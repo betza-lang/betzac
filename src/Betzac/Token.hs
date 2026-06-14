@@ -24,4 +24,4 @@ data Token
     | TokUsing String
     | TokOverride
     | TokExport
-    deriving (Show)
+    deriving (Eq, Show)

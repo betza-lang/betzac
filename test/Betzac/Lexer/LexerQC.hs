@@ -1,7 +1,8 @@
 module Lexer.LexerQC (spec) where
 
+import Arbitrary ()
 import Betzac.Alphabet.Comp (compAlphabet)
-import Betzac.Alphabet.Expr (alphanum, behaviour, direction, space, upper, whitespace)
+import Betzac.Alphabet.Expr (whitespace)
 import Betzac.Lexer.Lexer (lexSource, runLexer)
 import Betzac.Token
 import Data.List (intercalate)
@@ -38,32 +39,8 @@ unlexOne t = case t of
 unlex :: [Token] -> String
 unlex = intercalate " " . map unlexOne
 
-descriptor :: Gen String
-descriptor = intercalate [space] <$> resize 4 (listOf1 $ resize 7 $ listOf1 $ elements (',' : alphanum))
-
-exprToken :: Gen Token
-exprToken = sized $ \n ->
-    oneof
-        [ TokAtom <$> elements upper
-        , TokDescriptor <$> descriptor
-        , TokDirection <$> elements direction
-        , TokBehaviour <$> elements behaviour
-        , oneof [pure TokLParen, pure TokRParen]
-        , oneof [pure TokLBracket, pure TokRBracket]
-        , oneof [pure TokLBrace, pure TokRBrace]
-        , oneof [pure TokLAngle, pure TokRAngle]
-        , oneof [pure TokChainStep, pure TokChainSequence]
-        , pure TokBang
-        , pure TokSlippery
-        , frequency
-            [ (1, pure $ TokNumber 0)
-            , (3, TokNumber <$> choose (0, let n' = (n + 1) `div` 5 in 10 ^ n'))
-            ]
-        , pure TokComma
-        ]
-
 lexableExpr :: Gen String
-lexableExpr = unlex <$> listOf1 exprToken
+lexableExpr = unlex <$> listOf1 arbitrary
 
 prop_lexableNoLeadingWhitespace :: Property
 prop_lexableNoLeadingWhitespace = forAll lexableExpr noLeadingWhitespace
@@ -98,11 +75,18 @@ prop_failOnGarbage = forAll semiLexableExpr $ \s ->
         Left _ -> True
         Right _ -> False
 
+prop_roundTrip :: Property
+prop_roundTrip = forAll (listOf1 arbitrary) $ \tokens ->
+    case runLexer lexSource (unlex tokens) of
+        Left _ -> False
+        Right (ts, _, _) -> ts == tokens
+
 spec :: Spec
 spec = describe "Lexer.Core" $ do
     context "test generators" $ do
         prop "lexable input is considered not to have leading whitespace" prop_lexableNoLeadingWhitespace
-    describe "expression lexer" $ do
+    describe "lexer" $ do
         prop "never fails on lexable strings" prop_lexableNeverFails
         prop "reduces the amount of information of lexable input" prop_informationReduction
         prop "fails on garbage characters" prop_failOnGarbage
+        prop "lex . unlex = id" prop_roundTrip

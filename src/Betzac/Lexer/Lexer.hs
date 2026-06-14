@@ -8,7 +8,7 @@ where
 import Betzac.Alphabet.Expr (alphanum, behaviour, digit, direction, nonzeroDigit, space, upper)
 import Betzac.Alphabet.Stmt (assign, stmtEnd)
 import Betzac.Lexer.Core
-import Betzac.Lexer.Scan (lexIgnore, lexIgnoreSomeLeadingWhitespace)
+import Betzac.Lexer.Scan (lexIgnore, lexIgnoreSome)
 import Betzac.Token
 
 lexSource :: Lexer [Token]
@@ -41,7 +41,6 @@ lexToken =
         <|> lexComma
         <|> lexAssign
         <|> lexEndStmt
-        <|> lexUnknown
 
 lexAtom :: Lexer Token
 lexAtom = TokAtom <$> oneOf upper
@@ -66,14 +65,14 @@ lexParen = lparen <|> rparen
 lexBracket :: Lexer Token
 lexBracket = lbracket <|> rbracket
   where
-    lbracket = TokLBracket <$ char '{'
-    rbracket = TokRBracket <$ char '}'
+    lbracket = TokLBracket <$ char '['
+    rbracket = TokRBracket <$ char ']'
 
 lexBrace :: Lexer Token
 lexBrace = lbrace <|> rbrace
   where
-    lbrace = TokLBrace <$ char '['
-    rbrace = TokRBrace <$ char ']'
+    lbrace = TokLBrace <$ char '{'
+    rbrace = TokRBrace <$ char '}'
 
 lexAngle :: Lexer Token
 lexAngle = langle <|> rangle
@@ -107,7 +106,7 @@ lexEndStmt :: Lexer Token
 lexEndStmt = TokEndStmt <$ char stmtEnd
 
 lexKeyword :: String -> Token -> Lexer Token
-lexKeyword kw tok = tok <$ match kw <* lexIgnoreSomeLeadingWhitespace
+lexKeyword kw tok = tok <$ match kw <* lexIgnoreSome
 
 lexOverride :: Lexer Token
 lexOverride = lexKeyword "override" TokOverride
@@ -115,11 +114,8 @@ lexOverride = lexKeyword "override" TokOverride
 lexExport :: Lexer Token
 lexExport = lexKeyword "export" TokExport
 
-lexUnknown :: Lexer Token
-lexUnknown = empty
-
 lexUsing :: Lexer Token
-lexUsing = TokUsing <$> (match "using" *> lexIgnoreSomeLeadingWhitespace *> path)
+lexUsing = TokUsing <$> (match "using" *> lexIgnoreSome *> path)
   where
     path = (<>) <$> part <*> (concat <$> (many $ (:) <$> char '.' <*> part))
     part = some $ oneOf alphanum

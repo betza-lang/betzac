@@ -1,4 +1,4 @@
-module Betzac.Lexer.Scan (lexIgnore, lexWhitespace, lexComment, lexIgnoreSomeLeadingWhitespace) where
+module Betzac.Lexer.Scan (lexIgnore, lexWhitespace, lexComment, lexIgnoreSome) where
 
 import Betzac.Alphabet.Expr
 import Betzac.Lexer.Core
@@ -12,5 +12,5 @@ lexIgnore = () <$ many (lexWhitespace <|> lexComment)
 lexWhitespace :: Lexer ()
 lexWhitespace = () <$ some (oneOf whitespace)
 
-lexIgnoreSomeLeadingWhitespace :: Lexer ()
-lexIgnoreSomeLeadingWhitespace = (oneOf whitespace) >> lexIgnore
+lexIgnoreSome :: Lexer ()
+lexIgnoreSome = () <$ some (lexWhitespace <|> lexComment)

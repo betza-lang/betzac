@@ -89,6 +89,7 @@ test-suite betzac-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Arbitrary
       Lexer.CoreSpec
       Lexer.LexerQC
       Lexer.LexerSpec

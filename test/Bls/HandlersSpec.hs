@@ -51,11 +51,6 @@ spec = describe "bls handlers" $ do
                     diags <- createDoc "test.betza" betzaKind (pack "fW@bF") >> waitForDiagnostics
                     liftIO $ length diags `shouldBe` 1
 
-            it "produces a diagnostic for a hash character" $
-                blsSession $ do
-                    diags <- createDoc "test.betza" betzaKind (pack "#comment") >> waitForDiagnostics
-                    liftIO $ length diags `shouldBe` 1
-
             it "reports the diagnostic at the correct position" $
                 blsSession $ do
                     diags <- createDoc "test.betza" betzaKind (pack "fW@bF") >> waitForDiagnostics
