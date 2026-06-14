@@ -1,20 +1,29 @@
-module Betzac.Lexer.Expr (
-    lexWhitespace,
+module Betzac.Lexer.Lexer (
     lexToken,
-    lexExpr,
     runLexer,
+    lexSource,
 )
 where
 
-import Betzac.Alphabet.Expr (alphanum, behaviour, digit, direction, nonzeroDigit, space, upper, whitespace)
+import Betzac.Alphabet.Expr (alphanum, behaviour, digit, direction, nonzeroDigit, space, upper)
+import Betzac.Alphabet.Stmt (assign, stmtEnd)
 import Betzac.Lexer.Core
+import Betzac.Lexer.Scan (lexIgnore, lexIgnoreSomeLeadingWhitespace)
 import Betzac.Token
 
-lexWhitespace :: Lexer ()
-lexWhitespace = () <$ many (oneOf whitespace)
+lexSource :: Lexer [Token]
+lexSource = do
+    lexIgnore
+    tokens <- many (lexToken' <* lexIgnore)
+    rest <- peek
+    case rest of
+        Nothing -> pure tokens
+        Just _ -> empty
+  where
+    lexToken' = lexToken <|> lexDirective
 
-lexExpr :: Lexer [Token]
-lexExpr = failOn (`elem` whitespace) >> many (lexToken <* lexWhitespace)
+lexDirective :: Lexer Token
+lexDirective = lexExport <|> lexUsing <|> lexOverride
 
 lexToken :: Lexer Token
 lexToken =
@@ -30,6 +39,9 @@ lexToken =
         <|> lexBang
         <|> lexNumber
         <|> lexComma
+        <|> lexAssign
+        <|> lexEndStmt
+        <|> lexUnknown
 
 lexAtom :: Lexer Token
 lexAtom = TokAtom <$> oneOf upper
@@ -37,7 +49,7 @@ lexAtom = TokAtom <$> oneOf upper
 lexDescriptor :: Lexer Token
 lexDescriptor = TokDescriptor <$> (char ':' *> descriptor <* char ':')
   where
-    descriptor = some (oneOf $ space : alphanum)
+    descriptor = some (oneOf $ ',' : space : alphanum)
 
 lexDirection :: Lexer Token
 lexDirection = TokDirection <$> oneOf direction
@@ -87,3 +99,27 @@ lexNumber = lexZeroStar <|> lexNonZero <|> lexZero
 
 lexComma :: Lexer Token
 lexComma = TokComma <$ char ','
+
+lexAssign :: Lexer Token
+lexAssign = TokAssign <$ char assign
+
+lexEndStmt :: Lexer Token
+lexEndStmt = TokEndStmt <$ char stmtEnd
+
+lexKeyword :: String -> Token -> Lexer Token
+lexKeyword kw tok = tok <$ match kw <* lexIgnoreSomeLeadingWhitespace
+
+lexOverride :: Lexer Token
+lexOverride = lexKeyword "override" TokOverride
+
+lexExport :: Lexer Token
+lexExport = lexKeyword "export" TokExport
+
+lexUnknown :: Lexer Token
+lexUnknown = empty
+
+lexUsing :: Lexer Token
+lexUsing = TokUsing <$> (match "using" *> lexIgnoreSomeLeadingWhitespace *> path)
+  where
+    path = (<>) <$> part <*> (concat <$> (many $ (:) <$> char '.' <*> part))
+    part = some $ oneOf alphanum

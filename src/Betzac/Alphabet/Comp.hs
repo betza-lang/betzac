@@ -8,5 +8,8 @@ import Betzac.Alphabet.Stmt (stmtAlphabet)
 pathSep :: Char
 pathSep = '.'
 
+commentMarker :: Char
+commentMarker = '#'
+
 compAlphabet :: String
-compAlphabet = pathSep : stmtAlphabet
+compAlphabet = commentMarker : pathSep : stmtAlphabet

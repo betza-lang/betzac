@@ -30,7 +30,7 @@ library
       Betzac.Alphabet.Stmt
       Betzac.AST
       Betzac.Lexer.Core
-      Betzac.Lexer.Expr
+      Betzac.Lexer.Lexer
       Betzac.Lexer.Scan
       Betzac.Pipeline
       Betzac.Token
@@ -90,7 +90,9 @@ test-suite betzac-test
   main-is: Spec.hs
   other-modules:
       Lexer.CoreSpec
-      Lexer.ExprQC
+      Lexer.LexerQC
+      Lexer.LexerSpec
+      Lexer.ScanSpec
       Paths_betzac
   hs-source-dirs:
       test/Betzac

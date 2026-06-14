@@ -12,6 +12,8 @@ module Betzac.Lexer.Core (
     char,
     oneOf,
     noneOf,
+    match,
+    singleton,
 ) where
 
 import Control.Applicative (Alternative (..))
@@ -62,3 +64,10 @@ oneOf s = sat $ (`elem` s)
 
 noneOf :: String -> Lexer Char
 noneOf s = sat (`notElem` s)
+
+match :: String -> Lexer String
+match [] = pure []
+match (c : cs) = (:) <$> (char c) <*> (match cs)
+
+singleton :: Lexer a -> Lexer [a]
+singleton = fmap (: [])

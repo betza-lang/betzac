@@ -19,4 +19,9 @@ data Token
     | TokSlippery
     | TokNumber Int
     | TokComma
+    | TokAssign
+    | TokEndStmt
+    | TokUsing String
+    | TokOverride
+    | TokExport
     deriving (Show)

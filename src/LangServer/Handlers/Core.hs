@@ -3,7 +3,7 @@
 module LangServer.Handlers.Core (makeDiagnostic, publishLexDiagnostics) where
 
 import Betzac.Lexer.Core
-import Betzac.Pipeline
+import Betzac.Lexer.Lexer (lexSource)
 import Data.Text
 import LangServer.Config
 import Language.LSP.Protocol.Message
@@ -21,7 +21,7 @@ makeDiagnostic pos message =
 
 publishLexDiagnostics :: Uri -> String -> LspM ConfigBLS ()
 publishLexDiagnostics u source = do
-    let diags = either toDiag (const []) (lexSource source) where
+    let diags = either toDiag (const []) (runLexer lexSource source) where
         toDiag (LexError pos) = [makeDiagnostic pos "Unexpected character"]
     sendNotification SMethod_TextDocumentPublishDiagnostics $
         PublishDiagnosticsParams u Nothing diags
