@@ -33,6 +33,7 @@ library
       Betzac.Lexer.Lexer
       Betzac.Lexer.Scan
       Betzac.Pipeline
+      Betzac.StreamMutator
       Betzac.Token
       LangServer.Config
       LangServer.Handlers.Core
