@@ -14,12 +14,15 @@ module Betzac.StreamMutator (
     oneOf,
     noneOf,
     singleton,
+    optional,
+    someNE,
 ) where
 
 -- for peek
 import Control.Applicative (Alternative (..))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict (StateT (..), get, gets, put)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (listToMaybe)
 
 newtype StreamMutator e s a = StreamMutator (StateT (Int, [s]) (Either e) a)
@@ -72,3 +75,9 @@ noneOf ss = sat (`notElem` ss)
 
 singleton :: StreamMutator e s s -> StreamMutator e s [s]
 singleton = fmap (: [])
+
+optional :: (StreamError e) => StreamMutator e s a -> StreamMutator e s (Maybe a)
+optional m = Just <$> m <|> return Nothing
+
+someNE :: (StreamError e) => StreamMutator e s a -> StreamMutator e s (NonEmpty a)
+someNE p = (:|) <$> p <*> many p

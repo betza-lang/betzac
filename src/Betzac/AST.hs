@@ -1,26 +1,65 @@
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+
 module Betzac.AST (
-    BetzaExpr,
+    BetzaProgram,
+    QualifiedStmt (..),
+    Directive (..),
+    BetzaStmt (..),
+    BetzaExpr (..),
+    ChainExpr (..),
+    OptionExpr (..),
+    UnionExpr (..),
+    ModifierExpr (..),
+    ExponentExpr (..),
+    AtomExpr (..),
+    ChainOperator (..),
+    Modifier (..),
+    DirectionModifier (..),
     Direction (..),
     Behaviour (..),
+    Exponent (..),
+    Label (..),
+    Number,
 )
 where
+
+import Data.List.NonEmpty (NonEmpty)
+
+type BetzaProgram = [QualifiedStmt]
+
+data QualifiedStmt
+    = Override Directive
+    | Plain Directive
+    deriving (Show)
+
+data Directive
+    = Using FilePath
+    | Export BetzaStmt
+    | Bare BetzaStmt
+    deriving (Show)
+
+data BetzaStmt
+    = Assign {label :: Label, expr :: BetzaExpr}
+    | Alias {alias :: Label, label :: Label}
+    | Resolve {label :: Label}
+    | Anonymous {expr :: BetzaExpr}
+    deriving (Show)
+
+-- Strictly related to expressions
 
 data BetzaExpr = BetzaExpr ChainExpr
     deriving (Show)
 
-data ChainExpr = ChainExpr OptionExpr (Maybe (ChainOperator, ChainExpr))
+data ChainExpr = ChainExpr OptionExpr [(ChainOperator, OptionExpr)]
     deriving (Show)
 
 data OptionExpr = Choose BetzaExpr | IffUnblocked BetzaExpr | Mandatory UnionExpr
     deriving (Show)
 
-data UnionExpr = UnionExpr SetupExpr (Maybe UnionExpr)
+newtype UnionExpr = UnionExpr (NonEmpty ModifierExpr)
     deriving (Show)
 
-data SetupExpr = Setup ModifierExpr | NoSetup ModifierExpr
-    deriving (Show)
-
-data ModifierExpr = ModifierExpr [Modifier] ExponentExpr
+data ModifierExpr = ModifierExpr {setup :: Bool, modifiers :: [Modifier], atom :: ExponentExpr}
     deriving (Show)
 
 data ExponentExpr = ExponentExpr AtomExpr (Maybe Exponent)
@@ -38,16 +77,16 @@ data Modifier = Directional DirectionModifier | Behavioural Behaviour
 data DirectionModifier = Amalgamated Direction Direction | Single Direction
     deriving (Show)
 
-data Direction = Forward | Backward | Leftward | Rightward | Sideway | Vertically | Any
+data Direction = Forward | Backward | Leftward | Rightward | Sideway | Vertically | All
     deriving (Show)
 
-data Behaviour = Capture | Leap | Initial | Jump | Move | NoJump | Hop | All
+data Behaviour = Capture | Leap | Initial | Jump | Move | NoJump | Hop | Any
     deriving (Show)
 
-data Exponent = Infinite | Repeat Number | ModifiedRepeat (Maybe ChainOperator) [Modifier]
+data Exponent = Infinite | Repeat (Maybe ChainOperator) [Modifier] Number
+    deriving (Show)
+
+data Label = Upper Char | Descriptor String | Leaper Number Number
     deriving (Show)
 
 type Number = Int
-
-data Label = Upper Char | Descriptor String
-    deriving (Show)

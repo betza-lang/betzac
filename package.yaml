@@ -50,6 +50,7 @@ executables:
       - -with-rtsopts=-N
     dependencies:
       - betzac
+      - optparse-applicative
   bls:
     main: Main.hs
     source-dirs: app/Bls

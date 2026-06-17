@@ -29,9 +29,13 @@ library
       Betzac.Alphabet.Expr
       Betzac.Alphabet.Stmt
       Betzac.AST
+      Betzac.Debug.Dot.Dot
+      Betzac.Debug.Dot.Visitor
       Betzac.Lexer.Core
       Betzac.Lexer.Lexer
       Betzac.Lexer.Scan
+      Betzac.Parser.Core
+      Betzac.Parser.Parser
       Betzac.Pipeline
       Betzac.StreamMutator
       Betzac.Token
@@ -57,6 +61,7 @@ library
 executable betzac
   main-is: Main.hs
   other-modules:
+      Options
       Paths_betzac
   hs-source-dirs:
       app/Betzac
@@ -66,6 +71,7 @@ executable betzac
     , betzac
     , lens
     , lsp
+    , optparse-applicative
     , text
     , transformers
   default-language: Haskell2010
