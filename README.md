@@ -29,5 +29,5 @@ For help:
 You can use `dot` from `graphviz` to visualize the AST.
 
 ```bash
-betzac FILE --emit-dot - | dot -Txlib &
+betzac FILE --dot - | dot -Txlib &
 ```

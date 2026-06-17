@@ -83,7 +83,7 @@ data Direction = Forward | Backward | Leftward | Rightward | Sideway | Verticall
 data Behaviour = Capture | Leap | Initial | Jump | Move | NoJump | Hop | Any
     deriving (Show)
 
-data Exponent = Infinite | Repeat (Maybe ChainOperator) [Modifier] Number
+data Exponent = Infinite | Slippery | Repeat (Maybe ChainOperator) [Modifier] Number
     deriving (Show)
 
 data Label = Upper Char | Descriptor String | Leaper Number Number

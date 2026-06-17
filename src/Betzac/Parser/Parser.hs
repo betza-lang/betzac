@@ -127,13 +127,14 @@ parseExponentExpr :: Parser ExponentExpr
 parseExponentExpr = ExponentExpr <$> parseAtomExpr <*> optional parseExponent
 
 parseExponent :: Parser Exponent
-parseExponent = parseInfinite <|> parseRepeat
+parseExponent = parseInfinite <|> parseRepeat <|> parseSlippery
   where
     parseInfinite = Infinite <$ tok (TokNumber 0)
+    parseSlippery = Slippery <$ tok TokSlippery
     parseRepeat = Repeat <$> optional parseChainOperator <*> many parseModifier <*> parseNumber
     parseNumber = dispatch $ \case
         TokNumber n -> Just n
-        _ -> empty
+        _ -> Nothing
 
 parseAtomExpr :: Parser AtomExpr
 parseAtomExpr = (Paren <$> parseParen) <|> (From <$> parseLabel)

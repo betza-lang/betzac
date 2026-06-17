@@ -92,6 +92,7 @@ atomExprNode = \case
 exponentNode :: Exponent -> DotNode
 exponentNode = \case
     Infinite -> node "Infinite :: Exponent" []
+    Slippery -> node "Slippery :: Exponent" []
     Repeat mco ms n ->
         node "Repeat :: Exponent" $
             maybe [] (\co -> [chainOperatorNode co]) mco

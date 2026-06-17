@@ -1,3 +1,6 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
+
 module Main (main) where
 
 import Betzac.Debug.Dot.Visitor (toDot)
@@ -5,70 +8,100 @@ import Betzac.Lexer.Core (LexError (..))
 import Betzac.Parser.Core (ParseError (..))
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
 import Control.Exception (IOException, try)
-import qualified Data.Text as T (Text)
+import Control.Monad (when)
+import qualified Data.Text as T (Text, lines, unlines)
 import qualified Data.Text.IO as T
 import Options
 import qualified System.Exit as S
 import qualified System.IO as S
 import Prelude hiding (readFile)
 
-showLexResults :: Options -> PipelineResult -> IO ()
+showLexResults :: Options -> PipelineResult -> IO StageResult
 showLexResults _ p = case lexResult p of
-    Nothing -> passed
+    Nothing -> return notRun
     Just (Left (LexError pos)) -> do
-        failure
         hPutIndentLn S.stderr $ "Lex error at position " ++ show pos
-        S.exitFailure
-    Just (Right tokens) -> success >> mapM_ (hPutIndentLn S.stderr . show) tokens
+        return $ err mempty
+    Just (Right tokens) -> do
+        return
+            ok
+                { stageDetail = do
+                    mapM_ (hPutIndentLn S.stderr . show) tokens
+                    S.hPutStrLn S.stderr ""
+                }
 
-showParseResults :: Options -> PipelineResult -> IO ()
+showParseResults :: Options -> PipelineResult -> IO StageResult
 showParseResults o p = case parseResult p of
-    Nothing -> passed
-    Just (Left ParseError) -> failure >> hPutIndentLn S.stderr "Parse error" >> S.exitFailure
-    Just (Right program) ->
-        success >> case emitDot o of
+    Nothing -> return notRun
+    Just (Left ParseError) -> do
+        hPutIndentLn S.stderr "Parse error"
+        return $ err mempty
+    Just (Right program) -> do
+        case emitDot o of
             Just "/dev/null" -> mempty
-            Just "stdout" -> streamProgramToStdout
-            Just "-" -> streamProgramToStdout
-            Just path -> writeProgramTo path >> hPutIndentLn S.stderr ("Wrote AST to " ++ path)
+            Just "stdout" -> T.hPutStr S.stdout (toDot program)
+            Just "-" -> T.hPutStr S.stdout (toDot program)
+            Just path -> T.writeFile path (toDot program)
             Nothing -> mempty
-      where
-        streamProgramToStdout = T.hPutStr S.stdout (toDot program)
-        writeProgramTo f = T.writeFile f (toDot program)
+        let dotNote = case emitDot o of
+                Just path | path `notElem` ["/dev/null", "stdout", "-"] -> hPutIndentLn S.stderr ("Wrote AST to " ++ path)
+                _ -> mempty
+        return ok{stageDetail = dotNote}
 
-showAnalysis :: Options -> PipelineResult -> IO ()
-showAnalysis = const . const $ S.hPutStrLn S.stderr "Not implemented yet"
+showAnalysis :: Options -> PipelineResult -> IO StageResult
+showAnalysis _ _ = return notRun
+
+data StageResult = StageResult
+    { stageStatus :: String
+    , stageDetail :: IO ()
+    , stageExit :: IO ()
+    }
+
+ok, notRun :: StageResult
+ok = StageResult "Ok" mempty mempty
+notRun = StageResult "(not run)" mempty mempty
+err :: IO () -> StageResult
+err details = StageResult "Fail" details S.exitFailure
+
+success, failure, passed :: String
+success = "Ok"
+failure = "Fail"
+passed = "(not run)"
+
+hPutStage :: Options -> String -> IO StageResult -> IO ()
+hPutStage o label action = do
+    StageResult status detail exit <- action
+    when (verbosity o >= Verbose) $
+        S.hPutStrLn S.stderr (label ++ ": " ++ status)
+    whenVeryVerbose o detail
+    exit
+
+-- | Run a detail action only if verbosity >= -vv
+whenVeryVerbose :: Options -> IO () -> IO ()
+whenVeryVerbose o action = if verbosity o >= VeryVerbose then action else mempty
 
 hPutIndentLn :: S.Handle -> String -> IO ()
 hPutIndentLn h s = S.hPutStrLn h $ "    " ++ s
 
-failure :: IO ()
-failure = S.hPutStrLn S.stderr "Fail"
-
-passed :: IO ()
-passed = S.hPutStrLn S.stderr "(not run)"
-
-success :: IO ()
-success = S.hPutStrLn S.stderr "Ok"
-
 main :: IO ()
 main = do
     opts <- getOptions
-    S.hPutStr S.stderr "IO: "
     f <- try (T.readFile $ inputFile opts) :: IO (Either IOException T.Text)
     case f of
-        Left err -> do
-            S.hPutStrLn S.stderr $ "Could not read file"
-            S.hPutStrLn S.stderr $ show err
+        Left e -> do
+            when (verbosity opts >= Verbose) $ S.hPutStrLn S.stderr ("IO: " ++ failure)
+            hPutIndentLn S.stderr $ "Could not read file: " ++ show e
             S.exitFailure
         Right src -> do
-            success
+            when (verbosity opts >= Verbose) $ S.hPutStrLn S.stderr ("IO: " ++ success)
+            whenVeryVerbose opts $
+                T.hPutStrLn S.stderr $
+                    (T.unlines . map ("    " <>) . T.lines) src
             case fromScratch src of
-                Left err -> S.hPutStrLn S.stderr $ "Fatal pipeline error: " ++ show err
+                Left e -> do
+                    S.hPutStrLn S.stderr $ "Fatal pipeline error: " ++ show e
+                    S.exitFailure
                 Right results -> do
-                    S.hPutStr S.stderr "LEXER: "
-                    showLexResults opts results
-                    S.hPutStr S.stderr "PARSER: "
-                    showParseResults opts results
-                    S.hPutStr S.stderr "ANALYSIS: "
-                    showAnalysis opts results
+                    hPutStage opts "LEXER" $ showLexResults opts results
+                    hPutStage opts "PARSER" $ showParseResults opts results
+                    hPutStage opts "ANALYSIS" $ showAnalysis opts results
