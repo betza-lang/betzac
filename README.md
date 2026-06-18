@@ -4,7 +4,7 @@
 
 - stack
 - GHC
-- dot (optional)
+- dot or xdot (optional)
 
 ## Build
 
@@ -29,5 +29,7 @@ For help:
 You can use `dot` from `graphviz` to visualize the AST.
 
 ```bash
-betzac FILE --dot - | dot -Txlib &
+betzac FILE --dot - | dot -Txlib
+# or
+betzac FILE --dot - | xdot -
 ```

@@ -9,7 +9,10 @@ module Betzac.Debug.Dot.Dot (
     DotNode,
     NodeId,
     DotM,
-    leaf,
+    metaNode,
+    rootNode,
+    leafNode,
+    midNode,
     numberNode,
 ) where
 
@@ -21,8 +24,12 @@ type DotM = State NodeId
 fresh :: DotM NodeId
 fresh = get <* modify (+ 1)
 
-emit :: NodeId -> String -> DotM [String]
-emit i label = return ["  " ++ show i ++ " [label=\"" ++ label ++ "\"]"]
+emit :: NodeId -> String -> String -> String -> DotM [String]
+emit i label colour shape = return ["  " ++ show i ++ " [" ++ labelStr ++ " " ++ colorStr ++ " " ++ shapeStr ++ "]"]
+  where
+    labelStr = "label=\"" ++ label ++ "\""
+    colorStr = "fillcolor=" ++ (show colour)
+    shapeStr = "shape=" ++ shape
 
 edge :: NodeId -> NodeId -> DotM [String]
 edge from to = return ["  " ++ show from ++ " -> " ++ show to]
@@ -41,15 +48,24 @@ child parent mkChild = do
 children :: NodeId -> [DotNode] -> DotM [String]
 children parent = fmap concat . mapM (child parent)
 
-node :: String -> [DotNode] -> DotNode
-node label subs = do
+node :: String -> String -> String -> [DotNode] -> DotNode
+node label colour shape subs = do
     i <- fresh
-    ns <- emit i label
+    ns <- emit i label colour shape
     cs <- children i subs
     return (i, ns ++ cs)
 
-leaf :: String -> DotNode
-leaf s = node (escape s) []
+metaNode :: String
+metaNode = "  node [fontname=monospace colorscheme=rdylgn9 style=filled]"
+
+rootNode :: String -> [DotNode] -> DotNode
+rootNode label = node label "1" "box"
+
+midNode :: String -> Int -> [DotNode] -> DotNode
+midNode label colour = node label (show colour) "box"
+
+leafNode :: String -> DotNode
+leafNode s = node (escape s) "#ccf0ff" "ellipse" []
 
 numberNode :: Int -> DotNode
-numberNode = leaf . show
+numberNode = leafNode . show

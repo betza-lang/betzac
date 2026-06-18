@@ -13,97 +13,126 @@ toDot :: BetzaProgram -> Text
 toDot prog =
     pack
         . unlines
-        $ ["digraph {", "  node [shape=box fontname=monospace]"]
+        $ ["digraph {", metaNode]
             ++ evalState (concatMap snd <$> mapM qualfiedStmtNode prog) 0
             ++ ["}"]
 
 qualfiedStmtNode :: QualifiedStmt -> DotNode
 qualfiedStmtNode = \case
-    Override d -> node "Override :: QualifiedStmt" [directiveNode d]
-    Plain d -> node "Plain :: QualifiedStmt" [directiveNode d]
+    Override d -> rootNode "Override :: QualifiedStmt" [directiveNode d]
+    Plain d -> rootNode "Plain :: QualifiedStmt" [directiveNode d]
 
 directiveNode :: Directive -> DotNode
 directiveNode = \case
-    Using f -> node "Using :: Directive" [filePathNode f]
-    Export s -> node "Export :: Directive" [stmtNode s]
-    Bare s -> node "Bare :: Directive" [stmtNode s]
+    Using f -> myNode "Using :: Directive" [filePathNode f]
+    Export s -> myNode "Export :: Directive" [stmtNode s]
+    Bare s -> myNode "Bare :: Directive" [stmtNode s]
+  where
+    myNode l = midNode l 2
 
 filePathNode :: FilePath -> DotNode
-filePathNode f = node (escape f) []
+filePathNode f = leafNode f
 
 stmtNode :: BetzaStmt -> DotNode
 stmtNode = \case
-    Assign l e -> node "Assign :: BetzaStmt" [labelNode l, exprNode e]
-    Alias a l -> node "Alias :: BetzaStmt" [labelNode a, labelNode l]
-    Resolve l -> node "Resolve :: BetzaStmt" [labelNode l]
-    Anonymous e -> node "Anonymous :: BetzaStmt" [exprNode e]
+    Assign l e -> myNode "Assign :: BetzaStmt" [labelNode l, exprNode e]
+    Alias a l -> myNode "Alias :: BetzaStmt" [labelNode a, labelNode l]
+    Resolve l -> myNode "Resolve :: BetzaStmt" [labelNode l]
+    Anonymous e -> myNode "Anonymous :: BetzaStmt" [exprNode e]
+  where
+    myNode l = midNode l 3
 
 exprNode :: BetzaExpr -> DotNode
-exprNode (BetzaExpr c) = node "BetzaExpr" [chainExprNode c]
+exprNode (BetzaExpr c) = myNode "BetzaExpr" [chainExprNode c]
+  where
+    myNode l = midNode l 5
 
 chainExprNode :: ChainExpr -> DotNode
-chainExprNode (ChainExpr o rest) = node "ChainExpr" $ optionExprNode o : map chainLinkNode rest
+chainExprNode (ChainExpr o rest) = myNode "ChainExpr" $ optionExprNode o : map chainLinkNode rest
+  where
+    myNode l = midNode l 5
 
+-- TODO: not convinced about this one
 chainLinkNode :: (ChainOperator, OptionExpr) -> DotNode
-chainLinkNode (op, e) =
-    node (show op) [optionExprNode e]
+chainLinkNode (op, e) = myNode (show op ++ " :: ChainOperator") [optionExprNode e]
+  where
+    myNode l = midNode l 6
 
 optionExprNode :: OptionExpr -> DotNode
 optionExprNode = \case
-    Choose e -> node "Choose :: OptionExpr" [exprNode e]
-    IffUnblocked e -> node "IffUnblocked :: OptionExpr" [exprNode e]
-    Mandatory u -> node "Mandatory :: OptionExpr" [unionExprNode u]
+    Choose e -> myNode "Choose :: OptionExpr" [exprNode e]
+    IffUnblocked e -> myNode "IffUnblocked :: OptionExpr" [exprNode e]
+    Mandatory u -> myNode "Mandatory :: OptionExpr" [unionExprNode u]
+  where
+    myNode l = midNode l 6
 
 unionExprNode :: UnionExpr -> DotNode
-unionExprNode (UnionExpr ms) = node "UnionExpr" $ map modifierExprNode (toList ms)
+unionExprNode (UnionExpr ms) = myNode "UnionExpr" $ map modifierExprNode (toList ms)
+  where
+    myNode l = midNode l 6
 
 modifierExprNode :: ModifierExpr -> DotNode
 modifierExprNode (ModifierExpr s ms a) =
-    node ("ModifierExpr -- setup=" ++ show s) $
+    myNode ("ModifierExpr -- setup=" ++ show s) $
         map modifierNode ms ++ [exponentExprNode a]
+  where
+    myNode l = midNode l 7
 
 modifierNode :: Modifier -> DotNode
 modifierNode = \case
-    Directional d -> node "Directional :: Modifier" [directionModifierNode d]
-    Behavioural b -> node "Behavioural :: Modifier" [behaviourNode b]
+    Directional d -> myNode "Directional :: Modifier" [directionModifierNode d]
+    Behavioural b -> myNode "Behavioural :: Modifier" [behaviourNode b]
+  where
+    myNode l = midNode l 7
 
 directionModifierNode :: DirectionModifier -> DotNode
 directionModifierNode = \case
-    Amalgamated d1 d2 -> node "Amalgamated :: DirectionModifier" [directionNode d1, directionNode d2]
-    Single d -> node "Single :: DirectionModifier" [directionNode d]
+    Amalgamated d1 d2 -> myNode "Amalgamated :: DirectionModifier" [directionNode d1, directionNode d2]
+    Single d -> myNode "Single :: DirectionModifier" [directionNode d]
+  where
+    myNode l = midNode l 8
 
 directionNode :: Direction -> DotNode
 directionNode d =
-    node (show d) []
+    leafNode $ show d
 
 behaviourNode :: Behaviour -> DotNode
 behaviourNode b =
-    node (show b) []
+    leafNode $ show b
 
 exponentExprNode :: ExponentExpr -> DotNode
 exponentExprNode (ExponentExpr a me) =
-    node "ExponentExpr" $ atomExprNode a : maybe [] (\e -> [exponentNode e]) me
+    myNode "ExponentExpr" $
+        atomExprNode a : maybe [] (\e -> [exponentNode e]) me
+  where
+    myNode l = midNode l 7
 
 atomExprNode :: AtomExpr -> DotNode
 atomExprNode = \case
-    Paren e -> node "Paren :: AtomExpr" [exprNode e]
-    From l -> node "From :: AtomExpr" [labelNode l]
+    Paren e -> myNode "Paren :: AtomExpr" [exprNode e]
+    From l -> myNode "From :: AtomExpr" [labelNode l]
+  where
+    myNode l = midNode l 8
 
 exponentNode :: Exponent -> DotNode
 exponentNode = \case
-    Infinite -> node "Infinite :: Exponent" []
-    Slippery -> node "Slippery :: Exponent" []
+    Infinite -> leafNode "Infinite :: Exponent"
+    Slippery -> leafNode "Slippery :: Exponent"
     Repeat mco ms n ->
-        node "Repeat :: Exponent" $
+        myNode "Repeat :: Exponent" $
             maybe [] (\co -> [chainOperatorNode co]) mco
                 ++ map modifierNode ms
                 ++ [numberNode n]
+      where
+        myNode l = midNode l 8
 
 chainOperatorNode :: ChainOperator -> DotNode
-chainOperatorNode op = node (show op) []
+chainOperatorNode op = leafNode $ show op
 
 labelNode :: Label -> DotNode
 labelNode = \case
-    Upper c -> node "Upper :: Label" [leaf [c]]
-    Descriptor s -> node "Descriptor :: Label" [leaf s]
-    Leaper m n -> node "Leaper :: Label" [numberNode m, numberNode n]
+    Upper c -> myNode "Upper :: Label" [leafNode [c]]
+    Descriptor s -> myNode "Descriptor :: Label" [leafNode s]
+    Leaper m n -> myNode "Leaper :: Label" [numberNode m, numberNode n]
+  where
+    myNode l = midNode l 8
