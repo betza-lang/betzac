@@ -59,10 +59,10 @@ parseOptionExpr :: Parser OptionExpr
 parseOptionExpr = parseChoose <|> parseIffUnblocked <|> parseMandatory
 
 parseChoose :: Parser OptionExpr
-parseChoose = Choose <$> (tok TokLBrace *> parseExpr <* tok TokRBrace)
+parseChoose = Choose <$> (tok TokLBracket *> parseExpr <* tok TokRBracket)
 
 parseIffUnblocked :: Parser OptionExpr
-parseIffUnblocked = IffUnblocked <$> (tok TokLBracket *> parseExpr <* tok TokRBracket)
+parseIffUnblocked = IffUnblocked <$> (tok TokLBrace *> parseExpr <* tok TokRBrace)
 
 parseMandatory :: Parser OptionExpr
 parseMandatory = Mandatory <$> parseUnionExpr

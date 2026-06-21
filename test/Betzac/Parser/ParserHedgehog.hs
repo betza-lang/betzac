@@ -59,8 +59,8 @@ unparseChainOp Step = TokChainStep
 unparseChainOp Sequence = TokChainSequence
 
 unparseOption :: OptionExpr -> [Token]
-unparseOption (Choose e) = [TokLBrace] <> unparseExpr e <> [TokRBrace]
-unparseOption (IffUnblocked e) = [TokLBracket] <> unparseExpr e <> [TokRBracket]
+unparseOption (Choose e) = [TokLBracket] <> unparseExpr e <> [TokRBracket]
+unparseOption (IffUnblocked e) = [TokLBrace] <> unparseExpr e <> [TokRBrace]
 unparseOption (Mandatory u) = unparseUnion u
 
 unparseUnion :: UnionExpr -> [Token]
