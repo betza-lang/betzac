@@ -72,6 +72,8 @@ tests:
     dependencies:
       - hspec
       - QuickCheck
+      - hedgehog
+      - hspec-hedgehog
       - betzac
   bls-test:
     main: Spec.hs

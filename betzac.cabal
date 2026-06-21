@@ -101,6 +101,7 @@ test-suite betzac-test
       Lexer.LexerQC
       Lexer.LexerSpec
       Lexer.ScanSpec
+      Parser.ParserHedgehog
       Paths_betzac
   hs-source-dirs:
       test/Betzac
@@ -109,7 +110,9 @@ test-suite betzac-test
       QuickCheck
     , base >=4.7 && <5
     , betzac
+    , hedgehog
     , hspec
+    , hspec-hedgehog
     , lens
     , lsp
     , text

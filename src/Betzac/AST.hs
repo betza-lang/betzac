@@ -18,6 +18,7 @@ module Betzac.AST (
     Direction (..),
     Behaviour (..),
     Exponent (..),
+    ExponentKind (..),
     Label (..),
     Number,
 )
@@ -30,63 +31,66 @@ type BetzaProgram = [QualifiedStmt]
 data QualifiedStmt
     = Override Directive
     | Plain Directive
-    deriving (Show)
+    deriving (Eq, Show)
 
 data Directive
     = Using FilePath
     | Export BetzaStmt
     | Bare BetzaStmt
-    deriving (Show)
+    deriving (Eq, Show)
 
 data BetzaStmt
     = Assign {label :: Label, expr :: BetzaExpr}
     | Alias {alias :: Label, label :: Label}
     | Resolve {label :: Label}
     | Anonymous {expr :: BetzaExpr}
-    deriving (Show)
+    deriving (Eq, Show)
 
 -- Strictly related to expressions
 
 data BetzaExpr = BetzaExpr ChainExpr
-    deriving (Show)
+    deriving (Eq, Show)
 
 data ChainExpr = ChainExpr OptionExpr [(ChainOperator, OptionExpr)]
-    deriving (Show)
+    deriving (Eq, Show)
 
 data OptionExpr = Choose BetzaExpr | IffUnblocked BetzaExpr | Mandatory UnionExpr
-    deriving (Show)
+    deriving (Eq, Show)
 
 newtype UnionExpr = UnionExpr (NonEmpty ModifierExpr)
-    deriving (Show)
+    deriving (Eq, Show)
 
-data ModifierExpr = ModifierExpr {setup :: Bool, modifiers :: [Modifier], atom :: ExponentExpr}
-    deriving (Show)
+data ModifierExpr = ModifierExpr {setup :: Bool, modifiers :: [Modifier], expExpr :: ExponentExpr}
+    deriving (Eq, Show)
 
 data ExponentExpr = ExponentExpr AtomExpr (Maybe Exponent)
-    deriving (Show)
+    deriving (Eq, Show)
 
 data AtomExpr = Paren BetzaExpr | From Label
-    deriving (Show)
+    deriving (Eq, Show)
 
 data ChainOperator = Step | Sequence
-    deriving (Show)
+    deriving (Eq, Show)
 
 data Modifier = Directional DirectionModifier | Behavioural Behaviour
-    deriving (Show)
+    deriving (Eq, Show)
 
 data DirectionModifier = Amalgamated Direction Direction | Single Direction
-    deriving (Show)
+    deriving (Eq, Show)
 
 data Direction = Forward | Backward | Leftward | Rightward | Sideway | Vertically | All
-    deriving (Show)
+    deriving (Eq, Show)
 
 data Behaviour = Capture | Leap | Initial | Jump | Move | NoJump | Hop | Any
-    deriving (Show)
+    deriving (Eq, Show)
 
-data Exponent = Infinite | Slippery | Repeat (Maybe ChainOperator) [Modifier] Number
-    deriving (Show)
+data Exponent = Exponent (Maybe ChainOperator) [Modifier] ExponentKind
+    deriving (Eq, Show)
+
+data ExponentKind = Infinite | Slippery | Repeat Number
+    deriving (Eq, Show)
 
 data Label = Upper Char | Descriptor String | Leaper Number Number
-    deriving (Show)
+    deriving (Eq, Show)
 
 type Number = Int

@@ -115,16 +115,19 @@ atomExprNode = \case
     myNode l = midNode l 8
 
 exponentNode :: Exponent -> DotNode
-exponentNode = \case
-    Infinite -> leafNode "Infinite :: Exponent"
-    Slippery -> leafNode "Slippery :: Exponent"
-    Repeat mco ms n ->
-        myNode "Repeat :: Exponent" $
-            maybe [] (\co -> [chainOperatorNode co]) mco
-                ++ map modifierNode ms
-                ++ [numberNode n]
-      where
-        myNode l = midNode l 8
+exponentNode (Exponent mco ms k) =
+    myNode "Exponent" $
+        maybe [] (\co -> [chainOperatorNode co]) mco
+            <> map modifierNode ms
+            <> [exponentKindNode k]
+  where
+    myNode l = midNode l 8
+
+exponentKindNode :: ExponentKind -> DotNode
+exponentKindNode = \case
+    Infinite -> leafNode "Infinite"
+    Slippery -> leafNode "Slippery"
+    Repeat n -> leafNode $ "Repeat " ++ show n
 
 chainOperatorNode :: ChainOperator -> DotNode
 chainOperatorNode op = leafNode $ show op
