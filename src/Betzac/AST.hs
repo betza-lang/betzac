@@ -41,8 +41,6 @@ data Directive
 
 data BetzaStmt
     = Assign {label :: Label, expr :: BetzaExpr}
-    | Alias {alias :: Label, label :: Label}
-    | Resolve {label :: Label}
     | Anonymous {expr :: BetzaExpr}
     deriving (Eq, Show)
 

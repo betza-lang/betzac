@@ -38,27 +38,10 @@ parseExport :: Parser Directive
 parseExport = Export <$> (tok TokExport *> parseStmt)
 
 parseStmt :: Parser BetzaStmt
-parseStmt = parseLabelHeaded <|> parseAnonymous
+parseStmt = parseAssign <|> parseAnonymous
   where
     parseAnonymous = Anonymous <$> parseExpr
-
-parseLabelHeaded :: Parser BetzaStmt
-parseLabelHeaded = do
-    lhs <- parseLabel
-    mt <- peek
-    case mt of
-        Just TokAssign -> advance *> (parseAlias lhs <|> parseAssign lhs)
-        Just TokEndStmt -> parseResolve lhs
-        _ -> empty
-
-parseAlias :: Label -> Parser BetzaStmt
-parseAlias lhs = Alias lhs <$> parseLabel
-
-parseAssign :: Label -> Parser BetzaStmt
-parseAssign lhs = Assign lhs <$> parseExpr
-
-parseResolve :: Label -> Parser BetzaStmt
-parseResolve lhs = return $ Resolve lhs
+    parseAssign = Assign <$> parseLabel <* tok TokAssign <*> parseExpr
 
 parseExpr :: Parser BetzaExpr
 parseExpr = BetzaExpr <$> parseChainExpr

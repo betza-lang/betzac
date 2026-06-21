@@ -36,8 +36,6 @@ filePathNode f = leafNode f
 stmtNode :: BetzaStmt -> DotNode
 stmtNode = \case
     Assign l e -> myNode "Assign :: BetzaStmt" [labelNode l, exprNode e]
-    Alias a l -> myNode "Alias :: BetzaStmt" [labelNode a, labelNode l]
-    Resolve l -> myNode "Resolve :: BetzaStmt" [labelNode l]
     Anonymous e -> myNode "Anonymous :: BetzaStmt" [exprNode e]
   where
     myNode l = midNode l 3

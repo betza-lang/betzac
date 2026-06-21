@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Parser.ParserHedgehog (spec) where
 
 import Betzac.AST
@@ -9,8 +11,8 @@ import Betzac.Lexer.ErrorHandling (emptyTokenMap)
 import Lexer.LexerQC (unlex)
 
 import Data.List (intercalate, singleton)
-import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 
+import Data.List.NonEmpty (toList)
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
@@ -27,14 +29,15 @@ unparseQualifiedStmt (Override d) = TokOverride : unparseDirective d <> [TokEndS
 unparseQualifiedStmt (Plain d) = unparseDirective d <> [TokEndStmt]
 
 unparseDirective :: Directive -> [Token]
-unparseDirective (Using f) = [TokUsing f]
+unparseDirective (Using f) = [TokUsing $ unparseFilePath f]
 unparseDirective (Export s) = TokExport : unparseStmt s
 unparseDirective (Bare s) = unparseStmt s
 
+unparseFilePath :: FilePath -> FilePath
+unparseFilePath f = (\c -> if c == '/' then '.' else c) <$> f
+
 unparseStmt :: BetzaStmt -> [Token]
-unparseStmt (Assign l e) = unparseLabel l : unparseExpr e
-unparseStmt (Alias a l) = [unparseLabel a, unparseLabel l]
-unparseStmt (Resolve l) = [unparseLabel l]
+unparseStmt (Assign l e) = unparseLabel l : TokAssign : unparseExpr e
 unparseStmt (Anonymous e) = unparseExpr e
 
 unparseLabel :: Label -> Token
@@ -49,11 +52,7 @@ unparseChain :: ChainExpr -> [Token]
 unparseChain (ChainExpr o t) = unparseOption o <> unparseChainTail t
 
 unparseChainTail :: [(ChainOperator, OptionExpr)] -> [Token]
-unparseChainTail (co : t) =
-    [unparseChainOp (fst co)]
-        <> unparseOption (snd co)
-        <> unparseChainTail t
-unparseChainTail [] = []
+unparseChainTail = concatMap $ \(op, o) -> unparseChainOp op : unparseOption o
 
 unparseChainOp :: ChainOperator -> Token
 unparseChainOp Step = TokChainStep
@@ -168,7 +167,7 @@ genModifier :: Gen Modifier
 genModifier = Gen.choice [Directional <$> genDirectionMod, Behavioural <$> genBehaviour]
 
 genModifiers :: Gen [Modifier]
-genModifiers = Gen.sized (\(Size n) -> Gen.list (Range.linear 0 (max 1 n)) genModifier)
+genModifiers = Gen.list (Range.linear 0 3) genModifier
 
 genSmallExpr :: Gen BetzaExpr
 genSmallExpr = Gen.sized $ \n -> Gen.resize (n `div` 2) genExpr
@@ -198,7 +197,7 @@ genModifierExpr =
         <*> genExponentExpr
 
 genUnion :: Gen UnionExpr
-genUnion = UnionExpr <$> Gen.sized (\(Size n) -> Gen.nonEmpty (Range.linear 1 (max 1 n)) genModifierExpr)
+genUnion = UnionExpr <$> Gen.nonEmpty (Range.linear 1 4) genModifierExpr
 
 genOption :: Gen OptionExpr
 genOption =
@@ -216,7 +215,7 @@ genChain :: Gen ChainExpr
 genChain = ChainExpr <$> genOption <*> genChainTail
 
 genChainTail :: Gen [(ChainOperator, OptionExpr)]
-genChainTail = Gen.sized $ \(Size n) -> Gen.list (Range.linear 0 n) ((,) <$> genChainOperator <*> genOption)
+genChainTail = Gen.list (Range.linear 0 3) ((,) <$> genChainOperator <*> genOption)
 
 genExpr :: Gen BetzaExpr
 genExpr = BetzaExpr <$> genChain
@@ -224,22 +223,13 @@ genExpr = BetzaExpr <$> genChain
 genStmt :: Gen BetzaStmt
 genStmt =
     Gen.choice
-        [ Anonymous <$> genNonTrivialExpr
-        , Resolve <$> genLabel
-        , Alias <$> genLabel <*> genLabel
+        [ Anonymous <$> genExpr
         , Assign <$> genLabel <*> genExpr
         ]
 
--- To prevent the degenerate and ambiguous case of Resolve (Upper c) and the bare label expression below unparsing to the same thing
-genNonTrivialExpr :: Gen BetzaExpr
-genNonTrivialExpr = Gen.filter (not . isBareLabel) genExpr
-  where
-    isBareLabel (BetzaExpr (ChainExpr (Mandatory (UnionExpr (ModifierExpr False [] (ExponentExpr (From (Upper _)) Nothing) :| []))) [])) = True
-    isBareLabel _ = False
-
 genFilePath :: Gen FilePath
 genFilePath =
-    intercalate "."
+    intercalate "/"
         <$> Gen.list
             (Range.linear 1 10)
             (Gen.string (Range.linear 1 20) Gen.alphaNum)
@@ -263,12 +253,64 @@ genProgram :: Gen BetzaProgram
 genProgram = Gen.sized $
     \(Size n) -> Gen.list (Range.linear 1 (max 1 (n `div` 20))) genQualifiedStmt
 
+-- utils
+
+isOverride :: QualifiedStmt -> Bool
+isOverride (Override _) = True; isOverride _ = False
+isPlain :: QualifiedStmt -> Bool
+isPlain (Plain _) = True; isPlain _ = False
+isUsing :: Directive -> Bool
+isUsing (Using _) = True; isUsing _ = False
+isExport :: Directive -> Bool
+isExport (Export _) = True; isExport _ = False
+isBare :: Directive -> Bool
+isBare (Bare _) = True; isBare _ = False
+isAssign :: BetzaStmt -> Bool
+isAssign (Assign{}) = True; isAssign _ = False
+isAnonymous :: BetzaStmt -> Bool
+isAnonymous (Anonymous _) = True; isAnonymous _ = False
+
+hasDirective :: (Directive -> t) -> QualifiedStmt -> t
+hasDirective f (Override d) = f d
+hasDirective f (Plain d) = f d
+
+hasStmt :: (BetzaStmt -> Bool) -> QualifiedStmt -> Bool
+hasStmt f qs = case qs of
+    Plain (Bare s) -> f s
+    Plain (Export s) -> f s
+    Override (Bare s) -> f s
+    Override (Export s) -> f s
+    _ -> False
+
 -- props
 
 prop_parseUndoesUnparse :: PropertyT IO ()
 prop_parseUndoesUnparse = do
     prog <- forAll genProgram
     annotate . unlex . unparse $ prog
+
+    -- program-level stats
+    let tokens = unparse prog
+    classify "short (< 20 tokens)" $ length tokens < 20
+    classify "medium (20-100 tokens)" $ length tokens >= 20 && length tokens < 100
+    classify "large (> 100 tokens)" $ length tokens > 100
+
+    classify "single statement" $ length prog == 1
+    classify "multiple statements" $ length prog > 1
+
+    -- qualified stmt
+    classify "has Override" $ any isOverride prog
+    classify "has Plain" $ any isPlain prog
+
+    -- directive
+    classify "has Using" $ any (hasDirective isUsing) prog
+    classify "has Export" $ any (hasDirective isExport) prog
+    classify "has Bare" $ any (hasDirective isBare) prog
+
+    -- stmt
+    classify "has Assign" $ any (hasStmt isAssign) prog
+    classify "has Anonymous" $ any (hasStmt isAnonymous) prog
+
     ((\(p, _, _) -> p) <$> (runParser emptyTokenMap parseTokens (unparse prog))) === Right prog
 
 -- spec
