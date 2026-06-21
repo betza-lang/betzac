@@ -1,4 +1,5 @@
 module Betzac.Lexer.Lexer (
+    LexOutput (..),
     lexToken,
     runLexer,
     lexSource,
@@ -8,16 +9,23 @@ where
 import Betzac.Alphabet.Expr (alphanum, behaviour, digit, direction, nonzeroDigit, space, upper)
 import Betzac.Alphabet.Stmt (assign, stmtEnd)
 import Betzac.Lexer.Core
+import Betzac.Lexer.ErrorHandling (buildMap, spanned)
 import Betzac.Lexer.Scan (lexIgnore, lexIgnoreSome)
-import Betzac.Token
+import Betzac.Token (Token (..))
 
-lexSource :: Lexer [Token]
+data LexOutput = LexOutput
+    { lexTokens :: [Token]
+    , lexTokenMap :: TokenMap
+    }
+    deriving (Show)
+
+lexSource :: Lexer LexOutput
 lexSource = do
     lexIgnore
-    tokens <- many (lexToken' <* lexIgnore)
+    pairs <- many (spanned (lexToken' <* lexIgnore))
     rest <- peek
     case rest of
-        Nothing -> pure tokens
+        Nothing -> return $ LexOutput (fst <$> pairs) (buildMap $ snd <$> pairs)
         Just _ -> empty
   where
     lexToken' = lexToken <|> lexDirective

@@ -2,6 +2,8 @@ module Betzac.Lexer.Core (
     module Control.Applicative,
     Lexer,
     LexError (..),
+    TokenMap (..),
+    lookupSpan,
     runLexer,
     peek,
     advance,
@@ -14,9 +16,9 @@ module Betzac.Lexer.Core (
     singleton,
 ) where
 
--- for peek
 import Betzac.StreamMutator
 import Control.Applicative (Alternative (..))
+import GHC.Arr (Array, Ix (inRange), bounds, (!))
 
 type Lexer = StreamMutator LexError Char
 
@@ -27,6 +29,15 @@ data LexError = LexError Int deriving (Eq, Show)
 
 instance StreamError LexError where
     errorAt = LexError
+    errorPos (LexError n) = n
 
 char :: Char -> Lexer Char
 char = matchOne
+
+data TokenMap = TokenMap (Array Int (Int, Int))
+    deriving (Show)
+
+lookupSpan :: TokenMap -> Int -> Maybe (Int, Int)
+lookupSpan (TokenMap arr) i
+    | inRange (bounds arr) i = Just (arr ! i)
+    | otherwise = Nothing

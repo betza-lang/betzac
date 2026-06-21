@@ -2,7 +2,7 @@ module Lexer.LexerSpec (spec) where
 
 import Betzac.Alphabet.Expr (behaviour, direction, upper)
 import Betzac.Lexer.Core (LexError, runLexer)
-import Betzac.Lexer.Lexer (lexSource, lexToken)
+import Betzac.Lexer.Lexer (lexSource, lexToken, lexTokens)
 import Betzac.Token
 import Data.Either (isLeft)
 import Test.Hspec
@@ -10,7 +10,7 @@ import Test.Hspec
 tok :: String -> Either LexError [Token]
 tok s = case runLexer lexSource s of
     Left e -> Left e
-    Right (ts, _, _) -> Right ts
+    Right (out, _, _) -> Right (lexTokens out)
 
 oneTok :: String -> Either LexError Token
 oneTok s = case runLexer lexToken s of

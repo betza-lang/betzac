@@ -5,6 +5,7 @@ module Betzac.Parser.Parser (parseTokens) where
 import Betzac.AST
 import Betzac.Parser.Core
 import Betzac.Token
+
 import Data.Char (isDigit)
 import Data.Maybe (isJust)
 
@@ -17,10 +18,10 @@ parseTokens = do
         Just _ -> empty
 
 parseQualifiedStmt :: Parser QualifiedStmt
-parseQualifiedStmt = parseOverride <|> (Plain <$> parseDirective)
+parseQualifiedStmt = ((Override <$> parseOverride) <|> (Plain <$> parseDirective)) <* tok TokEndStmt
 
-parseOverride :: Parser QualifiedStmt
-parseOverride = Override <$> (tok TokOverride *> parseDirective)
+parseOverride :: Parser Directive
+parseOverride = tok TokOverride *> parseDirective
 
 parseDirective :: Parser Directive
 parseDirective = parseUsing <|> parseExport <|> Bare <$> parseStmt
@@ -37,14 +38,18 @@ parseExport :: Parser Directive
 parseExport = Export <$> (tok TokExport *> parseStmt)
 
 parseStmt :: Parser BetzaStmt
-parseStmt = (parseLabelHeaded <|> parseAnonymous) <* tok TokEndStmt
+parseStmt = parseLabelHeaded <|> parseAnonymous
   where
     parseAnonymous = Anonymous <$> parseExpr
 
 parseLabelHeaded :: Parser BetzaStmt
 parseLabelHeaded = do
     lhs <- parseLabel
-    (tok TokAssign *> (parseAlias lhs <|> parseAssign lhs)) <|> parseResolve lhs
+    mt <- peek
+    case mt of
+        Just TokAssign -> advance *> (parseAlias lhs <|> parseAssign lhs)
+        Just TokEndStmt -> parseResolve lhs
+        _ -> empty
 
 parseAlias :: Label -> Parser BetzaStmt
 parseAlias lhs = Alias lhs <$> parseLabel

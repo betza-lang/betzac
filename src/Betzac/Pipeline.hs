@@ -7,10 +7,10 @@ module Betzac.Pipeline (
 
 import Betzac.AST (BetzaProgram)
 import Betzac.Lexer.Core (LexError (..), runLexer)
+import Betzac.Lexer.Lexer (LexOutput (lexTokenMap, lexTokens))
 import qualified Betzac.Lexer.Lexer as Lexer (lexSource)
 import Betzac.Parser.Core (ParseError, runParser)
 import qualified Betzac.Parser.Parser as Parser (parseTokens)
-import Betzac.Token (Token)
 import Control.Monad.Trans.State.Strict (StateT, execStateT, gets, modify)
 import Data.Text (Text, unpack)
 import Prelude hiding (length)
@@ -19,7 +19,7 @@ type Pipeline a = StateT PipelineResult (Either PipelineError) a
 
 data PipelineResult = PipelineResult
     { sourceText :: Text
-    , lexResult :: Maybe (Either LexError [Token])
+    , lexResult :: Maybe (Either LexError LexOutput)
     , parseResult :: Maybe (Either ParseError BetzaProgram)
     }
     deriving (Show)
@@ -57,10 +57,13 @@ lexSource = do
 
 parseTokens :: Pipeline ()
 parseTokens = do
-    mts <- gets lexResult
-    case mts >>= either (const Nothing) Just of
-        Just ts -> modify $ \r ->
+    mloutput <- gets lexResult
+    case mloutput >>= either (const Nothing) Just of
+        Just loutput -> modify $ \r ->
             r
-                { parseResult = Just $ (\(program, _, _) -> program) <$> runParser Parser.parseTokens ts
+                { parseResult =
+                    Just $
+                        (\(program, _, _) -> program)
+                            <$> runParser (lexTokenMap loutput) Parser.parseTokens (lexTokens loutput)
                 }
         Nothing -> pure ()

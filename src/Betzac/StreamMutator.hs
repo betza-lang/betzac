@@ -35,10 +35,16 @@ runMutator (StreamMutator m) ss = (\(a, (n, ss')) -> (a, n, ss')) <$> runStateT 
 
 class StreamError e where
     errorAt :: Int -> e
+    errorPos :: e -> Int
 
 instance (StreamError e) => Alternative (StreamMutator e s) where
     empty = StreamMutator $ gets fst >>= lift . Left . errorAt
-    StreamMutator l <|> StreamMutator r = StreamMutator $ StateT $ \s -> either (const $ runStateT r s) Right (runStateT l s)
+    StreamMutator l <|> StreamMutator r = StreamMutator $ StateT $ \s ->
+        case runStateT l s of
+            Right x -> Right x
+            Left el -> case runStateT r s of
+                Right x -> Right x
+                Left er -> Left $ if errorPos er >= errorPos el then er else el
     some p = p >>= \x -> (x :) <$> many p
 
 peek :: StreamMutator e s (Maybe s)

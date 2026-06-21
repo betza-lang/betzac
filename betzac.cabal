@@ -32,6 +32,7 @@ library
       Betzac.Debug.Dot.Dot
       Betzac.Debug.Dot.Visitor
       Betzac.Lexer.Core
+      Betzac.Lexer.ErrorHandling
       Betzac.Lexer.Lexer
       Betzac.Lexer.Scan
       Betzac.Parser.Core

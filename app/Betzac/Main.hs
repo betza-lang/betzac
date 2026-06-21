@@ -4,8 +4,9 @@
 module Main (main) where
 
 import Betzac.Debug.Dot.Visitor (toDot)
-import Betzac.Lexer.Core (LexError (..))
-import Betzac.Parser.Core (ParseError (..))
+import Betzac.Lexer.Core (LexError (LexError))
+import Betzac.Lexer.Lexer
+import Betzac.Parser.Core
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
 import Control.Exception (IOException, try)
 import Control.Monad (when)
@@ -22,19 +23,23 @@ showLexResults _ p = case lexResult p of
     Just (Left (LexError pos)) -> do
         hPutIndentLn S.stderr $ "Lex error at position " ++ show pos
         return $ err mempty
-    Just (Right tokens) -> do
+    Just (Right loutput) -> do
         return
             ok
                 { stageDetail = do
-                    mapM_ (hPutIndentLn S.stderr . show) tokens
+                    mapM_ (hPutIndentLn S.stderr . show) (lexTokens loutput)
                     S.hPutStrLn S.stderr ""
                 }
 
 showParseResults :: Options -> PipelineResult -> IO StageResult
 showParseResults o p = case parseResult p of
     Nothing -> return notRun
-    Just (Left ParseError) -> do
-        hPutIndentLn S.stderr "Parse error"
+    Just (Left err') -> do
+        hPutIndentLn S.stderr $
+            "Parse error at token "
+                ++ show (parseErrTokenIdx err')
+                ++ maybe "" (\(s, e) -> " (chars " ++ show s ++ "-" ++ show e ++ ")") (parseErrSpan err')
+                ++ maybe "" (\t -> ": unexpected " ++ show t) (parseErrToken err')
         return $ err mempty
     Just (Right program) -> do
         case emitDot o of

@@ -5,8 +5,11 @@ import Betzac.Parser.Core (runParser)
 import Betzac.Parser.Parser (parseTokens)
 import Betzac.Token
 
+import Betzac.Lexer.ErrorHandling (emptyTokenMap)
+import Lexer.LexerQC (unlex)
+
 import Data.List (intercalate, singleton)
-import Data.List.NonEmpty (toList)
+import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -157,21 +160,25 @@ genLabel = Gen.choice [genUpper, genDescriptor, genLeaper]
 genDirectionMod :: Gen DirectionModifier
 genDirectionMod =
     Gen.frequency
-        [ (1, Amalgamated <$> genDirection <*> genDirection)
-        , (2, Single <$> genDirection)
+        [ (2, Single <$> genDirection)
+        , (1, Amalgamated <$> genDirection <*> genDirection)
         ]
 
 genModifier :: Gen Modifier
 genModifier = Gen.choice [Directional <$> genDirectionMod, Behavioural <$> genBehaviour]
 
 genModifiers :: Gen [Modifier]
-genModifiers = Gen.sized (\(Size n) -> Gen.list (Range.linear 1 (max 1 n)) genModifier)
+genModifiers = Gen.sized (\(Size n) -> Gen.list (Range.linear 0 (max 1 n)) genModifier)
 
 genSmallExpr :: Gen BetzaExpr
 genSmallExpr = Gen.sized $ \n -> Gen.resize (n `div` 2) genExpr
 
 genAtom :: Gen AtomExpr
-genAtom = Gen.choice [From <$> genLabel, Paren <$> genSmallExpr]
+genAtom =
+    Gen.recursive
+        Gen.choice
+        [From <$> genLabel]
+        [Paren <$> genSmallExpr]
 
 genExponent :: Gen Exponent
 genExponent =
@@ -195,17 +202,21 @@ genUnion = UnionExpr <$> Gen.sized (\(Size n) -> Gen.nonEmpty (Range.linear 1 (m
 
 genOption :: Gen OptionExpr
 genOption =
-    Gen.frequency
-        [ (1, Choose <$> genSmallExpr)
-        , (1, IffUnblocked <$> genSmallExpr)
-        , (2, Mandatory <$> genUnion)
-        ]
+    Gen.sized $ \n ->
+        Gen.frequency $
+            [(2, Mandatory <$> genUnion)]
+                <> if n <= 1
+                    then []
+                    else
+                        [ (1, Choose <$> genSmallExpr)
+                        , (1, IffUnblocked <$> genSmallExpr)
+                        ]
 
 genChain :: Gen ChainExpr
 genChain = ChainExpr <$> genOption <*> genChainTail
 
 genChainTail :: Gen [(ChainOperator, OptionExpr)]
-genChainTail = Gen.sized $ \(Size n) -> Gen.list (Range.linear 1 n) ((,) <$> genChainOperator <*> genOption)
+genChainTail = Gen.sized $ \(Size n) -> Gen.list (Range.linear 0 n) ((,) <$> genChainOperator <*> genOption)
 
 genExpr :: Gen BetzaExpr
 genExpr = BetzaExpr <$> genChain
@@ -213,11 +224,18 @@ genExpr = BetzaExpr <$> genChain
 genStmt :: Gen BetzaStmt
 genStmt =
     Gen.choice
-        [ Assign <$> genLabel <*> genExpr
-        , Alias <$> genLabel <*> genLabel
+        [ Anonymous <$> genNonTrivialExpr
         , Resolve <$> genLabel
-        , Anonymous <$> genExpr
+        , Alias <$> genLabel <*> genLabel
+        , Assign <$> genLabel <*> genExpr
         ]
+
+-- To prevent the degenerate and ambiguous case of Resolve (Upper c) and the bare label expression below unparsing to the same thing
+genNonTrivialExpr :: Gen BetzaExpr
+genNonTrivialExpr = Gen.filter (not . isBareLabel) genExpr
+  where
+    isBareLabel (BetzaExpr (ChainExpr (Mandatory (UnionExpr (ModifierExpr False [] (ExponentExpr (From (Upper _)) Nothing) :| []))) [])) = True
+    isBareLabel _ = False
 
 genFilePath :: Gen FilePath
 genFilePath =
@@ -229,28 +247,29 @@ genFilePath =
 genDirective :: Gen Directive
 genDirective =
     Gen.choice
-        [ Using <$> genFilePath
+        [ Bare <$> genStmt
         , Export <$> genStmt
-        , Bare <$> genStmt
+        , Using <$> genFilePath
         ]
 
 genQualifiedStmt :: Gen QualifiedStmt
 genQualifiedStmt =
     Gen.choice
-        [ Override <$> genDirective
-        , Plain <$> genDirective
+        [ Plain <$> genDirective
+        , Override <$> genDirective
         ]
 
 genProgram :: Gen BetzaProgram
 genProgram = Gen.sized $
-    \(Size n) -> Gen.list (Range.linear 1 (n `div` 20)) genQualifiedStmt
+    \(Size n) -> Gen.list (Range.linear 1 (max 1 (n `div` 20))) genQualifiedStmt
 
 -- props
 
 prop_parseUndoesUnparse :: PropertyT IO ()
 prop_parseUndoesUnparse = do
     prog <- forAll genProgram
-    ((\(p, _, _) -> p) <$> (runParser parseTokens (unparse prog))) === Right prog
+    annotate . unlex . unparse $ prog
+    ((\(p, _, _) -> p) <$> (runParser emptyTokenMap parseTokens (unparse prog))) === Right prog
 
 -- spec
 spec :: Spec

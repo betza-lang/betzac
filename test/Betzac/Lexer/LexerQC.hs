@@ -1,9 +1,9 @@
-module Lexer.LexerQC (spec) where
+module Lexer.LexerQC (spec, unlex) where
 
 import Arbitrary ()
 import Betzac.Alphabet.Comp (compAlphabet)
 import Betzac.Alphabet.Expr (whitespace)
-import Betzac.Lexer.Lexer (lexSource, runLexer)
+import Betzac.Lexer.Lexer (lexSource, runLexer, lexTokens)
 import Betzac.Token
 import Data.List (intercalate)
 import Test.Hspec
@@ -67,7 +67,7 @@ prop_lexableNeverFails = forAll lexableExpr $ \s ->
 prop_informationReduction :: Property
 prop_informationReduction = forAll lexableExpr $ \s -> case runLexer lexSource s of
     Left _ -> False
-    Right (toks, _, _) -> length toks <= length s
+    Right (out, _, _) -> length (lexTokens out) <= length s
 
 prop_failOnGarbage :: Property
 prop_failOnGarbage = forAll semiLexableExpr $ \s ->
@@ -79,7 +79,7 @@ prop_roundTrip :: Property
 prop_roundTrip = forAll (listOf1 arbitrary) $ \tokens ->
     case runLexer lexSource (unlex tokens) of
         Left _ -> False
-        Right (ts, _, _) -> ts == tokens
+        Right (out, _, _) -> (lexTokens out) == tokens
 
 spec :: Spec
 spec = describe "Lexer.Core" $ do
