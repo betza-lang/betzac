@@ -7,12 +7,14 @@ module Betzac.AST (
     BetzaStmt (..),
     BetzaExpr (..),
     ChainExpr (..),
-    OptionExpr (..),
+    ChainLeg (..),
     UnionExpr (..),
     ModifierExpr (..),
     ExponentExpr (..),
     AtomExpr (..),
     ChainOperator (..),
+    ChainKind (..),
+    ChainModality (..),
     Modifier (..),
     DirectionModifier (..),
     Direction (..),
@@ -49,10 +51,10 @@ data BetzaStmt
 data BetzaExpr = BetzaExpr ChainExpr
     deriving (Eq, Show)
 
-data ChainExpr = ChainExpr OptionExpr [(ChainOperator, OptionExpr)]
+data ChainExpr = ChainExpr UnionExpr (Maybe ChainLeg)
     deriving (Eq, Show)
 
-data OptionExpr = Choose BetzaExpr | IffUnblocked BetzaExpr | Mandatory UnionExpr
+data ChainLeg = ChainLeg ChainOperator ChainExpr
     deriving (Eq, Show)
 
 newtype UnionExpr = UnionExpr (NonEmpty ModifierExpr)
@@ -67,7 +69,13 @@ data ExponentExpr = ExponentExpr AtomExpr (Maybe Exponent)
 data AtomExpr = Paren BetzaExpr | From Label
     deriving (Eq, Show)
 
-data ChainOperator = Step | Sequence
+data ChainOperator = ChainOperator ChainKind ChainModality
+    deriving (Eq, Show)
+
+data ChainKind = Step | Sequence
+    deriving (Eq, Show)
+
+data ChainModality = Mandatory | Choose | IffUnblocked
     deriving (Eq, Show)
 
 data Modifier = Directional DirectionModifier | Behavioural Behaviour

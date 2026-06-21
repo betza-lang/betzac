@@ -47,25 +47,22 @@ parseExpr :: Parser BetzaExpr
 parseExpr = BetzaExpr <$> parseChainExpr
 
 parseChainExpr :: Parser ChainExpr
-parseChainExpr = ChainExpr <$> parseOptionExpr <*> many ((,) <$> parseChainOperator <*> parseOptionExpr)
+parseChainExpr = ChainExpr <$> parseUnionExpr <*> optional parseChainLeg
 
-parseChainOperator :: Parser ChainOperator
-parseChainOperator = parseStep <|> parseSequence
+parseChainLeg :: Parser ChainLeg
+parseChainLeg = do
+    kind <- parseChainKind
+    parseChoose kind <|> parseIffUnblocked kind <|> parseMandatory kind
+  where
+    parseMandatory k = ChainLeg (ChainOperator k Mandatory) <$> parseChainExpr
+    parseIffUnblocked k = ChainLeg (ChainOperator k IffUnblocked) <$> (tok TokLBrace *> parseChainExpr <* tok TokRBrace)
+    parseChoose k = ChainLeg (ChainOperator k Choose) <$> (tok TokLBracket *> parseChainExpr <* tok TokRBracket)
+
+parseChainKind :: Parser ChainKind
+parseChainKind = parseStep <|> parseSequence
   where
     parseStep = Step <$ tok TokChainStep
     parseSequence = Sequence <$ tok TokChainSequence
-
-parseOptionExpr :: Parser OptionExpr
-parseOptionExpr = parseChoose <|> parseIffUnblocked <|> parseMandatory
-
-parseChoose :: Parser OptionExpr
-parseChoose = Choose <$> (tok TokLBracket *> parseExpr <* tok TokRBracket)
-
-parseIffUnblocked :: Parser OptionExpr
-parseIffUnblocked = IffUnblocked <$> (tok TokLBrace *> parseExpr <* tok TokRBrace)
-
-parseMandatory :: Parser OptionExpr
-parseMandatory = Mandatory <$> parseUnionExpr
 
 parseUnionExpr :: Parser UnionExpr
 parseUnionExpr = UnionExpr <$> someNE parseModifierExpr
@@ -115,7 +112,15 @@ parseExponentExpr :: Parser ExponentExpr
 parseExponentExpr = ExponentExpr <$> parseAtomExpr <*> optional parseExponent
 
 parseExponent :: Parser Exponent
-parseExponent = Exponent <$> optional parseChainOperator <*> many parseModifier <*> parseExponentKind
+parseExponent = do
+    mop <- optional parseChainKind
+    case mop of
+        Nothing -> Exponent Nothing <$> many parseModifier <*> parseExponentKind
+        Just kind -> parseChoose kind <|> parseIffUnblocked kind <|> parseMandatory kind
+  where
+    parseMandatory k = Exponent (Just $ ChainOperator k Mandatory) <$> many parseModifier <*> parseExponentKind
+    parseIffUnblocked k = Exponent (Just $ ChainOperator k IffUnblocked) <$> (tok TokLBrace *> many parseModifier) <*> parseExponentKind <* tok TokRBrace
+    parseChoose k = Exponent (Just $ ChainOperator k Choose) <$> (tok TokLBracket *> many parseModifier) <*> parseExponentKind <* tok TokRBracket
 
 parseExponentKind :: Parser ExponentKind
 parseExponentKind = parseInfinite <|> parseSlippery <|> parseRepeat

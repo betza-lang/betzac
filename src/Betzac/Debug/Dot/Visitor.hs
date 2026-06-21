@@ -46,20 +46,17 @@ exprNode (BetzaExpr c) = myNode "BetzaExpr" [chainExprNode c]
     myNode l = midNode l 5
 
 chainExprNode :: ChainExpr -> DotNode
-chainExprNode (ChainExpr o rest) = myNode "ChainExpr" $ optionExprNode o : concatMap chainLinkNode rest
+chainExprNode (ChainExpr u mcl) =
+    myNode "ChainExpr" $
+        [unionExprNode u]
+            <> maybe [] (\cl -> [chainLegNode cl]) mcl
   where
     myNode l = midNode l 5
 
-chainLinkNode :: (ChainOperator, OptionExpr) -> [DotNode]
-chainLinkNode (op, e) = leafNode (show op) : [optionExprNode e]
-
-optionExprNode :: OptionExpr -> DotNode
-optionExprNode = \case
-    Choose e -> myNode "Choose :: OptionExpr" [exprNode e]
-    IffUnblocked e -> myNode "IffUnblocked :: OptionExpr" [exprNode e]
-    Mandatory u -> myNode "Mandatory :: OptionExpr" [unionExprNode u]
+chainLegNode :: ChainLeg -> DotNode
+chainLegNode (ChainLeg op c) = myNode "ChainLeg" [chainOperatorNode op, chainExprNode c]
   where
-    myNode l = midNode l 6
+    myNode l = midNode l 5
 
 unionExprNode :: UnionExpr -> DotNode
 unionExprNode (UnionExpr ms) = myNode "UnionExpr" $ map modifierExprNode (toList ms)
@@ -125,7 +122,15 @@ exponentKindNode = \case
     Repeat n -> leafNode $ "Repeat " ++ show n
 
 chainOperatorNode :: ChainOperator -> DotNode
-chainOperatorNode op = leafNode $ show op
+chainOperatorNode (ChainOperator k m) = myNode "ChainOperator" [chainKindNode k, chainModalityNode m]
+  where
+    myNode l = midNode l 6
+
+chainKindNode :: ChainKind -> DotNode
+chainKindNode k = leafNode $ show k
+
+chainModalityNode :: ChainModality -> DotNode
+chainModalityNode m = leafNode $ show m
 
 labelNode :: Label -> DotNode
 labelNode = \case

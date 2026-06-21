@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Parser.ParserHedgehog (spec) where
@@ -10,7 +11,9 @@ import Betzac.Token
 import Betzac.Lexer.ErrorHandling (emptyTokenMap)
 import Lexer.LexerQC (unlex)
 
-import Data.List (intercalate, singleton)
+import Data.List (intercalate)
+import Data.Maybe (isJust)
+import qualified Data.Monoid as M (Any (..), getAny)
 
 import Data.List.NonEmpty (toList)
 import Hedgehog
@@ -49,19 +52,26 @@ unparseExpr :: BetzaExpr -> [Token]
 unparseExpr (BetzaExpr c) = unparseChain c
 
 unparseChain :: ChainExpr -> [Token]
-unparseChain (ChainExpr o t) = unparseOption o <> unparseChainTail t
+unparseChain (ChainExpr u mcl) =
+    unparseUnion u
+        <> maybe [] unparseChainLeg mcl
 
-unparseChainTail :: [(ChainOperator, OptionExpr)] -> [Token]
-unparseChainTail = concatMap $ \(op, o) -> unparseChainOp op : unparseOption o
+unparseChainLeg :: ChainLeg -> [Token]
+unparseChainLeg (ChainLeg op c) = unparseChainOp op c
 
-unparseChainOp :: ChainOperator -> Token
-unparseChainOp Step = TokChainStep
-unparseChainOp Sequence = TokChainSequence
+unparseChainOp :: ChainOperator -> ChainExpr -> [Token]
+unparseChainOp (ChainOperator k Mandatory) c =
+    unparseChainKind k : unparseChain c
+unparseChainOp (ChainOperator k IffUnblocked) c =
+    [unparseChainKind k, TokLBrace] <> unparseChain c <> [TokRBrace]
+unparseChainOp (ChainOperator k Choose) c =
+    [unparseChainKind k, TokLBracket] <> unparseChain c <> [TokRBracket]
 
-unparseOption :: OptionExpr -> [Token]
-unparseOption (Choose e) = [TokLBracket] <> unparseExpr e <> [TokRBracket]
-unparseOption (IffUnblocked e) = [TokLBrace] <> unparseExpr e <> [TokRBrace]
-unparseOption (Mandatory u) = unparseUnion u
+unparseChainKind :: ChainKind -> Token
+unparseChainKind Step = TokChainStep
+unparseChainKind Sequence = TokChainSequence
+
+-- unparseChainModality ??
 
 unparseUnion :: UnionExpr -> [Token]
 unparseUnion (UnionExpr ms) = concat $ unparseModExpr <$> ms
@@ -112,10 +122,11 @@ unparseAtom (Paren e) = [TokLParen] <> unparseExpr e <> [TokRParen]
 unparseAtom (From l) = [unparseLabel l]
 
 unparseExponent :: Exponent -> [Token]
-unparseExponent (Exponent mop ms k) =
-    maybe [] (singleton . unparseChainOp) mop
-        <> (ms >>= unparseModifier)
-        <> [unparseExponentKind k]
+unparseExponent (Exponent mop ms k) = case mop of
+    Nothing -> (ms >>= unparseModifier) <> [unparseExponentKind k]
+    Just (ChainOperator ck Mandatory) -> [unparseChainKind ck] <> (ms >>= unparseModifier) <> [unparseExponentKind k]
+    Just (ChainOperator ck IffUnblocked) -> [unparseChainKind ck, TokLBrace] <> (ms >>= unparseModifier) <> [unparseExponentKind k, TokRBrace]
+    Just (ChainOperator ck Choose) -> [unparseChainKind ck, TokLBracket] <> (ms >>= unparseModifier) <> [unparseExponentKind k, TokRBracket]
 
 unparseExponentKind :: ExponentKind -> Token
 unparseExponentKind Infinite = TokNumber 0
@@ -131,7 +142,13 @@ genBehaviour :: Gen Behaviour
 genBehaviour = Gen.element [Capture, Leap, Initial, Jump, Move, NoJump, Hop, Any]
 
 genChainOperator :: Gen ChainOperator
-genChainOperator = Gen.element [Step, Sequence]
+genChainOperator = ChainOperator <$> genChainKind <*> genChainModality
+
+genChainKind :: Gen ChainKind
+genChainKind = Gen.element [Step, Sequence]
+
+genChainModality :: Gen ChainModality
+genChainModality = Gen.element [Mandatory, Choose, IffUnblocked]
 
 genNumber :: Gen Number
 genNumber = Gen.sized $ \(Size n) -> Gen.int $ Range.linear 1 (max 1 n)
@@ -199,23 +216,17 @@ genModifierExpr =
 genUnion :: Gen UnionExpr
 genUnion = UnionExpr <$> Gen.nonEmpty (Range.linear 1 4) genModifierExpr
 
-genOption :: Gen OptionExpr
-genOption =
-    Gen.sized $ \n ->
-        Gen.frequency $
-            [(2, Mandatory <$> genUnion)]
-                <> if n <= 1
-                    then []
-                    else
-                        [ (1, Choose <$> genSmallExpr)
-                        , (1, IffUnblocked <$> genSmallExpr)
-                        ]
-
 genChain :: Gen ChainExpr
-genChain = ChainExpr <$> genOption <*> genChainTail
+genChain =
+    Gen.recursive
+        Gen.choice
+        [ChainExpr <$> genUnion <*> return Nothing]
+        [ChainExpr <$> genUnion <*> (Just <$> genChainLeg)]
 
-genChainTail :: Gen [(ChainOperator, OptionExpr)]
-genChainTail = Gen.list (Range.linear 0 3) ((,) <$> genChainOperator <*> genOption)
+genChainLeg :: Gen ChainLeg
+genChainLeg = ChainLeg <$> genChainOperator <*> genSmallChain
+  where
+    genSmallChain = Gen.sized $ \n -> Gen.resize (n `div` 2) genChain
 
 genExpr :: Gen BetzaExpr
 genExpr = BetzaExpr <$> genChain
@@ -282,6 +293,97 @@ hasStmt f qs = case qs of
     Override (Export s) -> f s
     _ -> False
 
+-- coverage utils
+
+foldExpr ::
+    (Monoid m) =>
+    (ChainExpr -> m) ->
+    (ModifierExpr -> m) ->
+    (ExponentExpr -> m) ->
+    (AtomExpr -> m) ->
+    BetzaExpr ->
+    m
+foldExpr fc fm fe fa (BetzaExpr c) = goChain c
+  where
+    goChain ce@(ChainExpr (UnionExpr ms) ml) =
+        fc ce
+            <> foldMap goModifier (toList ms)
+            <> maybe mempty (\(ChainLeg _ inner) -> goChain inner) ml
+    goModifier me@(ModifierExpr _ _ e) =
+        fm me <> goExponent e
+    goExponent ee@(ExponentExpr a _) =
+        fe ee <> goAtom a
+    goAtom ae =
+        fa ae <> case ae of
+            Paren inner -> foldExpr fc fm fe fa inner
+            From _ -> mempty
+
+anyChainExpr :: (ChainExpr -> Bool) -> BetzaExpr -> Bool
+anyChainExpr p = M.getAny . foldExpr (M.Any . p) mempty mempty mempty
+
+anyModifierExpr :: (ModifierExpr -> Bool) -> BetzaExpr -> Bool
+anyModifierExpr p = M.getAny . foldExpr mempty (M.Any . p) mempty mempty
+
+anyExponentExpr :: (ExponentExpr -> Bool) -> BetzaExpr -> Bool
+anyExponentExpr p = M.getAny . foldExpr mempty mempty (M.Any . p) mempty
+
+anyAtomExpr :: (AtomExpr -> Bool) -> BetzaExpr -> Bool
+anyAtomExpr p = M.getAny . foldExpr mempty mempty mempty (M.Any . p)
+
+hasChainLeg :: BetzaExpr -> Bool
+hasChainLeg = anyChainExpr (\(ChainExpr _ ml) -> isJust ml)
+
+hasParenAtom :: BetzaExpr -> Bool
+hasParenAtom = anyAtomExpr (\case Paren _ -> True; _ -> False)
+
+hasAtomExponent :: BetzaExpr -> Bool
+hasAtomExponent = anyExponentExpr (\(ExponentExpr _ me) -> isJust me)
+
+hasBang :: BetzaExpr -> Bool
+hasBang = anyModifierExpr (\(ModifierExpr s _ _) -> s)
+
+hasAmalgamated :: BetzaExpr -> Bool
+hasAmalgamated =
+    anyModifierExpr
+        ( \(ModifierExpr _ ms _) ->
+            any (\case Directional (Amalgamated _ _) -> True; _ -> False) ms
+        )
+
+hasMultiUnion :: BetzaExpr -> Bool
+hasMultiUnion = anyChainExpr (\(ChainExpr (UnionExpr ne) _) -> length ne >= 2)
+
+hasModality :: ChainModality -> BetzaExpr -> Bool
+hasModality m =
+    anyChainExpr
+        ( \(ChainExpr _ ml) ->
+            maybe False (\(ChainLeg (ChainOperator _ m') _) -> m' == m) ml
+        )
+
+hasSequence :: BetzaExpr -> Bool
+hasSequence =
+    anyChainExpr
+        ( \(ChainExpr _ ml) ->
+            maybe False (\(ChainLeg (ChainOperator k _) _) -> k == Sequence) ml
+        )
+
+hasNestedChain :: BetzaExpr -> Bool
+hasNestedChain =
+    anyChainExpr
+        ( \(ChainExpr _ ml) ->
+            maybe False (\(ChainLeg _ (ChainExpr _ ml')) -> isJust ml') ml
+        )
+
+anyInProg :: (BetzaExpr -> Bool) -> BetzaProgram -> Bool
+anyInProg p = any (maybe False p . exprOf)
+  where
+    exprOf (Plain d) = exprOfDirective d
+    exprOf (Override d) = exprOfDirective d
+    exprOfDirective (Bare s) = exprOfStmt s
+    exprOfDirective (Export s) = exprOfStmt s
+    exprOfDirective (Using _) = Nothing
+    exprOfStmt (Assign _ e) = Just e
+    exprOfStmt (Anonymous e) = Just e
+
 -- props
 
 prop_parseUndoesUnparse :: PropertyT IO ()
@@ -310,6 +412,24 @@ prop_parseUndoesUnparse = do
     -- stmt
     classify "has Assign" $ any (hasStmt isAssign) prog
     classify "has Anonymous" $ any (hasStmt isAnonymous) prog
+
+    -- chain structure
+    classify "has chain leg" $ anyInProg hasChainLeg prog
+    classify "has IffUnblocked leg" $ anyInProg (hasModality IffUnblocked) prog
+    classify "has Choose leg" $ anyInProg (hasModality Choose) prog
+    classify "has Sequence leg" $ anyInProg hasSequence prog
+    classify "has Paren atom" $ anyInProg hasParenAtom prog
+    classify "has exponent on atom" $ anyInProg hasAtomExponent prog
+    classify "has nested chain" $ anyInProg hasNestedChain prog
+    classify "has setup (bang)" $ anyInProg hasBang prog
+    classify "has amalgamated direction" $ anyInProg hasAmalgamated prog
+    classify "has union of 2+" $ anyInProg hasMultiUnion prog
+
+    cover 10 "has chain leg" $ anyInProg hasChainLeg prog
+    cover 5 "has IffUnblocked leg" $ anyInProg (hasModality IffUnblocked) prog
+    cover 5 "has Choose leg" $ anyInProg (hasModality Choose) prog
+    cover 5 "has Paren atom" $ anyInProg hasParenAtom prog
+    cover 5 "has exponent on atom" $ anyInProg hasAtomExponent prog
 
     ((\(p, _, _) -> p) <$> (runParser emptyTokenMap parseTokens (unparse prog))) === Right prog
 
