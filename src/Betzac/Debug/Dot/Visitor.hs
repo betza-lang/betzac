@@ -46,15 +46,12 @@ exprNode (BetzaExpr c) = myNode "BetzaExpr" [chainExprNode c]
     myNode l = midNode l 5
 
 chainExprNode :: ChainExpr -> DotNode
-chainExprNode (ChainExpr o rest) = myNode "ChainExpr" $ optionExprNode o : map chainLinkNode rest
+chainExprNode (ChainExpr o rest) = myNode "ChainExpr" $ optionExprNode o : concatMap chainLinkNode rest
   where
     myNode l = midNode l 5
 
--- TODO: not convinced about this one
-chainLinkNode :: (ChainOperator, OptionExpr) -> DotNode
-chainLinkNode (op, e) = myNode (show op ++ " :: ChainOperator") [optionExprNode e]
-  where
-    myNode l = midNode l 6
+chainLinkNode :: (ChainOperator, OptionExpr) -> [DotNode]
+chainLinkNode (op, e) = leafNode (show op) : [optionExprNode e]
 
 optionExprNode :: OptionExpr -> DotNode
 optionExprNode = \case
