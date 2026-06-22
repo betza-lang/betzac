@@ -3,7 +3,7 @@ module Lexer.LexerQC (spec, unlex) where
 import Arbitrary ()
 import Betzac.Alphabet.Comp (compAlphabet)
 import Betzac.Alphabet.Expr (whitespace)
-import Betzac.Lexer.Lexer (lexSource, runLexer, lexTokens)
+import Betzac.Lexer.Lexer (lexSource, lexTokens, runLexer)
 import Betzac.Token
 import Data.List (intercalate)
 import Test.Hspec
@@ -31,7 +31,7 @@ unlexOne t = case t of
     TokNumber n -> show n
     TokComma -> ","
     TokAssign -> "="
-    TokEndStmt -> ";"
+    TokEndStmt -> ";\n"
     TokUsing p -> " using " <> p <> " "
     TokOverride -> " override "
     TokExport -> " export "

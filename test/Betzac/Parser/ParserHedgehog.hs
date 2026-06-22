@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser.ParserHedgehog (spec) where
+module Parser.ParserHedgehog (spec, genProgram, unparse) where
 
 import Betzac.AST
 import Betzac.Parser.Core (runParser)
