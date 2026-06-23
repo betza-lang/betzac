@@ -5,6 +5,7 @@ module Betzac.Lexer.Core (
     TokenMap (..),
     lookupSpan,
     runLexer,
+    try,
     peek,
     advance,
     sat,

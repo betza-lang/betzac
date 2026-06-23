@@ -18,6 +18,9 @@ handlers =
         mconcat
             [ notificationHandler SMethod_TextDocumentDidOpen onOpen
             , notificationHandler SMethod_TextDocumentDidChange onChange
+            , notificationHandler SMethod_TextDocumentDidClose $ const mempty
+            , notificationHandler SMethod_WorkspaceDidChangeConfiguration $ const mempty
+            , notificationHandler SMethod_Initialized $ const mempty
             ]
 
 -- notificationHandler SMethod_TextDocumentDidChange onChange,

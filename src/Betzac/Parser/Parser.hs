@@ -4,7 +4,11 @@ module Betzac.Parser.Parser (parseTokens) where
 
 import Betzac.AST
 import Betzac.Parser.Core
+import Betzac.StreamMutator (StreamError (errorAt), StreamMutator (StreamMutator))
 import Betzac.Token
+
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.State.Strict (gets)
 
 import Data.Char (isDigit)
 import Data.Maybe (isJust)
@@ -15,7 +19,9 @@ parseTokens = do
     rest <- peek
     case rest of
         Nothing -> return ast
-        Just _ -> empty
+        Just _ -> do
+            n <- StreamMutator $ gets fst
+            StreamMutator $ lift $ Left $ errorAt n
 
 parseQualifiedStmt :: Parser QualifiedStmt
 parseQualifiedStmt = ((Override <$> parseOverride) <|> (Plain <$> parseDirective)) <* tok TokEndStmt
@@ -38,7 +44,7 @@ parseExport :: Parser Directive
 parseExport = Export <$> (tok TokExport *> parseStmt)
 
 parseStmt :: Parser BetzaStmt
-parseStmt = parseAssign <|> parseAnonymous
+parseStmt = try parseAssign <|> parseAnonymous
   where
     parseAnonymous = Anonymous <$> parseExpr
     parseAssign = Assign <$> parseLabel <* tok TokAssign <*> parseExpr
@@ -47,7 +53,7 @@ parseExpr :: Parser BetzaExpr
 parseExpr = BetzaExpr <$> parseChainExpr
 
 parseChainExpr :: Parser ChainExpr
-parseChainExpr = ChainExpr <$> parseUnionExpr <*> optional parseChainLeg
+parseChainExpr = ChainExpr <$> parseUnionExpr <*> optional (try parseChainLeg)
 
 parseChainLeg :: Parser ChainLeg
 parseChainLeg = do
@@ -109,7 +115,7 @@ parseBehaviour = dispatch $ \case
     _ -> Nothing
 
 parseExponentExpr :: Parser ExponentExpr
-parseExponentExpr = ExponentExpr <$> parseAtomExpr <*> optional parseExponent
+parseExponentExpr = ExponentExpr <$> parseAtomExpr <*> optional (try parseExponent)
 
 parseExponent :: Parser Exponent
 parseExponent = do

@@ -5,6 +5,7 @@ module Betzac.StreamMutator (
     runMutator,
     module Control.Applicative,
     StreamError (..),
+    try,
     peek,
     sat,
     advance,
@@ -35,17 +36,30 @@ runMutator (StreamMutator m) ss = (\(a, (n, ss')) -> (a, n, ss')) <$> runStateT 
 
 class StreamError e where
     errorAt :: Int -> e
-    errorPos :: e -> Int
+    errorPos :: e -> Int -- for commitment
+    furthest :: e -> e -> e -- to pick the most informative
+    furthest e f = if errorPos e > errorPos f then e else f
+    resetPos :: Int -> e -> e -- reset commitment pos while keeping deep info
+    resetPos n _ = errorAt n
 
 instance (StreamError e) => Alternative (StreamMutator e s) where
     empty = StreamMutator $ gets fst >>= lift . Left . errorAt
-    StreamMutator l <|> StreamMutator r = StreamMutator $ StateT $ \s ->
+    StreamMutator l <|> StreamMutator r = StreamMutator $ StateT $ \s@(n, _) ->
         case runStateT l s of
             Right x -> Right x
-            Left el -> case runStateT r s of
-                Right x -> Right x
-                Left er -> Left $ if errorPos er >= errorPos el then er else el
+            Left el ->
+                if errorPos el > n
+                    then Left el
+                    else case runStateT r s of
+                        Right x -> Right x
+                        Left er -> Left $ furthest el er
     some p = p >>= \x -> (x :) <$> many p
+
+try :: (StreamError e) => StreamMutator e s a -> StreamMutator e s a
+try (StreamMutator m) = StreamMutator $ StateT $ \s@(n, _) ->
+    case runStateT m s of
+        Right x -> Right x
+        Left e -> Left $ resetPos n $ furthest (errorAt n) e
 
 peek :: StreamMutator e s (Maybe s)
 peek = StreamMutator $ gets $ listToMaybe . snd

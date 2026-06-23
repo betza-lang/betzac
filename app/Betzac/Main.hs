@@ -6,7 +6,7 @@ module Main (main) where
 import Betzac.Debug.Dot.Visitor (toDot)
 import Betzac.Lexer.Core (LexError (LexError))
 import Betzac.Lexer.Lexer
-import Betzac.Parser.Core
+import Betzac.Parser.Core hiding (try)
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
 import Control.Exception (IOException, try)
 import Control.Monad (when)

@@ -66,4 +66,4 @@ parseTokens = do
                         (\(program, _, _) -> program)
                             <$> runParser (lexTokenMap loutput) Parser.parseTokens (lexTokens loutput)
                 }
-        Nothing -> pure ()
+        Nothing -> return ()

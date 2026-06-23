@@ -5,6 +5,7 @@ module Betzac.Parser.Core (
     Parser,
     ParseError (..),
     runParser,
+    try,
     peek,
     advance,
     tok,
@@ -25,18 +26,25 @@ type Parser = StreamMutator ParseError Token
 runParser :: TokenMap -> Parser a -> [Token] -> Either ParseError (a, Int, [Token])
 runParser tmap p tokens = case runMutator p tokens of
     Right x -> Right x
-    Left err -> Left err{parseErrSpan = lookupSpan tmap (parseErrTokenIdx err)}
+    Left err ->
+        Left
+            err
+                { parseErrSpan = lookupSpan tmap (parseErrTokenIdx err)
+                }
 
 data ParseError = ParseError
-    { parseErrTokenIdx :: Int
-    , parseErrSpan :: Maybe (Int, Int)
+    { parseErrCommitPos :: Int -- used for commitment decisions
+    , parseErrTokenIdx :: Int -- furthest token reached, for reporting
+    , parseErrSpan :: Maybe (Int, Int) -- char span of furthest token
     , parseErrToken :: Maybe Token
     }
     deriving (Eq, Show)
 
 instance StreamError ParseError where
-    errorAt n = ParseError n Nothing Nothing
-    errorPos e = parseErrTokenIdx e
+    errorAt n = ParseError n n Nothing Nothing
+    errorPos = parseErrCommitPos
+    resetPos n e = e{parseErrCommitPos = n}
+    furthest e f = if parseErrTokenIdx e > parseErrTokenIdx f then e else f
 
 tok :: Token -> Parser Token
 tok = matchOne
@@ -48,4 +56,4 @@ dispatch f = do
     case f t of
         Just a -> return a
         Nothing ->
-            StreamMutator $ lift $ Left $ ParseError n Nothing (Just t)
+            StreamMutator $ lift $ Left $ ParseError n n Nothing (Just t)

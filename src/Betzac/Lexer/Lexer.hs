@@ -54,7 +54,7 @@ lexAtom :: Lexer Token
 lexAtom = TokAtom <$> oneOf upper
 
 lexDescriptor :: Lexer Token
-lexDescriptor = TokDescriptor <$> (char ':' *> descriptor <* char ':')
+lexDescriptor = try $ TokDescriptor <$> (char ':' *> descriptor <* char ':')
   where
     descriptor = some (oneOf $ ',' : space : alphanum)
 
@@ -98,7 +98,7 @@ lexPosIntStr :: Lexer String
 lexPosIntStr = (:) <$> oneOf nonzeroDigit <*> many (oneOf digit)
 
 lexNumber :: Lexer Token
-lexNumber = lexZeroStar <|> lexNonZero <|> lexZero
+lexNumber = try lexZeroStar <|> lexNonZero <|> lexZero
   where
     lexZeroStar = TokSlippery <$ (char '0' *> char '*')
     lexZero = TokNumber 0 <$ char '0'
@@ -114,7 +114,7 @@ lexEndStmt :: Lexer Token
 lexEndStmt = TokEndStmt <$ char stmtEnd
 
 lexKeyword :: String -> Token -> Lexer Token
-lexKeyword kw tok = tok <$ match kw <* lexIgnoreSome
+lexKeyword kw tok = try $ tok <$ match kw <* lexIgnoreSome
 
 lexOverride :: Lexer Token
 lexOverride = lexKeyword "override" TokOverride
@@ -125,5 +125,5 @@ lexExport = lexKeyword "export" TokExport
 lexUsing :: Lexer Token
 lexUsing = TokUsing <$> (match "using" *> lexIgnoreSome *> path)
   where
-    path = (<>) <$> part <*> (concat <$> (many $ (:) <$> char '.' <*> part))
+    path = (<>) <$> part <*> (concat <$> (many $ try $ (:) <$> char '.' <*> part))
     part = some $ oneOf alphanum
