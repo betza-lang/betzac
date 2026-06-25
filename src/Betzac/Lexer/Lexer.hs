@@ -9,6 +9,7 @@ import qualified Betzac.Token as B
 import Betzac.Lexer.Core
 import Betzac.Lexer.Space
 
+import Betzac.Alphabet.Expr (alphanum)
 import qualified Betzac.Alphabet.Stmt as B
 import Data.Void (Void)
 import Text.Megaparsec
@@ -107,7 +108,7 @@ lexEndStmt :: Lexer B.Token
 lexEndStmt = B.TokEndStmt <$ char B.stmtEnd
 
 lexKeyword :: String -> B.Token -> Lexer B.Token
-lexKeyword kw t = try $ t <$ string kw <* lexIgnoreSome
+lexKeyword kw t = t <$ string kw <* notFollowedBy (oneOf alphanum)
 
 lexOverride :: Lexer B.Token
 lexOverride = lexKeyword "override" B.TokOverride
