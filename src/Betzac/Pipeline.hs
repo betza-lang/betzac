@@ -5,65 +5,67 @@ module Betzac.Pipeline (
     PipelineError (..),
 ) where
 
-import Betzac.AST (BetzaProgram)
-import Betzac.Lexer.Core (LexError (..), runLexer)
-import Betzac.Lexer.Lexer (LexOutput (lexTokenMap, lexTokens))
-import qualified Betzac.Lexer.Lexer as Lexer (lexSource)
-import Betzac.Parser.Core (ParseError, runParser)
-import qualified Betzac.Parser.Parser as Parser (parseTokens)
+import Betzac.AST as B (BetzaProgram)
+import qualified Betzac.Lexer.Lexer as B (runLexer)
+import Betzac.Located
+import qualified Betzac.Parser.BetzaTokenStream as B (BetzaTokenStream (..))
+import qualified Betzac.Parser.Parser as B (parseTokens)
+import qualified Betzac.Token as B (Token)
+
 import Control.Monad.Trans.State.Strict (StateT, execStateT, gets, modify)
 import Data.Text (Text, unpack)
+import Data.Void
+import Text.Megaparsec
 import Prelude hiding (length)
+
+type LexBundle = ParseErrorBundle String Void
+type ParseBundle = ParseErrorBundle B.BetzaTokenStream Void
 
 type Pipeline a = StateT PipelineResult (Either PipelineError) a
 
 data PipelineResult = PipelineResult
     { sourceText :: Text
-    , lexResult :: Maybe (Either LexError LexOutput)
-    , parseResult :: Maybe (Either ParseError BetzaProgram)
+    , filePath :: FilePath
+    , lexResult :: Maybe (Either LexBundle [Located B.Token])
+    , parseResult :: Maybe (Either ParseBundle BetzaProgram)
     }
     deriving (Show)
 
-emptyResult :: Text -> PipelineResult
-emptyResult src =
+emptyResult :: FilePath -> Text -> PipelineResult
+emptyResult f src =
     PipelineResult
         { sourceText = src
+        , filePath = f
         , lexResult = Nothing
         , parseResult = Nothing
         }
 
-data PipelineError
-    = SystemError String
-    deriving (Show)
+data PipelineError = SystemError String deriving (Show)
 
 pipeline :: Pipeline ()
-pipeline = do
-    lexSource
-    parseTokens
+pipeline = lexStage >> parseStage
 
 updatePipeline :: PipelineResult -> Text -> Either PipelineError PipelineResult
-updatePipeline _ = fromScratch
+updatePipeline r = fromScratch $ filePath r
 
-fromScratch :: Text -> Either PipelineError PipelineResult
-fromScratch src = execStateT pipeline (emptyResult src)
+fromScratch :: FilePath -> Text -> Either PipelineError PipelineResult
+fromScratch f src = execStateT pipeline (emptyResult f src)
 
-lexSource :: Pipeline ()
-lexSource = do
+lexStage :: Pipeline ()
+lexStage = do
+    f <- gets filePath
     src <- gets $ unpack . sourceText
-    modify $ \r ->
-        r
-            { lexResult = Just $ (\(tokens, _, _) -> tokens) <$> runLexer Lexer.lexSource src
-            }
+    modify $ \r -> r{lexResult = Just $ B.runLexer f src}
 
-parseTokens :: Pipeline ()
-parseTokens = do
-    mloutput <- gets lexResult
-    case mloutput >>= either (const Nothing) Just of
-        Just loutput -> modify $ \r ->
-            r
-                { parseResult =
-                    Just $
-                        (\(program, _, _) -> program)
-                            <$> runParser (lexTokenMap loutput) Parser.parseTokens (lexTokens loutput)
-                }
+parseStage :: Pipeline ()
+parseStage = do
+    src <- gets $ unpack . sourceText
+    mlex <- gets lexResult
+    case mlex >>= either (const Nothing) Just of
         Nothing -> return ()
+        Just ts -> do
+            let stream = B.BetzaTokenStream src ts
+            modify $ \r ->
+                r
+                    { parseResult = Just $ parse B.parseTokens (filePath r) stream
+                    }

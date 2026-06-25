@@ -1,90 +1,85 @@
 module Lexer.LexerSpec (spec) where
 
 import Betzac.Alphabet.Expr (behaviour, direction, upper)
-import Betzac.Lexer.Core (LexError, runLexer)
-import Betzac.Lexer.Lexer (lexSource, lexToken, lexTokens)
+import Betzac.Lexer.Lexer (runLexer)
+import Betzac.Located (tokenVal)
 import Betzac.Token
 import Data.Either (isLeft)
 import Test.Hspec
 
-tok :: String -> Either LexError [Token]
-tok s = case runLexer lexSource s of
-    Left e -> Left e
-    Right (out, _, _) -> Right (lexTokens out)
-
-oneTok :: String -> Either LexError Token
-oneTok s = case runLexer lexToken s of
-    Left e -> Left e
-    Right (t, _, _) -> Right t
+tok :: String -> Either String [Token]
+tok s = case runLexer "<test>" s of
+    Left e -> Left (show e)
+    Right ts -> Right (tokenVal <$> ts)
 
 spec :: Spec
 spec = describe "Lexer.Lexer" $ do
     describe "lexToken" $ do
         describe "atoms" $ do
             it "lexes an uppercase letter as an atom" $
-                oneTok "Q" `shouldBe` Right (TokAtom 'Q')
+                tok "Q" `shouldBe` Right [TokAtom 'Q']
             it "lexes all uppercase letters" $
-                mapM_ (\c -> oneTok [c] `shouldBe` Right (TokAtom c)) upper
+                mapM_ (\c -> tok [c] `shouldBe` Right [TokAtom c]) upper
 
         describe "descriptors" $ do
             it "lexes a simple descriptor" $
-                oneTok ":hello:" `shouldBe` Right (TokDescriptor "hello")
+                tok ":hello:" `shouldBe` Right [TokDescriptor "hello"]
             it "lexes a descriptor with spaces" $
-                oneTok ":my piece:;" `shouldBe` Right (TokDescriptor "my piece")
+                tok ":my piece:" `shouldBe` Right [TokDescriptor "my piece"]
             it "lexes a leaper descriptor" $
-                oneTok ":3,4:;" `shouldBe` Right (TokDescriptor "3,4")
+                tok ":3,4:" `shouldBe` Right [TokDescriptor "3,4"]
             it "fails on an unclosed descriptor" $
-                oneTok ":hello" `shouldSatisfy` isLeft
+                tok ":hello" `shouldSatisfy` isLeft
 
         describe "directions" $ do
             it "lexes a direction modifier" $
-                mapM_ (\c -> oneTok [c] `shouldBe` Right (TokDirection c)) direction
+                mapM_ (\c -> tok [c] `shouldBe` Right [TokDirection c]) direction
 
         describe "behaviours" $ do
             it "lexes a behaviour modifier" $
-                mapM_ (\c -> oneTok [c] `shouldBe` Right (TokBehaviour c)) behaviour
+                mapM_ (\c -> tok [c] `shouldBe` Right [TokBehaviour c]) behaviour
 
         describe "chain operators" $ do
             it "lexes a chain step" $
-                oneTok "-" `shouldBe` Right TokChainStep
+                tok "-" `shouldBe` Right [TokChainStep]
             it "lexes a chain sequence" $
-                oneTok "--" `shouldBe` Right TokChainSequence
+                tok "--" `shouldBe` Right [TokChainSequence]
             it "prefers chain sequence over chain step" $
-                oneTok "--" `shouldBe` Right TokChainSequence
+                tok "--" `shouldBe` Right [TokChainSequence]
 
         describe "numbers" $ do
             it "lexes zero" $
-                oneTok "0" `shouldBe` Right (TokNumber 0)
+                tok "0" `shouldBe` Right [TokNumber 0]
             it "lexes a positive integer" $
-                oneTok "42" `shouldBe` Right (TokNumber 42)
+                tok "42" `shouldBe` Right [TokNumber 42]
             it "lexes 0* as slippery" $
-                oneTok "0*" `shouldBe` Right TokSlippery
+                tok "0*" `shouldBe` Right [TokSlippery]
             it "does not lex a bare * as slippery" $
-                oneTok "*" `shouldSatisfy` isLeft
+                tok "*" `shouldSatisfy` isLeft
 
         describe "grouping" $ do
             it "lexes parentheses" $
-                tok "();" `shouldBe` Right [TokLParen, TokRParen, TokEndStmt]
+                tok "()" `shouldBe` Right [TokLParen, TokRParen]
             it "lexes brackets" $
-                tok "[];" `shouldBe` Right [TokLBracket, TokRBracket, TokEndStmt]
+                tok "[]" `shouldBe` Right [TokLBracket, TokRBracket]
             it "lexes braces" $
-                tok "{};" `shouldBe` Right [TokLBrace, TokRBrace, TokEndStmt]
+                tok "{}" `shouldBe` Right [TokLBrace, TokRBrace]
             it "lexes angles" $
-                tok "<>;" `shouldBe` Right [TokLAngle, TokRAngle, TokEndStmt]
+                tok "<>" `shouldBe` Right [TokLAngle, TokRAngle]
 
     describe "directives" $ do
         it "lexes export directive" $
-            tok "export fW;" `shouldBe` Right [TokExport, TokDirection 'f', TokAtom 'W', TokEndStmt]
+            tok "export fW" `shouldBe` Right [TokExport, TokDirection 'f', TokAtom 'W']
         it "lexes override directive" $
-            tok "override fW;" `shouldBe` Right [TokOverride, TokDirection 'f', TokAtom 'W', TokEndStmt]
+            tok "override fW" `shouldBe` Right [TokOverride, TokDirection 'f', TokAtom 'W']
         it "lexes using directive with simple path" $
-            tok "using Std;" `shouldBe` Right [TokUsing "Std", TokEndStmt]
+            tok "using Std" `shouldBe` Right [TokUsing "Std"]
         it "lexes using directive with dotted path" $
-            tok "using Std.Prelude;" `shouldBe` Right [TokUsing "Std.Prelude", TokEndStmt]
+            tok "using Std.Prelude" `shouldBe` Right [TokUsing "Std.Prelude"]
         it "fails on directive keyword without following whitespace" $
-            tok "exportfW;" `shouldSatisfy` isLeft
+            tok "exportfW" `shouldSatisfy` isLeft
         it "fails on override without following whitespace" $
-            tok "overridefW;" `shouldSatisfy` isLeft
+            tok "overridefW" `shouldSatisfy` isLeft
 
     describe "lexSource" $ do
         it "lexes an empty file" $

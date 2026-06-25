@@ -4,42 +4,39 @@
 module Main (main) where
 
 import Betzac.Debug.Dot.Visitor (toDot)
-import Betzac.Lexer.Core (LexError (LexError))
-import Betzac.Lexer.Lexer
-import Betzac.Parser.Core hiding (try)
-import Betzac.Pipeline (PipelineResult (..), fromScratch)
+import qualified Betzac.Pipeline as B (PipelineResult (..), fromScratch)
+
 import Control.Exception (IOException, try)
 import Control.Monad (when)
-import qualified Data.Text as T (Text, lines, unlines)
+import qualified Data.Text as T
 import qualified Data.Text.IO as T
+
 import Options
+import Text.Megaparsec hiding (failure, try)
+
+import Betzac.Located (Located (tokenVal))
 import qualified System.Exit as S
 import qualified System.IO as S
-import Prelude hiding (readFile)
 
-showLexResults :: Options -> PipelineResult -> IO StageResult
-showLexResults _ p = case lexResult p of
+showLexResults :: Options -> B.PipelineResult -> IO StageResult
+showLexResults _ p = case B.lexResult p of
     Nothing -> return notRun
-    Just (Left (LexError pos)) -> do
-        hPutIndentLn S.stderr $ "Lex error at position " ++ show pos
+    Just (Left bundle) -> do
+        hPutBundlePretty S.stderr bundle
         return $ err mempty
-    Just (Right loutput) -> do
+    Just (Right ts) ->
         return
             ok
                 { stageDetail = do
-                    mapM_ (hPutIndentLn S.stderr . show) (lexTokens loutput)
+                    mapM_ (hPutIndentLn S.stderr . show . tokenVal) ts
                     S.hPutStrLn S.stderr ""
                 }
 
-showParseResults :: Options -> PipelineResult -> IO StageResult
-showParseResults o p = case parseResult p of
+showParseResults :: Options -> B.PipelineResult -> IO StageResult
+showParseResults o p = case B.parseResult p of
     Nothing -> return notRun
-    Just (Left err') -> do
-        hPutIndentLn S.stderr $
-            "Parse error at token "
-                ++ show (parseErrTokenIdx err')
-                ++ maybe "" (\(s, e) -> " (chars " ++ show s ++ "-" ++ show e ++ ")") (parseErrSpan err')
-                ++ maybe "" (\t -> ": unexpected " ++ show t) (parseErrToken err')
+    Just (Left bundle) -> do
+        hPutBundlePretty S.stderr bundle
         return $ err mempty
     Just (Right program) -> do
         case emitDot o of
@@ -49,11 +46,13 @@ showParseResults o p = case parseResult p of
             Just path -> T.writeFile path (toDot program)
             Nothing -> mempty
         let dotNote = case emitDot o of
-                Just path | path `notElem` ["/dev/null", "stdout", "-"] -> hPutIndentLn S.stderr ("Wrote AST to " ++ path)
+                Just path
+                    | path `notElem` ["/dev/null", "stdout", "-"] ->
+                        hPutIndentLn S.stderr ("Wrote AST to " ++ path)
                 _ -> mempty
         return ok{stageDetail = dotNote}
 
-showAnalysis :: Options -> PipelineResult -> IO StageResult
+showAnalysis :: Options -> B.PipelineResult -> IO StageResult
 showAnalysis _ _ = return notRun
 
 data StageResult = StageResult
@@ -63,10 +62,11 @@ data StageResult = StageResult
     }
 
 ok, notRun :: StageResult
-ok = StageResult "Ok" mempty mempty
-notRun = StageResult "(not run)" mempty mempty
+ok = StageResult success mempty mempty
+notRun = StageResult passed mempty mempty
+
 err :: IO () -> StageResult
-err details = StageResult "Fail" details S.exitFailure
+err details = StageResult failure details S.exitFailure
 
 success, failure, passed :: String
 success = "Ok"
@@ -74,24 +74,29 @@ failure = "Fail"
 passed = "(not run)"
 
 hPutStage :: Options -> String -> IO StageResult -> IO ()
-hPutStage o label action = do
+hPutStage o lbl action = do
     StageResult status detail exit <- action
     when (verbosity o >= Verbose) $
-        S.hPutStrLn S.stderr (label ++ ": " ++ status)
+        S.hPutStrLn S.stderr (lbl ++ ": " ++ status)
     whenVeryVerbose o detail
     exit
-
--- | Run a detail action only if verbosity >= -vv
-whenVeryVerbose :: Options -> IO () -> IO ()
-whenVeryVerbose o action = if verbosity o >= VeryVerbose then action else mempty
 
 hPutIndentLn :: S.Handle -> String -> IO ()
 hPutIndentLn h s = S.hPutStrLn h $ "    " ++ s
 
+hPutBundlePretty :: (VisualStream s, TraversableStream s, ShowErrorComponent e) => S.Handle -> ParseErrorBundle s e -> IO ()
+hPutBundlePretty h bundle =
+    mapM_ (hPutIndentLn h) $ lines $ errorBundlePretty bundle
+
+-- Run a detail action only if verbosity >= -vv
+whenVeryVerbose :: Options -> IO () -> IO ()
+whenVeryVerbose o action = if verbosity o >= VeryVerbose then action else mempty
+
 main :: IO ()
 main = do
     opts <- getOptions
-    f <- try (T.readFile $ inputFile opts) :: IO (Either IOException T.Text)
+    let fp = inputFile opts
+    f <- try (T.readFile fp) :: IO (Either IOException T.Text)
     case f of
         Left e -> do
             when (verbosity opts >= Verbose) $ S.hPutStrLn S.stderr ("IO: " ++ failure)
@@ -102,7 +107,7 @@ main = do
             whenVeryVerbose opts $
                 T.hPutStrLn S.stderr $
                     (T.unlines . map ("    " <>) . T.lines) src
-            case fromScratch src of
+            case B.fromScratch fp src of
                 Left e -> do
                     S.hPutStrLn S.stderr $ "Fatal pipeline error: " ++ show e
                     S.exitFailure

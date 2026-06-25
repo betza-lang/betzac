@@ -25,6 +25,7 @@ dependencies:
   - text
   - lens
   - lsp
+  - megaparsec
 
 ghc-options:
   - -Wall

@@ -1,44 +1,16 @@
-module Betzac.Lexer.Core (
-    module Control.Applicative,
-    Lexer,
-    LexError (..),
-    TokenMap (..),
-    lookupSpan,
-    runLexer,
-    try,
-    peek,
-    advance,
-    sat,
-    failOn,
-    char,
-    oneOf,
-    noneOf,
-    match,
-    singleton,
-) where
+module Betzac.Lexer.Core (Lexer, spanned) where
 
-import Betzac.StreamMutator
-import Control.Applicative (Alternative (..))
-import GHC.Arr (Array, Ix (inRange), bounds, (!))
+import Betzac.Located
+import qualified Betzac.Token as B
+import Data.Void
+import Text.Megaparsec
 
-type Lexer = StreamMutator LexError Char
+type Lexer = Parsec Void String
 
-runLexer :: Lexer a -> String -> Either LexError (a, Int, String)
-runLexer = runMutator
-
-data LexError = LexError Int deriving (Eq, Show)
-
-instance StreamError LexError where
-    errorAt = LexError
-    errorPos (LexError n) = n
-
-char :: Char -> Lexer Char
-char = matchOne
-
-data TokenMap = TokenMap (Array Int (Int, Int))
-    deriving (Show)
-
-lookupSpan :: TokenMap -> Int -> Maybe (Int, Int)
-lookupSpan (TokenMap arr) i
-    | inRange (bounds arr) i = Just (arr ! i)
-    | otherwise = Nothing
+spanned :: Lexer B.Token -> Lexer (Located B.Token)
+spanned p = do
+    start <- getSourcePos
+    a <- p
+    end <- getSourcePos
+    let len = unPos (sourceColumn end) - unPos (sourceColumn start)
+    return $ Located start end len a

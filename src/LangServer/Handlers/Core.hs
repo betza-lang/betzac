@@ -1,58 +1,57 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module LangServer.Handlers.Core (offsetToPosition, spanToRange, pointRange, publishDiagnostics, lexDiags, parseDiags, makeDiagnostic) where
+module LangServer.Handlers.Core (publishDiagnostics, makeDiagnostic) where
 
-import Betzac.Lexer.Core (LexError (..))
-import Betzac.Parser.Core (ParseError (..))
-import Betzac.Pipeline (PipelineResult (..), fromScratch)
+import qualified Betzac.Pipeline as B (PipelineResult (..), fromScratch)
+
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as T
 import LangServer.Config
 import Language.LSP.Protocol.Message
 import Language.LSP.Protocol.Types
 import Language.LSP.Server hiding (publishDiagnostics)
+import Text.Megaparsec
 
-offsetToPosition :: [Char] -> Int -> Position
-offsetToPosition src offset =
-    let before = take offset src
-        (line, col) =
-            foldl
-                (\(l, c) ch -> if ch == '\n' then (l + 1, 0) else (l, c + 1))
-                (0, 0)
-                before
-     in Position line col
-
-spanToRange :: String -> (Int, Int) -> Range
-spanToRange src (s, e) = Range (offsetToPosition src s) (offsetToPosition src e)
-
-pointRange :: String -> Int -> Range
-pointRange src offset =
-    let pos = offsetToPosition src offset
-     in Range pos pos
-
-publishDiagnostics :: Uri -> Text -> LspM ConfigBLS ()
-publishDiagnostics u src = do
-    let srcStr = T.unpack src
-        diags = case fromScratch src of
+publishDiagnostics :: FilePath -> Uri -> Text -> LspM ConfigBLS ()
+publishDiagnostics fp u src = do
+    let diags = case B.fromScratch fp src of
             Left _ -> []
-            Right result -> lexDiags srcStr result ++ parseDiags srcStr result
+            Right result -> lexDiags result ++ parseDiags result
     sendNotification SMethod_TextDocumentPublishDiagnostics $
         PublishDiagnosticsParams u Nothing diags
 
-lexDiags :: String -> PipelineResult -> [Diagnostic]
-lexDiags src result = case lexResult result of
-    Just (Left (LexError pos)) ->
-        [makeDiagnostic (pointRange src pos) "Unexpected character"]
+lexDiags :: B.PipelineResult -> [Diagnostic]
+lexDiags result = case B.lexResult result of
+    Just (Left bundle) -> bundleToDiagnostics bundle
     _ -> []
 
-parseDiags :: String -> PipelineResult -> [Diagnostic]
-parseDiags src result = case parseResult result of
-    Just (Left err) ->
-        let range = case parseErrSpan err of
-                Just (s, e) -> spanToRange src (s, e)
-                Nothing -> pointRange src 0
-         in [makeDiagnostic range "Parse error"]
+parseDiags :: B.PipelineResult -> [Diagnostic]
+parseDiags result = case B.parseResult result of
+    Just (Left bundle) -> bundleToDiagnostics bundle
     _ -> []
+
+bundleToDiagnostics ::
+    (VisualStream s, TraversableStream s, ShowErrorComponent e) =>
+    ParseErrorBundle s e -> [Diagnostic]
+bundleToDiagnostics bundle =
+    [ makeDiagnostic (sourcePosPairToRange sp) (T.pack $ parseErrorTextPretty err)
+    | (err, sp) <-
+        NE.toList $
+            fst $
+                attachSourcePos errorOffset (bundleErrors bundle) (bundlePosState bundle)
+    ]
+
+sourcePosPairToRange :: SourcePos -> Range
+sourcePosPairToRange sp =
+    let pos = sourcePosToPosition sp
+     in Range pos pos
+
+sourcePosToPosition :: SourcePos -> Position
+sourcePosToPosition sp =
+    Position
+        (fromIntegral $ unPos (sourceLine sp) - 1)
+        (fromIntegral $ unPos (sourceColumn sp) - 1)
 
 makeDiagnostic :: Range -> Text -> Diagnostic
 makeDiagnostic range message =

@@ -1,39 +1,31 @@
-module Betzac.Lexer.Lexer (
-    LexOutput (..),
-    lexToken,
-    runLexer,
-    lexSource,
-)
-where
+{-# LANGUAGE OverloadedStrings #-}
 
-import Betzac.Alphabet.Expr (alphanum, behaviour, digit, direction, nonzeroDigit, space, upper)
-import Betzac.Alphabet.Stmt (assign, stmtEnd)
+module Betzac.Lexer.Lexer (lexSource, runLexer) where
+
+import qualified Betzac.Alphabet.Expr as B
+import Betzac.Located (Located (..))
+import qualified Betzac.Token as B
+
 import Betzac.Lexer.Core
-import Betzac.Lexer.ErrorHandling (buildMap, spanned)
-import Betzac.Lexer.Scan (lexIgnore, lexIgnoreSome)
-import Betzac.Token (Token (..))
+import Betzac.Lexer.Space
 
-data LexOutput = LexOutput
-    { lexTokens :: [Token]
-    , lexTokenMap :: TokenMap
-    }
-    deriving (Show)
+import qualified Betzac.Alphabet.Stmt as B
+import Data.Void (Void)
+import Text.Megaparsec
+import Text.Megaparsec.Char (char, string)
 
-lexSource :: Lexer LexOutput
-lexSource = do
-    lexIgnore
-    pairs <- many (spanned (lexToken' <* lexIgnore))
-    rest <- peek
-    case rest of
-        Nothing -> return $ LexOutput (fst <$> pairs) (buildMap $ snd <$> pairs)
-        Just _ -> empty
+runLexer :: FilePath -> String -> Either (ParseErrorBundle String Void) [Located B.Token]
+runLexer = parse lexSource
+
+lexSource :: Lexer [Located B.Token]
+lexSource = lexIgnore *> many (spanned $ lexToken' <* lexIgnore) <* eof
   where
-    lexToken' = lexToken <|> lexDirective
+    lexToken' = lexDirective <|> lexToken
 
-lexDirective :: Lexer Token
+lexDirective :: Lexer B.Token
 lexDirective = lexExport <|> lexUsing <|> lexOverride
 
-lexToken :: Lexer Token
+lexToken :: Lexer B.Token
 lexToken =
     lexAtom
         <|> lexDescriptor
@@ -50,80 +42,80 @@ lexToken =
         <|> lexAssign
         <|> lexEndStmt
 
-lexAtom :: Lexer Token
-lexAtom = TokAtom <$> oneOf upper
+lexAtom :: Lexer B.Token
+lexAtom = B.TokAtom <$> oneOf B.upper
 
-lexDescriptor :: Lexer Token
-lexDescriptor = try $ TokDescriptor <$> (char ':' *> descriptor <* char ':')
+lexDescriptor :: Lexer B.Token
+lexDescriptor = try $ B.TokDescriptor <$> (char ':' *> descriptor <* char ':')
   where
-    descriptor = some (oneOf $ ',' : space : alphanum)
+    descriptor = some (oneOf $ ',' : B.space : B.alphanum)
 
-lexDirection :: Lexer Token
-lexDirection = TokDirection <$> oneOf direction
+lexDirection :: Lexer B.Token
+lexDirection = B.TokDirection <$> oneOf B.direction
 
-lexBehaviour :: Lexer Token
-lexBehaviour = TokBehaviour <$> oneOf behaviour
+lexBehaviour :: Lexer B.Token
+lexBehaviour = B.TokBehaviour <$> oneOf B.behaviour
 
-lexParen :: Lexer Token
+lexParen :: Lexer B.Token
 lexParen = lparen <|> rparen
   where
-    lparen = TokLParen <$ char '('
-    rparen = TokRParen <$ char ')'
+    lparen = B.TokLParen <$ char '('
+    rparen = B.TokRParen <$ char ')'
 
-lexBracket :: Lexer Token
+lexBracket :: Lexer B.Token
 lexBracket = lbracket <|> rbracket
   where
-    lbracket = TokLBracket <$ char '['
-    rbracket = TokRBracket <$ char ']'
+    lbracket = B.TokLBracket <$ char '['
+    rbracket = B.TokRBracket <$ char ']'
 
-lexBrace :: Lexer Token
+lexBrace :: Lexer B.Token
 lexBrace = lbrace <|> rbrace
   where
-    lbrace = TokLBrace <$ char '{'
-    rbrace = TokRBrace <$ char '}'
+    lbrace = B.TokLBrace <$ char '{'
+    rbrace = B.TokRBrace <$ char '}'
 
-lexAngle :: Lexer Token
+lexAngle :: Lexer B.Token
 lexAngle = langle <|> rangle
   where
-    langle = TokLAngle <$ char '<'
-    rangle = TokRAngle <$ char '>'
+    langle = B.TokLAngle <$ char '<'
+    rangle = B.TokRAngle <$ char '>'
 
-lexChain :: Lexer Token
-lexChain = char '-' *> (TokChainSequence <$ char '-' <|> pure TokChainStep)
+lexChain :: Lexer B.Token
+lexChain = char '-' *> (B.TokChainSequence <$ char '-' <|> pure B.TokChainStep)
 
-lexBang :: Lexer Token
-lexBang = TokBang <$ char '!'
+lexBang :: Lexer B.Token
+lexBang = B.TokBang <$ char '!'
+
+lexNumber :: Lexer B.Token
+lexNumber = try lexZeroStar <|> try lexNonZero <|> lexZero
+  where
+    lexZeroStar = B.TokSlippery <$ (char '0' *> char '*')
+    lexNonZero = B.TokNumber . read <$> lexPosIntStr
+    lexZero = B.TokNumber 0 <$ char '0'
 
 lexPosIntStr :: Lexer String
-lexPosIntStr = (:) <$> oneOf nonzeroDigit <*> many (oneOf digit)
+lexPosIntStr = (:) <$> oneOf B.nonzeroDigit <*> many (oneOf B.digit)
 
-lexNumber :: Lexer Token
-lexNumber = try lexZeroStar <|> lexNonZero <|> lexZero
-  where
-    lexZeroStar = TokSlippery <$ (char '0' *> char '*')
-    lexZero = TokNumber 0 <$ char '0'
-    lexNonZero = TokNumber . read <$> lexPosIntStr
+lexComma :: Lexer B.Token
+lexComma = B.TokComma <$ char ','
 
-lexComma :: Lexer Token
-lexComma = TokComma <$ char ','
+lexAssign :: Lexer B.Token
+lexAssign = B.TokAssign <$ char B.assign
 
-lexAssign :: Lexer Token
-lexAssign = TokAssign <$ char assign
+lexEndStmt :: Lexer B.Token
+lexEndStmt = B.TokEndStmt <$ char B.stmtEnd
 
-lexEndStmt :: Lexer Token
-lexEndStmt = TokEndStmt <$ char stmtEnd
+lexKeyword :: String -> B.Token -> Lexer B.Token
+lexKeyword kw t = try $ t <$ string kw <* lexIgnoreSome
 
-lexKeyword :: String -> Token -> Lexer Token
-lexKeyword kw tok = try $ tok <$ match kw <* lexIgnoreSome
+lexOverride :: Lexer B.Token
+lexOverride = lexKeyword "override" B.TokOverride
 
-lexOverride :: Lexer Token
-lexOverride = lexKeyword "override" TokOverride
+lexExport :: Lexer B.Token
+lexExport = lexKeyword "export" B.TokExport
 
-lexExport :: Lexer Token
-lexExport = lexKeyword "export" TokExport
-
-lexUsing :: Lexer Token
-lexUsing = TokUsing <$> (match "using" *> lexIgnoreSome *> path)
+lexUsing :: Lexer B.Token
+lexUsing = B.TokUsing <$> (string "using" *> lexIgnoreSome *> path)
   where
     path = (<>) <$> part <*> (concat <$> (many $ try $ (:) <$> char '.' <*> part))
-    part = some $ oneOf alphanum
+    part = some $ oneOf B.alphanum

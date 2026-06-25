@@ -2,154 +2,149 @@
 
 module Betzac.Parser.Parser (parseTokens) where
 
-import Betzac.AST
+import qualified Betzac.AST as B
 import Betzac.Parser.Core
-import Betzac.StreamMutator (StreamError (errorAt), StreamMutator (StreamMutator))
-import Betzac.Token
-
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.State.Strict (gets)
+import qualified Betzac.Token as B
 
 import Data.Char (isDigit)
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
+import Text.Megaparsec
 
-parseTokens :: Parser BetzaProgram
-parseTokens = do
-    ast <- many parseQualifiedStmt
-    rest <- peek
-    case rest of
-        Nothing -> return ast
-        Just _ -> do
-            n <- StreamMutator $ gets fst
-            StreamMutator $ lift $ Left $ errorAt n
+parseTokens :: Parser B.BetzaProgram
+parseTokens = many parseQualifiedStmt <* eof
 
-parseQualifiedStmt :: Parser QualifiedStmt
-parseQualifiedStmt = ((Override <$> parseOverride) <|> (Plain <$> parseDirective)) <* tok TokEndStmt
+parseQualifiedStmt :: Parser B.QualifiedStmt
+parseQualifiedStmt = (parseOverride' <|> parseDirective') <* tok B.TokEndStmt
+  where
+    parseOverride' = B.Override <$> parseOverride
+    parseDirective' = B.Plain <$> parseDirective
 
-parseOverride :: Parser Directive
-parseOverride = tok TokOverride *> parseDirective
+parseOverride :: Parser B.Directive
+parseOverride = tok B.TokOverride *> parseDirective
 
-parseDirective :: Parser Directive
-parseDirective = parseUsing <|> parseExport <|> Bare <$> parseStmt
+parseDirective :: Parser B.Directive
+parseDirective = parseUsing <|> parseExport <|> B.Bare <$> parseStmt
 
-parseUsing :: Parser Directive
+parseUsing :: Parser B.Directive
 parseUsing = dispatch $ \case
-    TokUsing p -> Just $ Using $ toRelativePath p
+    B.TokUsing p -> Just $ B.Using $ toRelativePath p
     _ -> Nothing
 
 toRelativePath :: String -> FilePath
 toRelativePath = map (\c -> if c == '.' then '/' else c)
 
-parseExport :: Parser Directive
-parseExport = Export <$> (tok TokExport *> parseStmt)
+parseExport :: Parser B.Directive
+parseExport = B.Export <$> (tok B.TokExport *> parseStmt)
 
-parseStmt :: Parser BetzaStmt
+parseStmt :: Parser B.BetzaStmt
 parseStmt = try parseAssign <|> parseAnonymous
   where
-    parseAnonymous = Anonymous <$> parseExpr
-    parseAssign = Assign <$> parseLabel <* tok TokAssign <*> parseExpr
+    parseAnonymous = B.Anonymous <$> parseExpr
+    parseAssign = B.Assign <$> parseLabel <* tok B.TokAssign <*> parseExpr
 
-parseExpr :: Parser BetzaExpr
-parseExpr = BetzaExpr <$> parseChainExpr
+parseExpr :: Parser B.BetzaExpr
+parseExpr = B.BetzaExpr <$> parseChainExpr
 
-parseChainExpr :: Parser ChainExpr
-parseChainExpr = ChainExpr <$> parseUnionExpr <*> optional (try parseChainLeg)
+parseChainExpr :: Parser B.ChainExpr
+parseChainExpr = B.ChainExpr <$> parseUnionExpr <*> optional (try parseChainLeg)
 
-parseChainLeg :: Parser ChainLeg
-parseChainLeg = do
-    kind <- parseChainKind
-    parseChoose kind <|> parseIffUnblocked kind <|> parseMandatory kind
+parseChainLeg :: Parser B.ChainLeg
+parseChainLeg = parseChainKind >>= \kind -> parseChoose kind <|> parseIffUnblocked kind <|> parseMandatory kind
   where
-    parseMandatory k = ChainLeg (ChainOperator k Mandatory) <$> parseChainExpr
-    parseIffUnblocked k = ChainLeg (ChainOperator k IffUnblocked) <$> (tok TokLBrace *> parseChainExpr <* tok TokRBrace)
-    parseChoose k = ChainLeg (ChainOperator k Choose) <$> (tok TokLBracket *> parseChainExpr <* tok TokRBracket)
+    parseMandatory k = B.ChainLeg (B.ChainOperator k B.Mandatory) <$> parseChainExpr
+    parseIffUnblocked k = B.ChainLeg (B.ChainOperator k B.IffUnblocked) <$> (tok B.TokLBrace *> parseChainExpr <* tok B.TokRBrace)
+    parseChoose k = B.ChainLeg (B.ChainOperator k B.Choose) <$> (tok B.TokLBracket *> parseChainExpr <* tok B.TokRBracket)
 
-parseChainKind :: Parser ChainKind
+parseChainKind :: Parser B.ChainKind
 parseChainKind = parseStep <|> parseSequence
   where
-    parseStep = Step <$ tok TokChainStep
-    parseSequence = Sequence <$ tok TokChainSequence
+    parseStep = B.Step <$ tok B.TokChainStep
+    parseSequence = B.Sequence <$ tok B.TokChainSequence
 
-parseUnionExpr :: Parser UnionExpr
-parseUnionExpr = UnionExpr <$> someNE parseModifierExpr
+parseUnionExpr :: Parser B.UnionExpr
+parseUnionExpr = B.UnionExpr <$> NE.fromList <$> some parseModifierExpr
 
-parseModifierExpr :: Parser ModifierExpr
+parseModifierExpr :: Parser B.ModifierExpr
 parseModifierExpr =
-    ModifierExpr
-        <$> (isJust <$> optional (tok TokBang))
+    B.ModifierExpr
+        <$> (isJust <$> optional (tok B.TokBang))
         <*> many parseModifier
         <*> parseExponentExpr
 
-parseModifier :: Parser Modifier
-parseModifier = (Directional <$> parseDirectional) <|> (Behavioural <$> parseBehaviour)
+parseModifier :: Parser B.Modifier
+parseModifier = parseDirectional' <|> parseBehavioural'
+  where
+    parseDirectional' = B.Directional <$> parseDirectional
+    parseBehavioural' = B.Behavioural <$> parseBehaviour
 
-parseDirectional :: Parser DirectionModifier
-parseDirectional = parseAmalgamated <|> (Single <$> parseDirection)
+parseDirectional :: Parser B.DirectionModifier
+parseDirectional = parseAmalgamated <|> (B.Single <$> parseDirection)
   where
     parseAmalgamated =
-        Amalgamated
-            <$> (tok TokLAngle *> parseDirection)
-            <*> (parseDirection <* tok TokRAngle)
+        B.Amalgamated
+            <$> (tok B.TokLAngle *> parseDirection)
+            <*> (parseDirection <* tok B.TokRAngle)
 
-parseDirection :: Parser Direction
+parseDirection :: Parser B.Direction
 parseDirection = dispatch $ \case
-    TokDirection 'f' -> Just Forward
-    TokDirection 'b' -> Just Backward
-    TokDirection 'l' -> Just Leftward
-    TokDirection 'r' -> Just Rightward
-    TokDirection 's' -> Just Sideway
-    TokDirection 'v' -> Just Vertically
-    TokDirection 'a' -> Just All
+    B.TokDirection 'f' -> Just B.Forward
+    B.TokDirection 'b' -> Just B.Backward
+    B.TokDirection 'l' -> Just B.Leftward
+    B.TokDirection 'r' -> Just B.Rightward
+    B.TokDirection 's' -> Just B.Sideway
+    B.TokDirection 'v' -> Just B.Vertically
+    B.TokDirection 'a' -> Just B.All
     _ -> Nothing
 
-parseBehaviour :: Parser Behaviour
+parseBehaviour :: Parser B.Behaviour
 parseBehaviour = dispatch $ \case
-    TokBehaviour 'c' -> Just Capture
-    TokBehaviour 'g' -> Just Leap
-    TokBehaviour 'i' -> Just Initial
-    TokBehaviour 'j' -> Just Jump
-    TokBehaviour 'm' -> Just Move
-    TokBehaviour 'n' -> Just NoJump
-    TokBehaviour 'p' -> Just Hop
-    TokBehaviour 'y' -> Just Any
+    B.TokBehaviour 'c' -> Just B.Capture
+    B.TokBehaviour 'g' -> Just B.Leap
+    B.TokBehaviour 'i' -> Just B.Initial
+    B.TokBehaviour 'j' -> Just B.Jump
+    B.TokBehaviour 'm' -> Just B.Move
+    B.TokBehaviour 'n' -> Just B.NoJump
+    B.TokBehaviour 'p' -> Just B.Hop
+    B.TokBehaviour 'y' -> Just B.Any
     _ -> Nothing
 
-parseExponentExpr :: Parser ExponentExpr
-parseExponentExpr = ExponentExpr <$> parseAtomExpr <*> optional (try parseExponent)
+parseExponentExpr :: Parser B.ExponentExpr
+parseExponentExpr = B.ExponentExpr <$> parseAtomExpr <*> optional (try parseExponent)
 
-parseExponent :: Parser Exponent
+parseExponent :: Parser B.Exponent
 parseExponent = do
     mop <- optional parseChainKind
     case mop of
-        Nothing -> Exponent Nothing <$> many parseModifier <*> parseExponentKind
+        Nothing -> B.Exponent Nothing <$> many parseModifier <*> parseExponentKind
         Just kind -> parseChoose kind <|> parseIffUnblocked kind <|> parseMandatory kind
   where
-    parseMandatory k = Exponent (Just $ ChainOperator k Mandatory) <$> many parseModifier <*> parseExponentKind
-    parseIffUnblocked k = Exponent (Just $ ChainOperator k IffUnblocked) <$> (tok TokLBrace *> many parseModifier) <*> parseExponentKind <* tok TokRBrace
-    parseChoose k = Exponent (Just $ ChainOperator k Choose) <$> (tok TokLBracket *> many parseModifier) <*> parseExponentKind <* tok TokRBracket
+    parseMandatory k = B.Exponent (Just $ B.ChainOperator k B.Mandatory) <$> many parseModifier <*> parseExponentKind
+    parseIffUnblocked k = B.Exponent (Just $ B.ChainOperator k B.IffUnblocked) <$> (tok B.TokLBrace *> many parseModifier) <*> parseExponentKind <* tok B.TokRBrace
+    parseChoose k = B.Exponent (Just $ B.ChainOperator k B.Choose) <$> (tok B.TokLBracket *> many parseModifier) <*> parseExponentKind <* tok B.TokRBracket
 
-parseExponentKind :: Parser ExponentKind
+parseExponentKind :: Parser B.ExponentKind
 parseExponentKind = parseInfinite <|> parseSlippery <|> parseRepeat
   where
-    parseInfinite = Infinite <$ tok (TokNumber 0)
-    parseSlippery = Slippery <$ tok TokSlippery
-    parseRepeat = Repeat <$> parseNumber
+    parseInfinite = B.Infinite <$ tok (B.TokNumber 0)
+    parseSlippery = B.Slippery <$ tok B.TokSlippery
+    parseRepeat = B.Repeat <$> parseNumber
     parseNumber = dispatch $ \case
-        TokNumber n -> Just n
+        B.TokNumber n -> Just n
         _ -> Nothing
 
-parseAtomExpr :: Parser AtomExpr
-parseAtomExpr = (Paren <$> parseParen) <|> (From <$> parseLabel)
+parseAtomExpr :: Parser B.AtomExpr
+parseAtomExpr = (B.Paren <$> parseParen) <|> (B.From <$> parseLabel)
   where
-    parseParen = tok TokLParen *> parseExpr <* tok TokRParen
+    parseParen = tok B.TokLParen *> parseExpr <* tok B.TokRParen
 
-parseLabel :: Parser Label
+parseLabel :: Parser B.Label
 parseLabel = dispatch $ \case
-    TokAtom c -> Just $ Upper c
-    TokDescriptor d -> Just $ parseDescriptor d
+    B.TokAtom c -> Just $ B.Upper c
+    B.TokDescriptor d -> Just $ parseDescriptor d
     _ -> Nothing
 
-parseDescriptor :: String -> Label
+parseDescriptor :: String -> B.Label
 parseDescriptor s = case span isDigit s of
-    (n, ',' : m) | not (null n), all isDigit m, not (null m) -> Leaper (read n) (read m)
-    _ -> Descriptor s
+    (n, ',' : m) | not (null n), all isDigit m, not (null m) -> B.Leaper (read n) (read m)
+    _ -> B.Descriptor s

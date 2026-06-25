@@ -1,59 +1,16 @@
-{-# LANGUAGE InstanceSigs #-}
+module Betzac.Parser.Core (Parser, tok, dispatch) where
 
-module Betzac.Parser.Core (
-    module Control.Applicative,
-    Parser,
-    ParseError (..),
-    runParser,
-    try,
-    peek,
-    advance,
-    tok,
-    dispatch,
-    optional,
-    someNE,
-) where
+import Betzac.Located
+import Betzac.Parser.BetzaTokenStream
+import qualified Betzac.Token as B
 
-import Betzac.Lexer.Core (TokenMap, lookupSpan)
-import Betzac.StreamMutator
-import Betzac.Token (Token)
-import Control.Applicative (Alternative (..))
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.State.Strict (gets)
+import Data.Void
+import Text.Megaparsec
 
-type Parser = StreamMutator ParseError Token
+type Parser = Parsec Void BetzaTokenStream
 
-runParser :: TokenMap -> Parser a -> [Token] -> Either ParseError (a, Int, [Token])
-runParser tmap p tokens = case runMutator p tokens of
-    Right x -> Right x
-    Left err ->
-        Left
-            err
-                { parseErrSpan = lookupSpan tmap (parseErrTokenIdx err)
-                }
+tok :: B.Token -> Parser (Located B.Token)
+tok t = satisfy (\lt -> tokenVal lt == t) <?> B.showToken t
 
-data ParseError = ParseError
-    { parseErrCommitPos :: Int -- used for commitment decisions
-    , parseErrTokenIdx :: Int -- furthest token reached, for reporting
-    , parseErrSpan :: Maybe (Int, Int) -- char span of furthest token
-    , parseErrToken :: Maybe Token
-    }
-    deriving (Eq, Show)
-
-instance StreamError ParseError where
-    errorAt n = ParseError n n Nothing Nothing
-    errorPos = parseErrCommitPos
-    resetPos n e = e{parseErrCommitPos = n}
-    furthest e f = if parseErrTokenIdx e > parseErrTokenIdx f then e else f
-
-tok :: Token -> Parser Token
-tok = matchOne
-
-dispatch :: (Token -> Maybe a) -> Parser a
-dispatch f = do
-    n <- StreamMutator $ gets fst
-    t <- advance
-    case f t of
-        Just a -> return a
-        Nothing ->
-            StreamMutator $ lift $ Left $ ParseError n n Nothing (Just t)
+dispatch :: (B.Token -> Maybe a) -> Parser a
+dispatch f = token (f . tokenVal) mempty

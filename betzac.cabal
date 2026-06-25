@@ -32,20 +32,19 @@ library
       Betzac.Debug.Dot.Dot
       Betzac.Debug.Dot.Visitor
       Betzac.Lexer.Core
-      Betzac.Lexer.ErrorHandling
       Betzac.Lexer.Lexer
-      Betzac.Lexer.Scan
+      Betzac.Lexer.Space
+      Betzac.Located
+      Betzac.Parser.BetzaTokenStream
       Betzac.Parser.Core
       Betzac.Parser.Parser
       Betzac.Pipeline
-      Betzac.StreamMutator
       Betzac.Token
       LangServer.Config
       LangServer.Handlers.Core
       LangServer.Handlers.OnChange
       LangServer.Handlers.OnOpen
       LangServer.Server
-      Lib
   other-modules:
       Paths_betzac
   hs-source-dirs:
@@ -55,6 +54,7 @@ library
       base >=4.7 && <5
     , lens
     , lsp
+    , megaparsec
     , text
     , transformers
   default-language: Haskell2010
@@ -72,6 +72,7 @@ executable betzac
     , betzac
     , lens
     , lsp
+    , megaparsec
     , optparse-applicative
     , text
     , transformers
@@ -89,6 +90,7 @@ executable bls
     , betzac
     , lens
     , lsp
+    , megaparsec
     , text
     , transformers
   default-language: Haskell2010
@@ -98,10 +100,8 @@ test-suite betzac-test
   main-is: Spec.hs
   other-modules:
       Arbitrary
-      Lexer.CoreSpec
       Lexer.LexerQC
       Lexer.LexerSpec
-      Lexer.ScanSpec
       Parser.ParserHedgehog
       Paths_betzac
   hs-source-dirs:
@@ -116,6 +116,7 @@ test-suite betzac-test
     , hspec-hedgehog
     , lens
     , lsp
+    , megaparsec
     , text
     , transformers
   default-language: Haskell2010
@@ -124,7 +125,6 @@ test-suite bls-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      CoreSpec
       HandlersSpec
       Paths_betzac
   hs-source-dirs:
@@ -137,6 +137,7 @@ test-suite bls-test
     , lens
     , lsp
     , lsp-test
+    , megaparsec
     , text
     , transformers
   default-language: Haskell2010

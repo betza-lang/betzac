@@ -4,11 +4,12 @@
 module Parser.ParserHedgehog (spec, genProgram, unparse) where
 
 import Betzac.AST
-import Betzac.Parser.Core (runParser)
-import Betzac.Parser.Parser (parseTokens)
-import Betzac.Token
+import Betzac.Parser.Parser
+import Betzac.Parser.BetzaTokenStream
+import qualified Betzac.Token as B
+import Betzac.Located
+import Text.Megaparsec
 
-import Betzac.Lexer.ErrorHandling (emptyTokenMap)
 import Lexer.LexerQC (unlex)
 
 import Data.List (intercalate)
@@ -24,114 +25,114 @@ import Test.Hspec.Hedgehog
 
 -- unparse
 
-unparse :: BetzaProgram -> [Token]
+unparse :: BetzaProgram -> [B.Token]
 unparse stmts = concat $ unparseQualifiedStmt <$> stmts
 
-unparseQualifiedStmt :: QualifiedStmt -> [Token]
-unparseQualifiedStmt (Override d) = TokOverride : unparseDirective d <> [TokEndStmt]
-unparseQualifiedStmt (Plain d) = unparseDirective d <> [TokEndStmt]
+unparseQualifiedStmt :: QualifiedStmt -> [B.Token]
+unparseQualifiedStmt (Override d) = B.TokOverride : unparseDirective d <> [B.TokEndStmt]
+unparseQualifiedStmt (Plain d) = unparseDirective d <> [B.TokEndStmt]
 
-unparseDirective :: Directive -> [Token]
-unparseDirective (Using f) = [TokUsing $ unparseFilePath f]
-unparseDirective (Export s) = TokExport : unparseStmt s
+unparseDirective :: Directive -> [B.Token]
+unparseDirective (Using f) = [B.TokUsing $ unparseFilePath f]
+unparseDirective (Export s) = B.TokExport : unparseStmt s
 unparseDirective (Bare s) = unparseStmt s
 
 unparseFilePath :: FilePath -> FilePath
 unparseFilePath f = (\c -> if c == '/' then '.' else c) <$> f
 
-unparseStmt :: BetzaStmt -> [Token]
-unparseStmt (Assign l e) = unparseLabel l : TokAssign : unparseExpr e
+unparseStmt :: BetzaStmt -> [B.Token]
+unparseStmt (Assign l e) = unparseLabel l : B.TokAssign : unparseExpr e
 unparseStmt (Anonymous e) = unparseExpr e
 
-unparseLabel :: Label -> Token
-unparseLabel (Upper c) = TokAtom c
-unparseLabel (Descriptor s) = TokDescriptor s
-unparseLabel (Leaper a b) = TokDescriptor $ show a ++ "," ++ show b
+unparseLabel :: Label -> B.Token
+unparseLabel (Upper c) = B.TokAtom c
+unparseLabel (Descriptor s) = B.TokDescriptor s
+unparseLabel (Leaper a b) = B.TokDescriptor $ show a ++ "," ++ show b
 
-unparseExpr :: BetzaExpr -> [Token]
+unparseExpr :: BetzaExpr -> [B.Token]
 unparseExpr (BetzaExpr c) = unparseChain c
 
-unparseChain :: ChainExpr -> [Token]
+unparseChain :: ChainExpr -> [B.Token]
 unparseChain (ChainExpr u mcl) =
     unparseUnion u
         <> maybe [] unparseChainLeg mcl
 
-unparseChainLeg :: ChainLeg -> [Token]
+unparseChainLeg :: ChainLeg -> [B.Token]
 unparseChainLeg (ChainLeg op c) = unparseChainOp op c
 
-unparseChainOp :: ChainOperator -> ChainExpr -> [Token]
+unparseChainOp :: ChainOperator -> ChainExpr -> [B.Token]
 unparseChainOp (ChainOperator k Mandatory) c =
     unparseChainKind k : unparseChain c
 unparseChainOp (ChainOperator k IffUnblocked) c =
-    [unparseChainKind k, TokLBrace] <> unparseChain c <> [TokRBrace]
+    [unparseChainKind k, B.TokLBrace] <> unparseChain c <> [B.TokRBrace]
 unparseChainOp (ChainOperator k Choose) c =
-    [unparseChainKind k, TokLBracket] <> unparseChain c <> [TokRBracket]
+    [unparseChainKind k, B.TokLBracket] <> unparseChain c <> [B.TokRBracket]
 
-unparseChainKind :: ChainKind -> Token
-unparseChainKind Step = TokChainStep
-unparseChainKind Sequence = TokChainSequence
+unparseChainKind :: ChainKind -> B.Token
+unparseChainKind Step = B.TokChainStep
+unparseChainKind Sequence = B.TokChainSequence
 
 -- unparseChainModality ??
 
-unparseUnion :: UnionExpr -> [Token]
+unparseUnion :: UnionExpr -> [B.Token]
 unparseUnion (UnionExpr ms) = concat $ unparseModExpr <$> ms
 
-unparseModExpr :: ModifierExpr -> [Token]
+unparseModExpr :: ModifierExpr -> [B.Token]
 unparseModExpr (ModifierExpr s ms e) =
-    (if s then [TokBang] else [])
+    (if s then [B.TokBang] else [])
         <> (ms >>= unparseModifier)
         <> unparseExponentExpr e
 
-unparseModifier :: Modifier -> [Token]
+unparseModifier :: Modifier -> [B.Token]
 unparseModifier (Directional m) = unparseDirectionMod m
 unparseModifier (Behavioural m) = [unparseBehaviour m]
 
-unparseDirectionMod :: DirectionModifier -> [Token]
+unparseDirectionMod :: DirectionModifier -> [B.Token]
 unparseDirectionMod (Amalgamated d1 d2) =
-    [ TokLAngle
+    [ B.TokLAngle
     , unparseDirection d1
     , unparseDirection d2
-    , TokRAngle
+    , B.TokRAngle
     ]
 unparseDirectionMod (Single d) = [unparseDirection d]
 
-unparseDirection :: Direction -> Token
-unparseDirection Forward = TokDirection 'f'
-unparseDirection Backward = TokDirection 'b'
-unparseDirection Leftward = TokDirection 'l'
-unparseDirection Rightward = TokDirection 'r'
-unparseDirection Sideway = TokDirection 's'
-unparseDirection Vertically = TokDirection 'v'
-unparseDirection All = TokDirection 'a'
+unparseDirection :: Direction -> B.Token
+unparseDirection Forward = B.TokDirection 'f'
+unparseDirection Backward = B.TokDirection 'b'
+unparseDirection Leftward = B.TokDirection 'l'
+unparseDirection Rightward = B.TokDirection 'r'
+unparseDirection Sideway = B.TokDirection 's'
+unparseDirection Vertically = B.TokDirection 'v'
+unparseDirection All = B.TokDirection 'a'
 
-unparseBehaviour :: Behaviour -> Token
-unparseBehaviour Capture = TokBehaviour 'c'
-unparseBehaviour Leap = TokBehaviour 'g'
-unparseBehaviour Initial = TokBehaviour 'i'
-unparseBehaviour Jump = TokBehaviour 'j'
-unparseBehaviour Move = TokBehaviour 'm'
-unparseBehaviour NoJump = TokBehaviour 'n'
-unparseBehaviour Hop = TokBehaviour 'p'
-unparseBehaviour Any = TokBehaviour 'y'
+unparseBehaviour :: Behaviour -> B.Token
+unparseBehaviour Capture = B.TokBehaviour 'c'
+unparseBehaviour Leap = B.TokBehaviour 'g'
+unparseBehaviour Initial = B.TokBehaviour 'i'
+unparseBehaviour Jump = B.TokBehaviour 'j'
+unparseBehaviour Move = B.TokBehaviour 'm'
+unparseBehaviour NoJump = B.TokBehaviour 'n'
+unparseBehaviour Hop = B.TokBehaviour 'p'
+unparseBehaviour Any = B.TokBehaviour 'y'
 
-unparseExponentExpr :: ExponentExpr -> [Token]
+unparseExponentExpr :: ExponentExpr -> [B.Token]
 unparseExponentExpr (ExponentExpr a me) = unparseAtom a <> maybe [] unparseExponent me
 
-unparseAtom :: AtomExpr -> [Token]
-unparseAtom (Paren e) = [TokLParen] <> unparseExpr e <> [TokRParen]
+unparseAtom :: AtomExpr -> [B.Token]
+unparseAtom (Paren e) = [B.TokLParen] <> unparseExpr e <> [B.TokRParen]
 unparseAtom (From l) = [unparseLabel l]
 
-unparseExponent :: Exponent -> [Token]
+unparseExponent :: Exponent -> [B.Token]
 unparseExponent (Exponent mop ms k) = case mop of
     Nothing -> (ms >>= unparseModifier) <> [unparseExponentKind k]
     Just (ChainOperator ck Mandatory) -> [unparseChainKind ck] <> (ms >>= unparseModifier) <> [unparseExponentKind k]
-    Just (ChainOperator ck IffUnblocked) -> [unparseChainKind ck, TokLBrace] <> (ms >>= unparseModifier) <> [unparseExponentKind k, TokRBrace]
-    Just (ChainOperator ck Choose) -> [unparseChainKind ck, TokLBracket] <> (ms >>= unparseModifier) <> [unparseExponentKind k, TokRBracket]
+    Just (ChainOperator ck IffUnblocked) -> [unparseChainKind ck, B.TokLBrace] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBrace]
+    Just (ChainOperator ck Choose) -> [unparseChainKind ck, B.TokLBracket] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBracket]
 
-unparseExponentKind :: ExponentKind -> Token
-unparseExponentKind Infinite = TokNumber 0
-unparseExponentKind Slippery = TokSlippery
-unparseExponentKind (Repeat n) = TokNumber n
+unparseExponentKind :: ExponentKind -> B.Token
+unparseExponentKind Infinite = B.TokNumber 0
+unparseExponentKind Slippery = B.TokSlippery
+unparseExponentKind (Repeat n) = B.TokNumber n
 
 -- generators
 
@@ -389,13 +390,15 @@ anyInProg p = any (maybe False p . exprOf)
 prop_parseUndoesUnparse :: PropertyT IO ()
 prop_parseUndoesUnparse = do
     prog <- forAll genProgram
-    annotate . unlex . unparse $ prog
+    let ts = unparse prog
+        src = unlex ts
+        stream = BetzaTokenStream src (liftLocated "<test>" <$> ts)
+    annotate src
 
     -- program-level stats
-    let tokens = unparse prog
-    classify "short (< 20 tokens)" $ length tokens < 20
-    classify "medium (20-100 tokens)" $ length tokens >= 20 && length tokens < 100
-    classify "large (> 100 tokens)" $ length tokens > 100
+    classify "short (< 20 tokens)" $ length ts < 20
+    classify "medium (20-100 tokens)" $ length ts >= 20 && length ts < 100
+    classify "large (> 100 tokens)" $ length ts > 100
 
     classify "single statement" $ length prog == 1
     classify "multiple statements" $ length prog > 1
@@ -431,7 +434,7 @@ prop_parseUndoesUnparse = do
     cover 5 "has Paren atom" $ anyInProg hasParenAtom prog
     cover 5 "has exponent on atom" $ anyInProg hasAtomExponent prog
 
-    ((\(p, _, _) -> p) <$> (runParser emptyTokenMap parseTokens (unparse prog))) === Right prog
+    (parse parseTokens "<test>" stream) === Right prog
 
 -- spec
 spec :: Spec
