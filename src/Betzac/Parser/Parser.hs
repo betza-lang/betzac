@@ -6,25 +6,30 @@ import qualified Betzac.AST as B
 import Betzac.Parser.Core
 import qualified Betzac.Token as B
 
+import Betzac.Alphabet.Expr (alphanum)
 import Data.Char (isDigit)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
 import Text.Megaparsec
 
 parseTokens :: Parser B.BetzaProgram
-parseTokens = many parseQualifiedStmt <* eof
+parseTokens = many parseQualifiedStmt <* hidden eof
 
 parseQualifiedStmt :: Parser B.QualifiedStmt
-parseQualifiedStmt = (parseOverride' <|> parseDirective') <* tok B.TokEndStmt
+parseQualifiedStmt = (parseOverride' <|> parseDirective') <* parseEndStmt
   where
     parseOverride' = B.Override <$> parseOverride
     parseDirective' = B.Plain <$> parseDirective
+    parseEndStmt = tok B.TokEndStmt <?> "';' to end statement"
 
 parseOverride :: Parser B.Directive
 parseOverride = tok B.TokOverride *> parseDirective
 
 parseDirective :: Parser B.Directive
-parseDirective = parseUsing <|> parseExport <|> B.Bare <$> parseStmt
+parseDirective =
+    parseUsing <|> parseExport <|> B.Bare
+        <$> parseStmt
+            <?> "statement or directive"
 
 parseUsing :: Parser B.Directive
 parseUsing = dispatch $ \case
@@ -44,13 +49,13 @@ parseStmt = try parseAssign <|> parseAnonymous
     parseAssign = B.Assign <$> parseLabel <* tok B.TokAssign <*> parseExpr
 
 parseExpr :: Parser B.BetzaExpr
-parseExpr = B.BetzaExpr <$> parseChainExpr
+parseExpr = B.BetzaExpr <$> parseChainExpr <?> "expression"
 
 parseChainExpr :: Parser B.ChainExpr
 parseChainExpr = B.ChainExpr <$> parseUnionExpr <*> optional (try parseChainLeg)
 
 parseChainLeg :: Parser B.ChainLeg
-parseChainLeg = parseChainKind >>= \kind -> parseChoose kind <|> parseIffUnblocked kind <|> parseMandatory kind
+parseChainLeg = (parseChainKind >>= \kind -> parseChoose kind <|> parseIffUnblocked kind <|> parseMandatory kind) <?> "chain continuation"
   where
     parseMandatory k = B.ChainLeg (B.ChainOperator k B.Mandatory) <$> parseChainExpr
     parseIffUnblocked k = B.ChainLeg (B.ChainOperator k B.IffUnblocked) <$> (tok B.TokLBrace *> parseChainExpr <* tok B.TokRBrace)
@@ -67,10 +72,12 @@ parseUnionExpr = B.UnionExpr <$> NE.fromList <$> some parseModifierExpr
 
 parseModifierExpr :: Parser B.ModifierExpr
 parseModifierExpr =
-    B.ModifierExpr
+    ( B.ModifierExpr
         <$> (isJust <$> optional (tok B.TokBang))
         <*> many parseModifier
         <*> parseExponentExpr
+    )
+        <?> "atom or modifier"
 
 parseModifier :: Parser B.Modifier
 parseModifier = parseDirectional' <|> parseBehavioural'
@@ -113,38 +120,66 @@ parseExponentExpr :: Parser B.ExponentExpr
 parseExponentExpr = B.ExponentExpr <$> parseAtomExpr <*> optional (try parseExponent)
 
 parseExponent :: Parser B.Exponent
-parseExponent = do
-    mop <- optional parseChainKind
-    case mop of
-        Nothing -> B.Exponent Nothing <$> many parseModifier <*> parseExponentKind
-        Just kind -> parseChoose kind <|> parseIffUnblocked kind <|> parseMandatory kind
+parseExponent =
+    ( do
+        mop <- optional parseChainKind
+        case mop of
+            Nothing -> B.Exponent Nothing <$> many parseModifier <*> parseExponentKind
+            Just kind -> parseChoose kind <|> parseIffUnblocked kind <|> parseMandatory kind
+    )
+        <?> "exponent"
   where
     parseMandatory k = B.Exponent (Just $ B.ChainOperator k B.Mandatory) <$> many parseModifier <*> parseExponentKind
     parseIffUnblocked k = B.Exponent (Just $ B.ChainOperator k B.IffUnblocked) <$> (tok B.TokLBrace *> many parseModifier) <*> parseExponentKind <* tok B.TokRBrace
     parseChoose k = B.Exponent (Just $ B.ChainOperator k B.Choose) <$> (tok B.TokLBracket *> many parseModifier) <*> parseExponentKind <* tok B.TokRBracket
 
 parseExponentKind :: Parser B.ExponentKind
-parseExponentKind = parseInfinite <|> parseSlippery <|> parseRepeat
+parseExponentKind =
+    parseInfinite
+        <|> parseSlippery
+        <|> parseRepeat
+        <?> "repeat count, '0' for infinite, or '0*' for slippery"
   where
     parseInfinite = B.Infinite <$ tok (B.TokNumber 0)
     parseSlippery = B.Slippery <$ tok B.TokSlippery
-    parseRepeat = B.Repeat <$> parseNumber
+    parseRepeat = B.Repeat <$> parseNumber <?> "number"
     parseNumber = dispatch $ \case
         B.TokNumber n -> Just n
         _ -> Nothing
 
 parseAtomExpr :: Parser B.AtomExpr
-parseAtomExpr = (B.Paren <$> parseParen) <|> (B.From <$> parseLabel)
+parseAtomExpr =
+    (B.Paren <$> parseParen)
+        <|> (B.From <$> parseLabel)
+        <?> "atom"
   where
     parseParen = tok B.TokLParen *> parseExpr <* tok B.TokRParen
 
 parseLabel :: Parser B.Label
-parseLabel = dispatch $ \case
-    B.TokAtom c -> Just $ B.Upper c
-    B.TokDescriptor d -> Just $ parseDescriptor d
-    _ -> Nothing
+parseLabel =
+    dispatch
+        ( \case
+            B.TokAtom c -> Just $ B.Upper c
+            B.TokDescriptor d -> parseDescriptor d
+            _ -> Nothing
+        )
+        <?> "piece name"
 
-parseDescriptor :: String -> B.Label
+parseDescriptor :: String -> Maybe B.Label
 parseDescriptor s = case span isDigit s of
-    (n, ',' : m) | not (null n), all isDigit m, not (null m) -> B.Leaper (read n) (read m)
-    _ -> B.Descriptor s
+    (n, ',' : m) | not (null n), all isDigit m, not (null m) -> Just $ B.Leaper (read n) (read m)
+    _ -> if validDescriptor s then Just $ B.Descriptor s else Nothing
+  where
+    validDescriptor (c : cs) =
+        c `elem` alphanum
+            && last (c : cs) `elem` alphanum
+            && noConsecutiveSpaces (c : cs)
+    validDescriptor [] = False
+
+    noConsecutiveSpaces (c : cs)
+        | c == ' ' = case cs of
+            ' ' : _ -> False
+            _ -> noConsecutiveSpaces cs
+        | c `elem` alphanum = noConsecutiveSpaces cs
+        | otherwise = False
+    noConsecutiveSpaces [] = True

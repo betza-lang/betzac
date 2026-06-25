@@ -18,12 +18,12 @@ runLexer :: FilePath -> String -> Either (ParseErrorBundle String Void) [Located
 runLexer = parse lexSource
 
 lexSource :: Lexer [Located B.Token]
-lexSource = lexIgnore *> many (spanned $ lexToken' <* lexIgnore) <* eof
+lexSource = lexIgnore *> many (spanned $ lexToken' <* lexIgnore) <* hidden eof
   where
     lexToken' = lexDirective <|> lexToken
 
 lexDirective :: Lexer B.Token
-lexDirective = lexExport <|> lexUsing <|> lexOverride
+lexDirective = lexExport <|> lexUsing <|> lexOverride <?> "directive keyword"
 
 lexToken :: Lexer B.Token
 lexToken =
@@ -41,6 +41,7 @@ lexToken =
         <|> lexComma
         <|> lexAssign
         <|> lexEndStmt
+        <?> "valid character as part of a token"
 
 lexAtom :: Lexer B.Token
 lexAtom = B.TokAtom <$> oneOf B.upper
