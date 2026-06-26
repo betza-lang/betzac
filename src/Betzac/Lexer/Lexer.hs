@@ -3,17 +3,19 @@
 module Betzac.Lexer.Lexer (lexSource, runLexer) where
 
 import qualified Betzac.Alphabet.Expr as B
+import qualified Betzac.Alphabet.Stmt as B
 import Betzac.Located (Located (..))
 import qualified Betzac.Token as B
 
 import Betzac.Lexer.Core
 import Betzac.Lexer.Space
 
-import Betzac.Alphabet.Expr (alphanum)
-import qualified Betzac.Alphabet.Stmt as B
+import Data.Char (isAlphaNum, isUpper)
 import Data.Void (Void)
+
 import Text.Megaparsec
 import Text.Megaparsec.Char (char, string)
+import qualified Text.Megaparsec.Char.Lexer as L
 
 runLexer :: FilePath -> String -> Either (ParseErrorBundle String Void) [Located B.Token]
 runLexer = parse lexSource
@@ -45,18 +47,18 @@ lexToken =
         <?> "valid character as part of a token"
 
 lexAtom :: Lexer B.Token
-lexAtom = B.TokAtom <$> oneOf B.upper
+lexAtom = B.TokAtom <$> satisfy isUpper
 
 lexDescriptor :: Lexer B.Token
 lexDescriptor = try $ B.TokDescriptor <$> (char ':' *> descriptor <* char ':')
   where
-    descriptor = some (oneOf $ ',' : B.space : B.alphanum)
+    descriptor = takeWhile1P (Just "descriptor character") (\c -> c `elem` [',', B.space] || isAlphaNum c)
 
 lexDirection :: Lexer B.Token
-lexDirection = B.TokDirection <$> oneOf B.direction
+lexDirection = B.TokDirection <$> satisfy (`elem` B.direction)
 
 lexBehaviour :: Lexer B.Token
-lexBehaviour = B.TokBehaviour <$> oneOf B.behaviour
+lexBehaviour = B.TokBehaviour <$> satisfy (`elem` B.behaviour)
 
 lexParen :: Lexer B.Token
 lexParen = lparen <|> rparen
@@ -89,14 +91,10 @@ lexBang :: Lexer B.Token
 lexBang = B.TokBang <$ char '!'
 
 lexNumber :: Lexer B.Token
-lexNumber = try lexZeroStar <|> try lexNonZero <|> lexZero
+lexNumber = try lexZeroStar <|> lexNumeric
   where
     lexZeroStar = B.TokSlippery <$ (char '0' *> char '*')
-    lexNonZero = B.TokNumber . read <$> lexPosIntStr
-    lexZero = B.TokNumber 0 <$ char '0'
-
-lexPosIntStr :: Lexer String
-lexPosIntStr = (:) <$> oneOf B.nonzeroDigit <*> many (oneOf B.digit)
+    lexNumeric = B.TokNumber <$> L.decimal
 
 lexComma :: Lexer B.Token
 lexComma = B.TokComma <$ char ','
@@ -108,7 +106,7 @@ lexEndStmt :: Lexer B.Token
 lexEndStmt = B.TokEndStmt <$ char B.stmtEnd
 
 lexKeyword :: String -> B.Token -> Lexer B.Token
-lexKeyword kw t = t <$ string kw <* notFollowedBy (oneOf alphanum)
+lexKeyword kw t = t <$ string kw <* notFollowedBy (oneOf B.alphanum)
 
 lexOverride :: Lexer B.Token
 lexOverride = lexKeyword "override" B.TokOverride
@@ -120,4 +118,4 @@ lexUsing :: Lexer B.Token
 lexUsing = B.TokUsing <$> (string "using" *> lexIgnoreSome *> path)
   where
     path = (<>) <$> part <*> (concat <$> (many $ try $ (:) <$> char '.' <*> part))
-    part = some $ oneOf B.alphanum
+    part = takeWhile1P (Just "path character") isAlphaNum

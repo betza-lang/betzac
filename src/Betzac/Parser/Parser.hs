@@ -3,10 +3,10 @@
 module Betzac.Parser.Parser (parseTokens) where
 
 import qualified Betzac.AST as B
+import Betzac.Alphabet.Expr (alphanum)
 import Betzac.Parser.Core
 import qualified Betzac.Token as B
 
-import Betzac.Alphabet.Expr (alphanum)
 import Data.Char (isDigit)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)

@@ -7,6 +7,7 @@ import Text.Megaparsec
 
 type Lexer = Parsec Void String
 
+{-# INLINE spanned #-}
 spanned :: Lexer B.Token -> Lexer (Located B.Token)
 spanned p = do
     start <- getSourcePos
