@@ -4,10 +4,10 @@
 module Parser.ParserHedgehog (spec, genProgram, unparse) where
 
 import Betzac.AST
-import Betzac.Parser.Parser
-import Betzac.Parser.BetzaTokenStream
-import qualified Betzac.Token as B
 import Betzac.Located
+import Betzac.Parser.BetzaTokenStream
+import Betzac.Parser.Parser
+import qualified Betzac.Token as B
 import Text.Megaparsec
 
 import Lexer.LexerQC (unlex)
@@ -85,7 +85,7 @@ unparseModExpr (ModifierExpr s ms e) =
 
 unparseModifier :: Modifier -> [B.Token]
 unparseModifier (Directional m) = unparseDirectionMod m
-unparseModifier (Behavioural m) = [unparseBehaviour m]
+unparseModifier (Behavioural m) = unparseBehaviour m
 
 unparseDirectionMod :: DirectionModifier -> [B.Token]
 unparseDirectionMod (Amalgamated d1 d2) =
@@ -105,15 +105,19 @@ unparseDirection Sideway = B.TokDirection 's'
 unparseDirection Vertically = B.TokDirection 'v'
 unparseDirection All = B.TokDirection 'a'
 
-unparseBehaviour :: Behaviour -> B.Token
-unparseBehaviour Capture = B.TokBehaviour 'c'
-unparseBehaviour Leap = B.TokBehaviour 'g'
-unparseBehaviour Initial = B.TokBehaviour 'i'
-unparseBehaviour Jump = B.TokBehaviour 'j'
-unparseBehaviour Move = B.TokBehaviour 'm'
-unparseBehaviour NoJump = B.TokBehaviour 'n'
-unparseBehaviour Hop = B.TokBehaviour 'p'
-unparseBehaviour Any = B.TokBehaviour 'y'
+unparseBehaviour :: Behaviour -> [B.Token]
+unparseBehaviour (Behaviour kind Once) = [unparseBehaviourOnce kind]
+unparseBehaviour (Behaviour kind Twice) = [unparseBehaviourOnce kind, unparseBehaviourOnce kind]
+unparseBehaviour (Behaviour kind Any) = [unparseBehaviourOnce kind, B.TokBehaviour 'y']
+
+unparseBehaviourOnce :: BehaviourKind -> B.Token
+unparseBehaviourOnce Capture = B.TokBehaviour 'c'
+unparseBehaviourOnce Leap = B.TokBehaviour 'g'
+unparseBehaviourOnce Initial = B.TokBehaviour 'i'
+unparseBehaviourOnce Jump = B.TokBehaviour 'j'
+unparseBehaviourOnce Move = B.TokBehaviour 'm'
+unparseBehaviourOnce NoJump = B.TokBehaviour 'n'
+unparseBehaviourOnce Hop = B.TokBehaviour 'p'
 
 unparseExponentExpr :: ExponentExpr -> [B.Token]
 unparseExponentExpr (ExponentExpr a me) = unparseAtom a <> maybe [] unparseExponent me
@@ -140,7 +144,14 @@ genDirection :: Gen Direction
 genDirection = Gen.element [Forward, Backward, Leftward, Rightward, Sideway, Vertically, All]
 
 genBehaviour :: Gen Behaviour
-genBehaviour = Gen.element [Capture, Leap, Initial, Jump, Move, NoJump, Hop, Any]
+genBehaviour =
+    Gen.choice
+        [ Gen.element [Behaviour Initial Once, Behaviour Move Once, Behaviour NoJump Once]
+        , Behaviour Capture <$> Gen.element [Once, Twice, Any]
+        , Behaviour Leap <$> Gen.element [Once, Twice, Any]
+        , Behaviour Jump <$> Gen.element [Once, Twice, Any]
+        , Behaviour Hop <$> Gen.element [Once, Twice]
+        ]
 
 genChainOperator :: Gen ChainOperator
 genChainOperator = ChainOperator <$> genChainKind <*> genChainModality
@@ -185,7 +196,15 @@ genModifier :: Gen Modifier
 genModifier = Gen.choice [Directional <$> genDirectionMod, Behavioural <$> genBehaviour]
 
 genModifiers :: Gen [Modifier]
-genModifiers = Gen.list (Range.linear 0 3) genModifier
+genModifiers =
+    Gen.filter noAmbiguousSequences $
+        Gen.list (Range.linear 0 3) genModifier
+  where
+    noAmbiguousSequences ms =
+        let ts = ms >>= unparseModifier
+         in not $ any ambiguous $ zip ts $ drop 1 ts
+    ambiguous (B.TokBehaviour a, B.TokBehaviour b) = a == b || b == 'y'
+    ambiguous _ = False
 
 genSmallExpr :: Gen BetzaExpr
 genSmallExpr = Gen.sized $ \n -> Gen.resize (n `div` 2) genExpr

@@ -105,16 +105,29 @@ parseDirection = dispatch $ \case
     _ -> Nothing
 
 parseBehaviour :: Parser B.Behaviour
-parseBehaviour = dispatch $ \case
-    B.TokBehaviour 'c' -> Just B.Capture
-    B.TokBehaviour 'g' -> Just B.Leap
-    B.TokBehaviour 'i' -> Just B.Initial
-    B.TokBehaviour 'j' -> Just B.Jump
-    B.TokBehaviour 'm' -> Just B.Move
-    B.TokBehaviour 'n' -> Just B.NoJump
-    B.TokBehaviour 'p' -> Just B.Hop
-    B.TokBehaviour 'y' -> Just B.Any
-    _ -> Nothing
+parseBehaviour = do
+    kind <- takeKind
+    modality <- (takeModality kind) <|> return B.Once
+    return $ B.Behaviour kind modality
+  where
+    takeKind = dispatch $ \case
+        B.TokBehaviour 'c' -> Just B.Capture
+        B.TokBehaviour 'g' -> Just B.Leap
+        B.TokBehaviour 'i' -> Just B.Initial
+        B.TokBehaviour 'j' -> Just B.Jump
+        B.TokBehaviour 'm' -> Just B.Move
+        B.TokBehaviour 'n' -> Just B.NoJump
+        B.TokBehaviour 'p' -> Just B.Hop
+        -- B.TokBehaviour 'y' not allowed by itself
+        _ -> Nothing
+    takeModality k = case k of
+        B.Capture -> parseTwice (B.TokBehaviour 'c') <|> parseAny
+        B.Leap -> parseTwice (B.TokBehaviour 'g') <|> parseAny
+        B.Jump -> parseTwice (B.TokBehaviour 'j') <|> parseAny
+        B.Hop -> parseTwice (B.TokBehaviour 'p') -- 'y' does not mean anything for hopping
+        _ -> empty
+    parseTwice t = B.Twice <$ tok t
+    parseAny = B.Any <$ tok (B.TokBehaviour 'y')
 
 parseExponentExpr :: Parser B.ExponentExpr
 parseExponentExpr = B.ExponentExpr <$> parseAtomExpr <*> optional (try parseExponent)

@@ -39,6 +39,8 @@ library
       Betzac.Parser.Core
       Betzac.Parser.Parser
       Betzac.Pipeline
+      Betzac.Semantic.AnalysisPass
+      Betzac.Semantic.Direction.AmalgamatedDirection
       Betzac.Token
       LangServer.Config
       LangServer.Handlers.Core

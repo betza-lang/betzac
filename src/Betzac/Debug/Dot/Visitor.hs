@@ -31,7 +31,7 @@ directiveNode = \case
     myNode l = midNode l 2
 
 filePathNode :: FilePath -> DotNode
-filePathNode f = leafNode f
+filePathNode = leafNode
 
 stmtNode :: BetzaStmt -> DotNode
 stmtNode = \case
@@ -85,12 +85,18 @@ directionModifierNode = \case
     myNode l = midNode l 8
 
 directionNode :: Direction -> DotNode
-directionNode d =
-    leafNode $ show d
+directionNode = leafNode . show
 
 behaviourNode :: Behaviour -> DotNode
-behaviourNode b =
-    leafNode $ show b
+behaviourNode (Behaviour kind modality) = myNode "Behaviour" [behaviourKindNode kind, behaviourModalityNode modality]
+  where
+    myNode l = midNode l 8
+
+behaviourKindNode :: BehaviourKind -> DotNode
+behaviourKindNode = leafNode . show
+
+behaviourModalityNode :: BehaviourModality -> DotNode
+behaviourModalityNode = leafNode . show
 
 exponentExprNode :: ExponentExpr -> DotNode
 exponentExprNode (ExponentExpr a me) =
@@ -116,10 +122,7 @@ exponentNode (Exponent mco ms k) =
     myNode l = midNode l 8
 
 exponentKindNode :: ExponentKind -> DotNode
-exponentKindNode = \case
-    Infinite -> leafNode "Infinite"
-    Slippery -> leafNode "Slippery"
-    Repeat n -> leafNode $ "Repeat " ++ show n
+exponentKindNode = leafNode . show
 
 chainOperatorNode :: ChainOperator -> DotNode
 chainOperatorNode (ChainOperator k m) = myNode "ChainOperator" [chainKindNode k, chainModalityNode m]
@@ -127,10 +130,10 @@ chainOperatorNode (ChainOperator k m) = myNode "ChainOperator" [chainKindNode k,
     myNode l = midNode l 6
 
 chainKindNode :: ChainKind -> DotNode
-chainKindNode k = leafNode $ show k
+chainKindNode = leafNode . show
 
 chainModalityNode :: ChainModality -> DotNode
-chainModalityNode m = leafNode $ show m
+chainModalityNode = leafNode . show
 
 labelNode :: Label -> DotNode
 labelNode = \case

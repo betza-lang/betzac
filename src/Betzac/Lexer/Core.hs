@@ -13,5 +13,4 @@ spanned p = do
     start <- getSourcePos
     a <- p
     end <- getSourcePos
-    let len = unPos (sourceColumn end) - unPos (sourceColumn start)
-    return $ Located start end len a
+    return $ Located start end a

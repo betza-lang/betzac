@@ -19,6 +19,8 @@ module Betzac.AST (
     DirectionModifier (..),
     Direction (..),
     Behaviour (..),
+    BehaviourKind (..),
+    BehaviourModality (..),
     Exponent (..),
     ExponentKind (..),
     Label (..),
@@ -87,7 +89,13 @@ data DirectionModifier = Amalgamated Direction Direction | Single Direction
 data Direction = Forward | Backward | Leftward | Rightward | Sideway | Vertically | All
     deriving (Eq, Show)
 
-data Behaviour = Capture | Leap | Initial | Jump | Move | NoJump | Hop | Any
+data Behaviour = Behaviour BehaviourKind BehaviourModality
+    deriving (Eq, Show)
+
+data BehaviourKind = Capture | Leap | Initial | Jump | Move | NoJump | Hop
+    deriving (Eq, Show)
+
+data BehaviourModality = Once | Twice | Any
     deriving (Eq, Show)
 
 data Exponent = Exponent (Maybe ChainOperator) [Modifier] ExponentKind
