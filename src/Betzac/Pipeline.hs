@@ -5,7 +5,7 @@ module Betzac.Pipeline (
     PipelineError (..),
 ) where
 
-import Betzac.AST as B (BetzaProgram)
+import Betzac.AST as B (BetzaProgram, Ps)
 import qualified Betzac.Lexer.Lexer as B (runLexer)
 import Betzac.Located
 import qualified Betzac.Parser.BetzaTokenStream as B (BetzaTokenStream (..))
@@ -27,7 +27,7 @@ data PipelineResult = PipelineResult
     { sourceText :: Text
     , filePath :: FilePath
     , lexResult :: Maybe (Either LexBundle [Located B.Token])
-    , parseResult :: Maybe (Either ParseBundle BetzaProgram)
+    , parseResult :: Maybe (Either ParseBundle (BetzaProgram Ps))
     }
     deriving (Show)
 

@@ -4,12 +4,14 @@ module Betzac.Debug.Dot.Visitor (toDot) where
 
 import Betzac.AST
 import Betzac.Debug.Dot.Dot
+import Betzac.Debug.PrettyPrint (Summarizable (summarize))
+
 import Control.Monad.Trans.State
 import Data.List.NonEmpty (toList)
 import Data.Text (Text, pack)
 import Prelude hiding (lines)
 
-toDot :: BetzaProgram -> Text
+toDot :: BetzaProgram Ps -> Text
 toDot prog =
     pack
         . unlines
@@ -17,128 +19,122 @@ toDot prog =
             ++ evalState (concatMap snd <$> mapM qualfiedStmtNode prog) 0
             ++ ["}"]
 
-qualfiedStmtNode :: QualifiedStmt -> DotNode
+qualfiedStmtNode :: QualifiedStmt Ps -> DotNode
 qualfiedStmtNode = \case
-    Override d -> rootNode "Override :: QualifiedStmt" [directiveNode d]
-    Plain d -> rootNode "Plain :: QualifiedStmt" [directiveNode d]
+    n@(Override d _) -> rootNode (summarize n) [directiveNode d]
+    n@(Plain d _) -> rootNode (summarize n) [directiveNode d]
 
-directiveNode :: Directive -> DotNode
+directiveNode :: Directive Ps -> DotNode
 directiveNode = \case
-    Using f -> myNode "Using :: Directive" [filePathNode f]
-    Export s -> myNode "Export :: Directive" [stmtNode s]
-    Bare s -> myNode "Bare :: Directive" [stmtNode s]
+    n@(Using f _) -> myNode n [filePathNode f]
+    n@(Export s _) -> myNode n [stmtNode s]
+    n@(Bare s _) -> myNode n [stmtNode s]
   where
-    myNode l = midNode l 2
+    myNode = (midNode 2) . summarize
 
 filePathNode :: FilePath -> DotNode
 filePathNode = leafNode
 
-stmtNode :: BetzaStmt -> DotNode
+stmtNode :: BetzaStmt Ps -> DotNode
 stmtNode = \case
-    Assign l e -> myNode "Assign :: BetzaStmt" [labelNode l, exprNode e]
-    Anonymous e -> myNode "Anonymous :: BetzaStmt" [exprNode e]
+    n@(Assign l e _) -> myNode n [labelNode l, exprNode e]
+    n@(Anonymous e _) -> myNode n [exprNode e]
   where
-    myNode l = midNode l 3
+    myNode = (midNode 3) . summarize
 
-exprNode :: BetzaExpr -> DotNode
-exprNode (BetzaExpr c) = myNode "BetzaExpr" [chainExprNode c]
+exprNode :: BetzaExpr Ps -> DotNode
+exprNode n@(BetzaExpr c _) = myNode n [chainExprNode c]
   where
-    myNode l = midNode l 5
+    myNode = (midNode 5) . summarize
 
-chainExprNode :: ChainExpr -> DotNode
-chainExprNode (ChainExpr u mcl) =
-    myNode "ChainExpr" $
-        [unionExprNode u]
-            <> maybe [] (\cl -> [chainLegNode cl]) mcl
+chainExprNode :: ChainExpr Ps -> DotNode
+chainExprNode n@(ChainExpr u mcl _) =
+    myNode n $ [unionExprNode u] <> maybe [] (\cl -> [chainLegNode cl]) mcl
   where
-    myNode l = midNode l 5
+    myNode = (midNode 5) . summarize
 
-chainLegNode :: ChainLeg -> DotNode
-chainLegNode (ChainLeg op c) = myNode "ChainLeg" [chainOperatorNode op, chainExprNode c]
+chainLegNode :: ChainLeg Ps -> DotNode
+chainLegNode n@(ChainLeg op c _) = myNode n [chainOperatorNode op, chainExprNode c]
   where
-    myNode l = midNode l 5
+    myNode = (midNode 5) . summarize
 
-unionExprNode :: UnionExpr -> DotNode
-unionExprNode (UnionExpr ms) = myNode "UnionExpr" $ map modifierExprNode (toList ms)
+unionExprNode :: UnionExpr Ps -> DotNode
+unionExprNode n@(UnionExpr ms _) = myNode n $ map modifierExprNode (toList ms)
   where
-    myNode l = midNode l 6
+    myNode = (midNode 6) . summarize
 
-modifierExprNode :: ModifierExpr -> DotNode
-modifierExprNode (ModifierExpr s ms a) =
-    myNode ("ModifierExpr -- setup=" ++ show s) $
-        map modifierNode ms ++ [exponentExprNode a]
+modifierExprNode :: ModifierExpr Ps -> DotNode
+modifierExprNode n@(ModifierExpr _ ms a _) = myNode n $ map modifierNode ms ++ [exponentExprNode a]
   where
-    myNode l = midNode l 7
+    myNode = (midNode 7) . summarize
 
-modifierNode :: Modifier -> DotNode
+modifierNode :: Modifier Ps -> DotNode
 modifierNode = \case
-    Directional d -> myNode "Directional :: Modifier" [directionModifierNode d]
-    Behavioural b -> myNode "Behavioural :: Modifier" [behaviourNode b]
+    n@(Directional d _) -> myNode n [directionModifierNode d]
+    n@(Behavioural b _) -> myNode n [behaviourNode b]
   where
-    myNode l = midNode l 7
+    myNode = (midNode 7) . summarize
 
-directionModifierNode :: DirectionModifier -> DotNode
+directionModifierNode :: DirectionModifier Ps -> DotNode
 directionModifierNode = \case
-    Amalgamated d1 d2 -> myNode "Amalgamated :: DirectionModifier" [directionNode d1, directionNode d2]
-    Single d -> myNode "Single :: DirectionModifier" [directionNode d]
+    n@(Amalgamated d1 d2 _) -> myNode n [directionNode d1, directionNode d2]
+    n@(Single d _) -> myNode n [directionNode d]
   where
-    myNode l = midNode l 8
+    myNode = (midNode 8) . summarize
 
-directionNode :: Direction -> DotNode
-directionNode = leafNode . show
+directionNode :: Direction Ps -> DotNode
+directionNode = leafNode . summarize
 
-behaviourNode :: Behaviour -> DotNode
-behaviourNode (Behaviour kind modality) = myNode "Behaviour" [behaviourKindNode kind, behaviourModalityNode modality]
+behaviourNode :: Behaviour Ps -> DotNode
+behaviourNode n@(Behaviour kind modality _) = myNode n [behaviourKindNode kind, behaviourModalityNode modality]
   where
-    myNode l = midNode l 8
+    myNode = (midNode 8) . summarize
 
-behaviourKindNode :: BehaviourKind -> DotNode
-behaviourKindNode = leafNode . show
+behaviourKindNode :: BehaviourKind Ps -> DotNode
+behaviourKindNode = leafNode . summarize
 
-behaviourModalityNode :: BehaviourModality -> DotNode
-behaviourModalityNode = leafNode . show
+behaviourModalityNode :: BehaviourModality Ps -> DotNode
+behaviourModalityNode = leafNode . summarize
 
-exponentExprNode :: ExponentExpr -> DotNode
-exponentExprNode (ExponentExpr a me) =
-    myNode "ExponentExpr" $
-        atomExprNode a : maybe [] (\e -> [exponentNode e]) me
+exponentExprNode :: ExponentExpr Ps -> DotNode
+exponentExprNode n@(ExponentExpr a me _) = myNode n $ atomExprNode a : maybe [] (\e -> [exponentNode e]) me
   where
-    myNode l = midNode l 7
+    myNode = (midNode 7) . summarize
 
-atomExprNode :: AtomExpr -> DotNode
+atomExprNode :: AtomExpr Ps -> DotNode
 atomExprNode = \case
-    Paren e -> myNode "Paren :: AtomExpr" [exprNode e]
-    From l -> myNode "From :: AtomExpr" [labelNode l]
+    n@(Paren e _) -> myNode n [exprNode e]
+    n@(From l _) -> myNode n [labelNode l]
   where
-    myNode l = midNode l 8
+    myNode = (midNode 8) . summarize
 
-exponentNode :: Exponent -> DotNode
-exponentNode (Exponent mco ms k) =
-    myNode "Exponent" $
+exponentNode :: Exponent Ps -> DotNode
+exponentNode n@(Exponent mco ms k _) =
+    myNode n $
         maybe [] (\co -> [chainOperatorNode co]) mco
             <> map modifierNode ms
             <> [exponentKindNode k]
   where
-    myNode l = midNode l 8
+    myNode = (midNode 8) . summarize
 
-exponentKindNode :: ExponentKind -> DotNode
-exponentKindNode = leafNode . show
+exponentKindNode :: ExponentKind Ps -> DotNode
+exponentKindNode = leafNode . summarize
 
-chainOperatorNode :: ChainOperator -> DotNode
-chainOperatorNode (ChainOperator k m) = myNode "ChainOperator" [chainKindNode k, chainModalityNode m]
+chainOperatorNode :: ChainOperator Ps -> DotNode
+chainOperatorNode n@(ChainOperator k m _) = myNode n [chainKindNode k, chainModalityNode m]
   where
-    myNode l = midNode l 6
+    myNode = (midNode 6) . summarize
 
-chainKindNode :: ChainKind -> DotNode
-chainKindNode = leafNode . show
+chainKindNode :: ChainKind Ps -> DotNode
+chainKindNode = leafNode . summarize
 
-chainModalityNode :: ChainModality -> DotNode
-chainModalityNode = leafNode . show
+chainModalityNode :: ChainModality Ps -> DotNode
+chainModalityNode = leafNode . summarize
 
-labelNode :: Label -> DotNode
+labelNode :: Label Ps -> DotNode
 labelNode = \case
-    Upper c -> myNode "Upper :: Label" [leafNode [c]]
-    Descriptor s -> myNode "Descriptor :: Label" [leafNode s]
-    Leaper m n -> myNode "Leaper :: Label" [numberNode m, numberNode n]
+    n@(Upper c _) -> myNode n [leafNode [c]]
+    n@(Descriptor s _) -> myNode n [leafNode s]
+    n@(Leaper x y _) -> myNode n [numberNode x, numberNode y]
   where
-    myNode l = midNode l 8
+    myNode = (midNode 8) . summarize

@@ -31,6 +31,8 @@ library
       Betzac.AST
       Betzac.Debug.Dot.Dot
       Betzac.Debug.Dot.Visitor
+      Betzac.Debug.PrettyPrint
+      Betzac.Debug.Strip
       Betzac.Lexer.Core
       Betzac.Lexer.Lexer
       Betzac.Lexer.Space
@@ -40,6 +42,7 @@ library
       Betzac.Parser.Parser
       Betzac.Pipeline
       Betzac.Semantic.AnalysisPass
+      Betzac.Semantic.Direction.All
       Betzac.Semantic.Direction.AmalgamatedDirection
       Betzac.Token
       LangServer.Config

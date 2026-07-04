@@ -4,13 +4,15 @@
 module Parser.ParserHedgehog (spec, genProgram, unparse) where
 
 import Betzac.AST
+import Betzac.Debug.Strip (strip)
 import Betzac.Located
 import Betzac.Parser.BetzaTokenStream
 import Betzac.Parser.Parser
 import qualified Betzac.Token as B
-import Text.Megaparsec
 
 import Lexer.LexerQC (unlex)
+
+import Text.Megaparsec
 
 import Data.List (intercalate)
 import Data.Maybe (isJust)
@@ -25,177 +27,203 @@ import Test.Hspec.Hedgehog
 
 -- unparse
 
-unparse :: BetzaProgram -> [B.Token]
+unparse :: BetzaProgram Ps -> [B.Token]
 unparse stmts = concat $ unparseQualifiedStmt <$> stmts
 
-unparseQualifiedStmt :: QualifiedStmt -> [B.Token]
-unparseQualifiedStmt (Override d) = B.TokOverride : unparseDirective d <> [B.TokEndStmt]
-unparseQualifiedStmt (Plain d) = unparseDirective d <> [B.TokEndStmt]
+unparseQualifiedStmt :: QualifiedStmt Ps -> [B.Token]
+unparseQualifiedStmt (Override d _) = B.TokOverride : unparseDirective d <> [B.TokEndStmt]
+unparseQualifiedStmt (Plain d _) = unparseDirective d <> [B.TokEndStmt]
 
-unparseDirective :: Directive -> [B.Token]
-unparseDirective (Using f) = [B.TokUsing $ unparseFilePath f]
-unparseDirective (Export s) = B.TokExport : unparseStmt s
-unparseDirective (Bare s) = unparseStmt s
+unparseDirective :: Directive Ps -> [B.Token]
+unparseDirective (Using f _) = [B.TokUsing $ unparseFilePath f]
+unparseDirective (Export s _) = B.TokExport : unparseStmt s
+unparseDirective (Bare s _) = unparseStmt s
 
 unparseFilePath :: FilePath -> FilePath
 unparseFilePath f = (\c -> if c == '/' then '.' else c) <$> f
 
-unparseStmt :: BetzaStmt -> [B.Token]
-unparseStmt (Assign l e) = unparseLabel l : B.TokAssign : unparseExpr e
-unparseStmt (Anonymous e) = unparseExpr e
+unparseStmt :: BetzaStmt Ps -> [B.Token]
+unparseStmt (Assign l e _) = unparseLabel l : B.TokAssign : unparseExpr e
+unparseStmt (Anonymous e _) = unparseExpr e
 
-unparseLabel :: Label -> B.Token
-unparseLabel (Upper c) = B.TokAtom c
-unparseLabel (Descriptor s) = B.TokDescriptor s
-unparseLabel (Leaper a b) = B.TokDescriptor $ show a ++ "," ++ show b
+unparseLabel :: Label Ps -> B.Token
+unparseLabel (Upper c _) = B.TokAtom c
+unparseLabel (Descriptor s _) = B.TokDescriptor s
+unparseLabel (Leaper a b _) = B.TokDescriptor $ show a ++ "," ++ show b
 
-unparseExpr :: BetzaExpr -> [B.Token]
-unparseExpr (BetzaExpr c) = unparseChain c
+unparseExpr :: BetzaExpr Ps -> [B.Token]
+unparseExpr (BetzaExpr c _) = unparseChain c
 
-unparseChain :: ChainExpr -> [B.Token]
-unparseChain (ChainExpr u mcl) =
-    unparseUnion u
-        <> maybe [] unparseChainLeg mcl
+unparseChain :: ChainExpr Ps -> [B.Token]
+unparseChain (ChainExpr u mcl _) = unparseUnion u <> maybe [] unparseChainLeg mcl
 
-unparseChainLeg :: ChainLeg -> [B.Token]
-unparseChainLeg (ChainLeg op c) = unparseChainOp op c
+unparseChainLeg :: ChainLeg Ps -> [B.Token]
+unparseChainLeg (ChainLeg op c _) = unparseChainOp op c
 
-unparseChainOp :: ChainOperator -> ChainExpr -> [B.Token]
-unparseChainOp (ChainOperator k Mandatory) c =
+unparseChainOp :: ChainOperator Ps -> ChainExpr Ps -> [B.Token]
+unparseChainOp (ChainOperator k (Mandatory _) _) c =
     unparseChainKind k : unparseChain c
-unparseChainOp (ChainOperator k IffUnblocked) c =
+unparseChainOp (ChainOperator k (IffUnblocked _) _) c =
     [unparseChainKind k, B.TokLBrace] <> unparseChain c <> [B.TokRBrace]
-unparseChainOp (ChainOperator k Choose) c =
+unparseChainOp (ChainOperator k (Choose _) _) c =
     [unparseChainKind k, B.TokLBracket] <> unparseChain c <> [B.TokRBracket]
 
-unparseChainKind :: ChainKind -> B.Token
-unparseChainKind Step = B.TokChainStep
-unparseChainKind Sequence = B.TokChainSequence
+unparseChainKind :: ChainKind Ps -> B.Token
+unparseChainKind (Step _) = B.TokChainStep
+unparseChainKind (Sequence _) = B.TokChainSequence
 
--- unparseChainModality ??
+unparseUnion :: UnionExpr Ps -> [B.Token]
+unparseUnion (UnionExpr ms _) = concat $ unparseModExpr <$> ms
 
-unparseUnion :: UnionExpr -> [B.Token]
-unparseUnion (UnionExpr ms) = concat $ unparseModExpr <$> ms
-
-unparseModExpr :: ModifierExpr -> [B.Token]
-unparseModExpr (ModifierExpr s ms e) =
+unparseModExpr :: ModifierExpr Ps -> [B.Token]
+unparseModExpr (ModifierExpr s ms e _) =
     (if s then [B.TokBang] else [])
         <> (ms >>= unparseModifier)
         <> unparseExponentExpr e
 
-unparseModifier :: Modifier -> [B.Token]
-unparseModifier (Directional m) = unparseDirectionMod m
-unparseModifier (Behavioural m) = unparseBehaviour m
+unparseModifier :: Modifier Ps -> [B.Token]
+unparseModifier (Directional m _) = unparseDirectionMod m
+unparseModifier (Behavioural m _) = unparseBehaviour m
 
-unparseDirectionMod :: DirectionModifier -> [B.Token]
-unparseDirectionMod (Amalgamated d1 d2) =
+unparseDirectionMod :: DirectionModifier Ps -> [B.Token]
+unparseDirectionMod (Amalgamated d1 d2 _) =
     [ B.TokLAngle
     , unparseDirection d1
     , unparseDirection d2
     , B.TokRAngle
     ]
-unparseDirectionMod (Single d) = [unparseDirection d]
+unparseDirectionMod (Single d _) = [unparseDirection d]
 
-unparseDirection :: Direction -> B.Token
-unparseDirection Forward = B.TokDirection 'f'
-unparseDirection Backward = B.TokDirection 'b'
-unparseDirection Leftward = B.TokDirection 'l'
-unparseDirection Rightward = B.TokDirection 'r'
-unparseDirection Sideway = B.TokDirection 's'
-unparseDirection Vertically = B.TokDirection 'v'
-unparseDirection All = B.TokDirection 'a'
+unparseDirection :: Direction Ps -> B.Token
+unparseDirection (Forward _) = B.TokDirection 'f'
+unparseDirection (Backward _) = B.TokDirection 'b'
+unparseDirection (Leftward _) = B.TokDirection 'l'
+unparseDirection (Rightward _) = B.TokDirection 'r'
+unparseDirection (Sideway _) = B.TokDirection 's'
+unparseDirection (Vertically _) = B.TokDirection 'v'
+unparseDirection (All _) = B.TokDirection 'a'
 
-unparseBehaviour :: Behaviour -> [B.Token]
-unparseBehaviour (Behaviour kind Once) = [unparseBehaviourOnce kind]
-unparseBehaviour (Behaviour kind Twice) = [unparseBehaviourOnce kind, unparseBehaviourOnce kind]
-unparseBehaviour (Behaviour kind Any) = [unparseBehaviourOnce kind, B.TokBehaviour 'y']
+unparseBehaviour :: Behaviour Ps -> [B.Token]
+unparseBehaviour (Behaviour kind (Once _) _) = [unparseBehaviourOnce kind]
+unparseBehaviour (Behaviour kind (Twice _) _) = [unparseBehaviourOnce kind, unparseBehaviourOnce kind]
+unparseBehaviour (Behaviour kind (Any _) _) = [unparseBehaviourOnce kind, B.TokBehaviour 'y']
 
-unparseBehaviourOnce :: BehaviourKind -> B.Token
-unparseBehaviourOnce Capture = B.TokBehaviour 'c'
-unparseBehaviourOnce Leap = B.TokBehaviour 'g'
-unparseBehaviourOnce Initial = B.TokBehaviour 'i'
-unparseBehaviourOnce Jump = B.TokBehaviour 'j'
-unparseBehaviourOnce Move = B.TokBehaviour 'm'
-unparseBehaviourOnce NoJump = B.TokBehaviour 'n'
-unparseBehaviourOnce Hop = B.TokBehaviour 'p'
+unparseBehaviourOnce :: BehaviourKind Ps -> B.Token
+unparseBehaviourOnce (Capture _) = B.TokBehaviour 'c'
+unparseBehaviourOnce (Leap _) = B.TokBehaviour 'g'
+unparseBehaviourOnce (Initial _) = B.TokBehaviour 'i'
+unparseBehaviourOnce (Jump _) = B.TokBehaviour 'j'
+unparseBehaviourOnce (Move _) = B.TokBehaviour 'm'
+unparseBehaviourOnce (NoJump _) = B.TokBehaviour 'n'
+unparseBehaviourOnce (Hop _) = B.TokBehaviour 'p'
 
-unparseExponentExpr :: ExponentExpr -> [B.Token]
-unparseExponentExpr (ExponentExpr a me) = unparseAtom a <> maybe [] unparseExponent me
+unparseExponentExpr :: ExponentExpr Ps -> [B.Token]
+unparseExponentExpr (ExponentExpr a me _) = unparseAtom a <> maybe [] unparseExponent me
 
-unparseAtom :: AtomExpr -> [B.Token]
-unparseAtom (Paren e) = [B.TokLParen] <> unparseExpr e <> [B.TokRParen]
-unparseAtom (From l) = [unparseLabel l]
+unparseAtom :: AtomExpr Ps -> [B.Token]
+unparseAtom (Paren e _) = [B.TokLParen] <> unparseExpr e <> [B.TokRParen]
+unparseAtom (From l _) = [unparseLabel l]
 
-unparseExponent :: Exponent -> [B.Token]
-unparseExponent (Exponent mop ms k) = case mop of
+unparseExponent :: Exponent Ps -> [B.Token]
+unparseExponent (Exponent mop ms k _) = case mop of
     Nothing -> (ms >>= unparseModifier) <> [unparseExponentKind k]
-    Just (ChainOperator ck Mandatory) -> [unparseChainKind ck] <> (ms >>= unparseModifier) <> [unparseExponentKind k]
-    Just (ChainOperator ck IffUnblocked) -> [unparseChainKind ck, B.TokLBrace] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBrace]
-    Just (ChainOperator ck Choose) -> [unparseChainKind ck, B.TokLBracket] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBracket]
+    Just (ChainOperator ck (Mandatory _) _) -> [unparseChainKind ck] <> (ms >>= unparseModifier) <> [unparseExponentKind k]
+    Just (ChainOperator ck (IffUnblocked _) _) -> [unparseChainKind ck, B.TokLBrace] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBrace]
+    Just (ChainOperator ck (Choose _) _) -> [unparseChainKind ck, B.TokLBracket] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBracket]
 
-unparseExponentKind :: ExponentKind -> B.Token
-unparseExponentKind Infinite = B.TokNumber 0
-unparseExponentKind Slippery = B.TokSlippery
-unparseExponentKind (Repeat n) = B.TokNumber n
+unparseExponentKind :: ExponentKind Ps -> B.Token
+unparseExponentKind (Infinite _) = B.TokNumber 0
+unparseExponentKind (Slippery _) = B.TokSlippery
+unparseExponentKind (Repeat n _) = B.TokNumber n
 
 -- generators
 
-genDirection :: Gen Direction
-genDirection = Gen.element [Forward, Backward, Leftward, Rightward, Sideway, Vertically, All]
+psx :: PsX -- dummy
+psx = PsX Generated
 
-genBehaviour :: Gen Behaviour
-genBehaviour =
-    Gen.choice
-        [ Gen.element [Behaviour Initial Once, Behaviour Move Once, Behaviour NoJump Once]
-        , Behaviour Capture <$> Gen.element [Once, Twice, Any]
-        , Behaviour Leap <$> Gen.element [Once, Twice, Any]
-        , Behaviour Jump <$> Gen.element [Once, Twice, Any]
-        , Behaviour Hop <$> Gen.element [Once, Twice]
+genPsx :: Gen PsX
+genPsx = Gen.constant psx
+
+genDirection :: Gen (Direction Ps)
+genDirection =
+    Gen.element
+        [ Forward psx
+        , Backward psx
+        , Leftward psx
+        , Rightward psx
+        , Sideway psx
+        , Vertically psx
+        , All psx
         ]
 
-genChainOperator :: Gen ChainOperator
-genChainOperator = ChainOperator <$> genChainKind <*> genChainModality
+genBehaviour :: Gen (Behaviour Ps)
+genBehaviour =
+    Gen.choice
+        [ Gen.element
+            [ Behaviour (Initial psx) (Once ()) psx
+            , Behaviour (Move psx) (Once ()) psx
+            , Behaviour (NoJump psx) (Once ()) psx
+            ]
+        , Behaviour (Capture psx) <$> Gen.element [Once (), Twice psx, Any psx] <*> genPsx
+        , Behaviour (Leap psx) <$> Gen.element [Once (), Twice psx, Any psx] <*> genPsx
+        , Behaviour (Jump psx) <$> Gen.element [Once (), Twice psx, Any psx] <*> genPsx
+        , Behaviour (Hop psx) <$> Gen.element [Once (), Twice psx, Any psx] <*> genPsx
+        ]
 
-genChainKind :: Gen ChainKind
-genChainKind = Gen.element [Step, Sequence]
+genChainOperator :: Gen (ChainOperator Ps)
+genChainOperator = ChainOperator <$> genChainKind <*> genChainModality <*> genPsx
 
-genChainModality :: Gen ChainModality
-genChainModality = Gen.element [Mandatory, Choose, IffUnblocked]
+genChainKind :: Gen (ChainKind Ps)
+genChainKind = Gen.element [Step psx, Sequence psx]
+
+genChainModality :: Gen (ChainModality Ps)
+genChainModality = Gen.element [Mandatory (), Choose psx, IffUnblocked psx]
 
 genNumber :: Gen Number
 genNumber = Gen.sized $ \(Size n) -> Gen.int $ Range.linear 1 (max 1 n)
 
-genExponentKind :: Gen ExponentKind
-genExponentKind = Gen.choice [Gen.constant Infinite, Gen.constant Slippery, Repeat <$> genNumber]
-
-genUpper :: Gen Label
-genUpper = Upper <$> Gen.element ['A' .. 'Z']
-
-genDescriptor :: Gen Label
-genDescriptor =
-    Descriptor <$> do
-        wrds <-
-            Gen.nonEmpty (Range.linear 1 5) $
-                Gen.string (Range.linear 1 8) Gen.alphaNum
-        pure $ intercalate " " (toList wrds)
-
-genLeaper :: Gen Label
-genLeaper = Leaper <$> genNumber <*> genNumber
-
-genLabel :: Gen Label
-genLabel = Gen.choice [genUpper, genDescriptor, genLeaper]
-
-genDirectionMod :: Gen DirectionModifier
-genDirectionMod =
-    Gen.frequency
-        [ (2, Single <$> genDirection)
-        , (1, Amalgamated <$> genDirection <*> genDirection)
+genExponentKind :: Gen (ExponentKind Ps)
+genExponentKind =
+    Gen.choice
+        [ Infinite <$> genPsx
+        , Slippery <$> genPsx
+        , Repeat <$> genNumber <*> genPsx
         ]
 
-genModifier :: Gen Modifier
-genModifier = Gen.choice [Directional <$> genDirectionMod, Behavioural <$> genBehaviour]
+genUpper :: Gen (Label Ps)
+genUpper = Upper <$> Gen.element ['A' .. 'Z'] <*> genPsx
 
-genModifiers :: Gen [Modifier]
+genDescriptor :: Gen (Label Ps)
+genDescriptor =
+    Descriptor
+        <$> do
+            wrds <-
+                Gen.nonEmpty (Range.linear 1 5) $
+                    Gen.string (Range.linear 1 8) Gen.alphaNum
+            pure $ intercalate " " (toList wrds)
+        <*> genPsx
+
+genLeaper :: Gen (Label Ps)
+genLeaper = Leaper <$> genNumber <*> genNumber <*> genPsx
+
+genLabel :: Gen (Label Ps)
+genLabel = Gen.choice [genUpper, genDescriptor, genLeaper]
+
+genDirectionMod :: Gen (DirectionModifier Ps)
+genDirectionMod =
+    Gen.frequency
+        [ (2, Single <$> genDirection <*> genPsx)
+        , (1, Amalgamated <$> genDirection <*> genDirection <*> genPsx)
+        ]
+
+genModifier :: Gen (Modifier Ps)
+genModifier =
+    Gen.choice
+        [ Directional <$> genDirectionMod <*> genPsx
+        , Behavioural <$> genBehaviour <*> genPsx
+        ]
+
+genModifiers :: Gen [Modifier Ps]
 genModifiers =
     Gen.filter noAmbiguousSequences $
         Gen.list (Range.linear 0 3) genModifier
@@ -206,56 +234,62 @@ genModifiers =
     ambiguous (B.TokBehaviour a, B.TokBehaviour b) = a == b || b == 'y'
     ambiguous _ = False
 
-genSmallExpr :: Gen BetzaExpr
+genSmallExpr :: Gen (BetzaExpr Ps)
 genSmallExpr = Gen.sized $ \n -> Gen.resize (n `div` 2) genExpr
 
-genAtom :: Gen AtomExpr
+genAtom :: Gen (AtomExpr Ps)
 genAtom =
     Gen.recursive
         Gen.choice
-        [From <$> genLabel]
-        [Paren <$> genSmallExpr]
+        [From <$> genLabel <*> genPsx]
+        [Paren <$> genSmallExpr <*> genPsx]
 
-genExponent :: Gen Exponent
+genExponent :: Gen (Exponent Ps)
 genExponent =
     Exponent
         <$> Gen.maybe genChainOperator
         <*> genModifiers
         <*> genExponentKind
+        <*> genPsx
 
-genExponentExpr :: Gen ExponentExpr
-genExponentExpr = ExponentExpr <$> genAtom <*> (Gen.maybe genExponent)
+genExponentExpr :: Gen (ExponentExpr Ps)
+genExponentExpr =
+    ExponentExpr
+        <$> genAtom
+        <*> (Gen.maybe genExponent)
+        <*> genPsx
 
-genModifierExpr :: Gen ModifierExpr
+genModifierExpr :: Gen (ModifierExpr Ps)
 genModifierExpr =
     ModifierExpr
         <$> Gen.bool -- setup
         <*> genModifiers
         <*> genExponentExpr
+        <*> genPsx
 
-genUnion :: Gen UnionExpr
-genUnion = UnionExpr <$> Gen.nonEmpty (Range.linear 1 4) genModifierExpr
+genUnion :: Gen (UnionExpr Ps)
+genUnion = UnionExpr <$> Gen.nonEmpty (Range.linear 1 4) genModifierExpr <*> genPsx
 
-genChain :: Gen ChainExpr
+genChain :: Gen (ChainExpr Ps)
 genChain =
     Gen.recursive
         Gen.choice
-        [ChainExpr <$> genUnion <*> return Nothing]
-        [ChainExpr <$> genUnion <*> (Just <$> genChainLeg)]
+        [ChainExpr <$> genUnion <*> return Nothing <*> genPsx]
+        [ChainExpr <$> genUnion <*> (Just <$> genChainLeg) <*> genPsx]
 
-genChainLeg :: Gen ChainLeg
-genChainLeg = ChainLeg <$> genChainOperator <*> genSmallChain
+genChainLeg :: Gen (ChainLeg Ps)
+genChainLeg = ChainLeg <$> genChainOperator <*> genSmallChain <*> genPsx
   where
     genSmallChain = Gen.sized $ \n -> Gen.resize (n `div` 2) genChain
 
-genExpr :: Gen BetzaExpr
-genExpr = BetzaExpr <$> genChain
+genExpr :: Gen (BetzaExpr Ps)
+genExpr = BetzaExpr <$> genChain <*> genPsx
 
-genStmt :: Gen BetzaStmt
+genStmt :: Gen (BetzaStmt Ps)
 genStmt =
     Gen.choice
-        [ Anonymous <$> genExpr
-        , Assign <$> genLabel <*> genExpr
+        [ Anonymous <$> genExpr <*> genPsx
+        , Assign <$> genLabel <*> genExpr <*> genPsx
         ]
 
 genFilePath :: Gen FilePath
@@ -265,144 +299,138 @@ genFilePath =
             (Range.linear 1 10)
             (Gen.string (Range.linear 1 20) Gen.alphaNum)
 
-genDirective :: Gen Directive
+genDirective :: Gen (Directive Ps)
 genDirective =
     Gen.choice
-        [ Bare <$> genStmt
-        , Export <$> genStmt
-        , Using <$> genFilePath
+        [ Bare <$> genStmt <*> genPsx
+        , Export <$> genStmt <*> genPsx
+        , Using <$> genFilePath <*> genPsx
         ]
 
-genQualifiedStmt :: Gen QualifiedStmt
+genQualifiedStmt :: Gen (QualifiedStmt Ps)
 genQualifiedStmt =
     Gen.choice
-        [ Plain <$> genDirective
-        , Override <$> genDirective
+        [ Plain <$> genDirective <*> genPsx
+        , Override <$> genDirective <*> genPsx
         ]
 
-genProgram :: Gen BetzaProgram
+genProgram :: Gen (BetzaProgram Ps)
 genProgram = Gen.sized $
-    \(Size n) -> Gen.list (Range.linear 1 (max 1 (n `div` 20))) genQualifiedStmt
+    \(Size n) -> Gen.list (Range.linear 1 $ max 1 $ n `div` 20) genQualifiedStmt
 
 -- utils
 
-isOverride :: QualifiedStmt -> Bool
-isOverride (Override _) = True; isOverride _ = False
-isPlain :: QualifiedStmt -> Bool
-isPlain (Plain _) = True; isPlain _ = False
-isUsing :: Directive -> Bool
-isUsing (Using _) = True; isUsing _ = False
-isExport :: Directive -> Bool
-isExport (Export _) = True; isExport _ = False
-isBare :: Directive -> Bool
-isBare (Bare _) = True; isBare _ = False
-isAssign :: BetzaStmt -> Bool
-isAssign (Assign{}) = True; isAssign _ = False
-isAnonymous :: BetzaStmt -> Bool
-isAnonymous (Anonymous _) = True; isAnonymous _ = False
+isOverride :: (QualifiedStmt Ps) -> Bool
+isOverride (Override _ _) = True; isOverride _ = False
+isPlain :: (QualifiedStmt Ps) -> Bool
+isPlain (Plain _ _) = True; isPlain _ = False
+isUsing :: (Directive Ps) -> Bool
+isUsing (Using _ _) = True; isUsing _ = False
+isExport :: (Directive Ps) -> Bool
+isExport (Export _ _) = True; isExport _ = False
+isBare :: (Directive Ps) -> Bool
+isBare (Bare _ _) = True; isBare _ = False
+isAssign :: (BetzaStmt Ps) -> Bool
+isAssign (Assign _ _ _) = True; isAssign _ = False
+isAnonymous :: (BetzaStmt Ps) -> Bool
+isAnonymous (Anonymous _ _) = True; isAnonymous _ = False
+isSequence :: (ChainKind Ps) -> Bool
+isSequence (Sequence _) = True; isSequence _ = False
 
-hasDirective :: (Directive -> t) -> QualifiedStmt -> t
-hasDirective f (Override d) = f d
-hasDirective f (Plain d) = f d
+hasDirective :: (Directive Ps -> t) -> QualifiedStmt Ps -> t
+hasDirective f (Override d _) = f d
+hasDirective f (Plain d _) = f d
 
-hasStmt :: (BetzaStmt -> Bool) -> QualifiedStmt -> Bool
+hasStmt :: (BetzaStmt Ps -> Bool) -> QualifiedStmt Ps -> Bool
 hasStmt f qs = case qs of
-    Plain (Bare s) -> f s
-    Plain (Export s) -> f s
-    Override (Bare s) -> f s
-    Override (Export s) -> f s
+    Plain (Bare s _) _ -> f s
+    Plain (Export s _) _ -> f s
+    Override (Bare s _) _ -> f s
+    Override (Export s _) _ -> f s
     _ -> False
 
 -- coverage utils
 
 foldExpr ::
     (Monoid m) =>
-    (ChainExpr -> m) ->
-    (ModifierExpr -> m) ->
-    (ExponentExpr -> m) ->
-    (AtomExpr -> m) ->
-    BetzaExpr ->
+    (ChainExpr Ps -> m) ->
+    (ModifierExpr Ps -> m) ->
+    (ExponentExpr Ps -> m) ->
+    (AtomExpr Ps -> m) ->
+    BetzaExpr Ps ->
     m
-foldExpr fc fm fe fa (BetzaExpr c) = goChain c
+foldExpr fc fm fe fa (BetzaExpr c _) = goChain c
   where
-    goChain ce@(ChainExpr (UnionExpr ms) ml) =
+    goChain ce@(ChainExpr (UnionExpr ms _) ml _) =
         fc ce
             <> foldMap goModifier (toList ms)
-            <> maybe mempty (\(ChainLeg _ inner) -> goChain inner) ml
-    goModifier me@(ModifierExpr _ _ e) =
+            <> maybe mempty (\(ChainLeg _ inner _) -> goChain inner) ml
+    goModifier me@(ModifierExpr _ _ e _) =
         fm me <> goExponent e
-    goExponent ee@(ExponentExpr a _) =
+    goExponent ee@(ExponentExpr a _ _) =
         fe ee <> goAtom a
     goAtom ae =
         fa ae <> case ae of
-            Paren inner -> foldExpr fc fm fe fa inner
-            From _ -> mempty
+            Paren inner _ -> foldExpr fc fm fe fa inner
+            From _ _ -> mempty
 
-anyChainExpr :: (ChainExpr -> Bool) -> BetzaExpr -> Bool
+anyChainExpr :: (ChainExpr Ps -> Bool) -> BetzaExpr Ps -> Bool
 anyChainExpr p = M.getAny . foldExpr (M.Any . p) mempty mempty mempty
 
-anyModifierExpr :: (ModifierExpr -> Bool) -> BetzaExpr -> Bool
+anyModifierExpr :: (ModifierExpr Ps -> Bool) -> BetzaExpr Ps -> Bool
 anyModifierExpr p = M.getAny . foldExpr mempty (M.Any . p) mempty mempty
 
-anyExponentExpr :: (ExponentExpr -> Bool) -> BetzaExpr -> Bool
+anyExponentExpr :: (ExponentExpr Ps -> Bool) -> BetzaExpr Ps -> Bool
 anyExponentExpr p = M.getAny . foldExpr mempty mempty (M.Any . p) mempty
 
-anyAtomExpr :: (AtomExpr -> Bool) -> BetzaExpr -> Bool
+anyAtomExpr :: (AtomExpr Ps -> Bool) -> BetzaExpr Ps -> Bool
 anyAtomExpr p = M.getAny . foldExpr mempty mempty mempty (M.Any . p)
 
-hasChainLeg :: BetzaExpr -> Bool
-hasChainLeg = anyChainExpr (\(ChainExpr _ ml) -> isJust ml)
+hasChainLeg :: BetzaExpr Ps -> Bool
+hasChainLeg = anyChainExpr $ \(ChainExpr _ ml _) -> isJust ml
 
-hasParenAtom :: BetzaExpr -> Bool
-hasParenAtom = anyAtomExpr (\case Paren _ -> True; _ -> False)
+hasParenAtom :: BetzaExpr Ps -> Bool
+hasParenAtom = anyAtomExpr $ \case Paren _ _ -> True; _ -> False
 
-hasAtomExponent :: BetzaExpr -> Bool
-hasAtomExponent = anyExponentExpr (\(ExponentExpr _ me) -> isJust me)
+hasAtomExponent :: BetzaExpr Ps -> Bool
+hasAtomExponent = anyExponentExpr $ \(ExponentExpr _ me _) -> isJust me
 
-hasBang :: BetzaExpr -> Bool
-hasBang = anyModifierExpr (\(ModifierExpr s _ _) -> s)
+hasBang :: BetzaExpr Ps -> Bool
+hasBang = anyModifierExpr $ \(ModifierExpr s _ _ _) -> s
 
-hasAmalgamated :: BetzaExpr -> Bool
+hasAmalgamated :: BetzaExpr Ps -> Bool
 hasAmalgamated =
-    anyModifierExpr
-        ( \(ModifierExpr _ ms _) ->
-            any (\case Directional (Amalgamated _ _) -> True; _ -> False) ms
-        )
+    anyModifierExpr $ \(ModifierExpr _ ms _ _) ->
+        any (\case Directional (Amalgamated _ _ _) _ -> True; _ -> False) ms
 
-hasMultiUnion :: BetzaExpr -> Bool
-hasMultiUnion = anyChainExpr (\(ChainExpr (UnionExpr ne) _) -> length ne >= 2)
+hasMultiUnion :: BetzaExpr Ps -> Bool
+hasMultiUnion = anyChainExpr $ \(ChainExpr (UnionExpr ne _) _ _) -> length ne >= 2
 
-hasModality :: ChainModality -> BetzaExpr -> Bool
+hasModality :: ChainModality Ps -> BetzaExpr Ps -> Bool
 hasModality m =
-    anyChainExpr
-        ( \(ChainExpr _ ml) ->
-            maybe False (\(ChainLeg (ChainOperator _ m') _) -> m' == m) ml
-        )
+    anyChainExpr $ \(ChainExpr _ ml _) ->
+        maybe False (\(ChainLeg (ChainOperator _ m' _) _ _) -> m' == m) ml
 
-hasSequence :: BetzaExpr -> Bool
+hasSequence :: BetzaExpr Ps -> Bool
 hasSequence =
-    anyChainExpr
-        ( \(ChainExpr _ ml) ->
-            maybe False (\(ChainLeg (ChainOperator k _) _) -> k == Sequence) ml
-        )
+    anyChainExpr $ \(ChainExpr _ ml _) ->
+        maybe False (\(ChainLeg (ChainOperator k _ _) _ _) -> isSequence k) ml
 
-hasNestedChain :: BetzaExpr -> Bool
+hasNestedChain :: BetzaExpr Ps -> Bool
 hasNestedChain =
-    anyChainExpr
-        ( \(ChainExpr _ ml) ->
-            maybe False (\(ChainLeg _ (ChainExpr _ ml')) -> isJust ml') ml
-        )
+    anyChainExpr $ \(ChainExpr _ ml _) ->
+        maybe False (\(ChainLeg _ (ChainExpr _ ml' _) _) -> isJust ml') ml
 
-anyInProg :: (BetzaExpr -> Bool) -> BetzaProgram -> Bool
+anyInProg :: (BetzaExpr Ps -> Bool) -> BetzaProgram Ps -> Bool
 anyInProg p = any (maybe False p . exprOf)
   where
-    exprOf (Plain d) = exprOfDirective d
-    exprOf (Override d) = exprOfDirective d
-    exprOfDirective (Bare s) = exprOfStmt s
-    exprOfDirective (Export s) = exprOfStmt s
-    exprOfDirective (Using _) = Nothing
-    exprOfStmt (Assign _ e) = Just e
-    exprOfStmt (Anonymous e) = Just e
+    exprOf (Plain d _) = exprOfDirective d
+    exprOf (Override d _) = exprOfDirective d
+    exprOfDirective (Bare s _) = exprOfStmt s
+    exprOfDirective (Export s _) = exprOfStmt s
+    exprOfDirective (Using _ _) = Nothing
+    exprOfStmt (Assign _ e _) = Just e
+    exprOfStmt (Anonymous e _) = Just e
 
 -- props
 
@@ -437,8 +465,8 @@ prop_parseUndoesUnparse = do
 
     -- chain structure
     classify "has chain leg" $ anyInProg hasChainLeg prog
-    classify "has IffUnblocked leg" $ anyInProg (hasModality IffUnblocked) prog
-    classify "has Choose leg" $ anyInProg (hasModality Choose) prog
+    classify "has IffUnblocked leg" $ anyInProg (hasModality $ IffUnblocked psx) prog
+    classify "has Choose leg" $ anyInProg (hasModality $ Choose psx) prog
     classify "has Sequence leg" $ anyInProg hasSequence prog
     classify "has Paren atom" $ anyInProg hasParenAtom prog
     classify "has exponent on atom" $ anyInProg hasAtomExponent prog
@@ -448,12 +476,14 @@ prop_parseUndoesUnparse = do
     classify "has union of 2+" $ anyInProg hasMultiUnion prog
 
     cover 10 "has chain leg" $ anyInProg hasChainLeg prog
-    cover 5 "has IffUnblocked leg" $ anyInProg (hasModality IffUnblocked) prog
-    cover 5 "has Choose leg" $ anyInProg (hasModality Choose) prog
+    cover 5 "has IffUnblocked leg" $ anyInProg (hasModality $ IffUnblocked psx) prog
+    cover 5 "has Choose leg" $ anyInProg (hasModality $ Choose psx) prog
     cover 5 "has Paren atom" $ anyInProg hasParenAtom prog
     cover 5 "has exponent on atom" $ anyInProg hasAtomExponent prog
 
-    (parse parseTokens "<test>" stream) === Right prog
+    case parse parseTokens "<test>" stream of
+        Left err -> footnote (show err) >> Test.Hspec.Hedgehog.failure
+        Right prog' -> strip prog' === strip prog
 
 -- spec
 spec :: Spec

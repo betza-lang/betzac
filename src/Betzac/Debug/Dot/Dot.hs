@@ -61,8 +61,8 @@ metaNode = "  node [fontname=monospace colorscheme=rdylgn9 style=filled]"
 rootNode :: String -> [DotNode] -> DotNode
 rootNode label = node label "1" "box"
 
-midNode :: String -> Int -> [DotNode] -> DotNode
-midNode label colour = node label (show colour) "box"
+midNode :: Int -> String -> [DotNode] -> DotNode
+midNode colour label = node label (show colour) "box"
 
 leafNode :: String -> DotNode
 leafNode s = node (escape s) "#ccf0ff" "ellipse" []
