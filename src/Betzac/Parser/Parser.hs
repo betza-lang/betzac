@@ -72,9 +72,10 @@ parseOverride = tok B.TokOverride *> parseDirective
 
 parseDirective :: Parser (B.Directive Ps)
 parseDirective =
-    parseUsing
+    ( parseUsing
         <|> parseExport
         <|> (spanning $ B.Bare <$> parseStmt)
+    )
         <?> "statement or directive"
 
 parseUsing :: Parser (B.Directive Ps)

@@ -16,7 +16,7 @@ stripQualifiedStmt (Plain d _) = Plain (stripDirective d) ()
 stripDirective :: Directive p -> Directive Stripped
 stripDirective (Using f _) = Using f ()
 stripDirective (Export s _) = Export (stripStmt s) ()
-stripDirective (Bare s _) = Export (stripStmt s) ()
+stripDirective (Bare s _) = Bare (stripStmt s) ()
 
 stripStmt :: BetzaStmt p -> BetzaStmt Stripped
 stripStmt (Assign l e _) = Assign (stripLabel l) (stripExpr e) ()
