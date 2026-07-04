@@ -23,9 +23,6 @@ handlers =
             , notificationHandler SMethod_Initialized $ const mempty
             ]
 
--- notificationHandler SMethod_TextDocumentDidChange onChange,
--- ]
-
 serverBLS :: ServerDefinition ConfigBLS
 serverBLS =
     ServerDefinition
