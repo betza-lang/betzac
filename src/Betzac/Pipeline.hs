@@ -12,6 +12,8 @@ import qualified Betzac.Parser.BetzaTokenStream as B (BetzaTokenStream (..))
 import qualified Betzac.Parser.Parser as B (parseTokens)
 import qualified Betzac.Token as B (Token)
 
+import Betzac.Semantic.Core (SemanticProblem)
+import Betzac.Semantic.Passes (runAllPasses)
 import Control.Monad.Trans.State.Strict (StateT, execStateT, gets, modify)
 import Data.Text (Text, unpack)
 import Data.Void
@@ -28,6 +30,7 @@ data PipelineResult = PipelineResult
     , filePath :: FilePath
     , lexResult :: Maybe (Either LexBundle [Located B.Token])
     , parseResult :: Maybe (Either ParseBundle (BetzaProgram Ps))
+    , semanticResult :: Maybe [SemanticProblem]
     }
     deriving (Show)
 
@@ -38,12 +41,13 @@ emptyResult f src =
         , filePath = f
         , lexResult = Nothing
         , parseResult = Nothing
+        , semanticResult = Nothing
         }
 
 data PipelineError = SystemError String deriving (Show)
 
 pipeline :: Pipeline ()
-pipeline = lexStage >> parseStage
+pipeline = lexStage >> parseStage >> semanticStage
 
 updatePipeline :: PipelineResult -> Text -> Either PipelineError PipelineResult
 updatePipeline r = fromScratch $ filePath r
@@ -69,3 +73,10 @@ parseStage = do
                 r
                     { parseResult = Just $ parse B.parseTokens (filePath r) stream
                     }
+
+semanticStage :: Pipeline ()
+semanticStage = do
+    mparse <- gets parseResult
+    case mparse >>= either (const Nothing) Just of
+        Nothing -> return ()
+        Just ast -> modify $ \r -> r{semanticResult = Just $ runAllPasses ast}

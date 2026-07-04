@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 
 module Betzac.AST where
@@ -22,12 +23,9 @@ data Ps -- parsed
 -- data Ds -- desugared
 
 -- Global extension records
+-- for Ps
 data PsX = PsX {psSpan :: Span}
     deriving (Eq, Show)
-
--- Every stage must be able to report errors
-instance HasSpan PsX where
-    getSpan = psSpan
 
 -- Extension type families, giving these constructors annotations
 -- XConstructorName Phase = FieldType
@@ -542,3 +540,157 @@ deriving instance (ShowX p) => Show (BehaviourModality p)
 deriving instance (ShowX p) => Show (Exponent p)
 deriving instance (ShowX p) => Show (ExponentKind p)
 deriving instance (ShowX p) => Show (Label p)
+
+-- HasSpan
+instance HasSpan () where -- Stripped phase, for uniformity
+    getSpan () = Generated
+
+instance HasSpan PsX where
+    getSpan = psSpan
+
+type SpanX p =
+    ( HasSpan (XOverride p)
+    , HasSpan (XPlain p)
+    , HasSpan (XUsing p)
+    , HasSpan (XExport p)
+    , HasSpan (XBare p)
+    , HasSpan (XAssign p)
+    , HasSpan (XAnonymous p)
+    , HasSpan (XBetzaExpr p)
+    , HasSpan (XChainExpr p)
+    , HasSpan (XChainLeg p)
+    , HasSpan (XUnionExpr p)
+    , HasSpan (XModifierExpr p)
+    , HasSpan (XExponentExpr p)
+    , HasSpan (XParen p)
+    , HasSpan (XFrom p)
+    , HasSpan (XChainOperator p)
+    , HasSpan (XStep p)
+    , HasSpan (XSequence p)
+    , HasSpan (XMandatory p)
+    , HasSpan (XChoose p)
+    , HasSpan (XIffUnblocked p)
+    , HasSpan (XDirectional p)
+    , HasSpan (XBehavioural p)
+    , HasSpan (XAmalgamated p)
+    , HasSpan (XSingle p)
+    , HasSpan (XForward p)
+    , HasSpan (XBackward p)
+    , HasSpan (XLeftward p)
+    , HasSpan (XRightward p)
+    , HasSpan (XSideway p)
+    , HasSpan (XVertically p)
+    , HasSpan (XAll p)
+    , HasSpan (XBehaviour p)
+    , HasSpan (XCapture p)
+    , HasSpan (XLeap p)
+    , HasSpan (XInitial p)
+    , HasSpan (XJump p)
+    , HasSpan (XMove p)
+    , HasSpan (XNoJump p)
+    , HasSpan (XHop p)
+    , HasSpan (XOnce p)
+    , HasSpan (XTwice p)
+    , HasSpan (XAny p)
+    , HasSpan (XExponent p)
+    , HasSpan (XInfinite p)
+    , HasSpan (XSlippery p)
+    , HasSpan (XRepeat p)
+    , HasSpan (XUpper p)
+    , HasSpan (XDescriptor p)
+    , HasSpan (XLeaper p)
+    )
+
+instance (SpanX p) => HasSpan (QualifiedStmt p) where
+    getSpan (Override _ ext) = getSpan ext
+    getSpan (Plain _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (Directive p) where
+    getSpan (Using _ ext) = getSpan ext
+    getSpan (Export _ ext) = getSpan ext
+    getSpan (Bare _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (BetzaStmt p) where
+    getSpan (Assign _ _ ext) = getSpan ext
+    getSpan (Anonymous _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (BetzaExpr p) where
+    getSpan (BetzaExpr _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (ChainExpr p) where
+    getSpan (ChainExpr _ _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (ChainLeg p) where
+    getSpan (ChainLeg _ _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (UnionExpr p) where
+    getSpan (UnionExpr _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (ModifierExpr p) where
+    getSpan = getSpan . modExprExt
+
+instance (SpanX p) => HasSpan (ExponentExpr p) where
+    getSpan (ExponentExpr _ _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (AtomExpr p) where
+    getSpan (Paren _ ext) = getSpan ext
+    getSpan (From _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (ChainOperator p) where
+    getSpan (ChainOperator _ _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (ChainKind p) where
+    getSpan (Step ext) = getSpan ext
+    getSpan (Sequence ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (ChainModality p) where
+    getSpan (Mandatory ext) = getSpan ext
+    getSpan (Choose ext) = getSpan ext
+    getSpan (IffUnblocked ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (Modifier p) where
+    getSpan (Directional _ ext) = getSpan ext
+    getSpan (Behavioural _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (DirectionModifier p) where
+    getSpan (Amalgamated _ _ ext) = getSpan ext
+    getSpan (Single _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (Direction p) where
+    getSpan (Forward ext) = getSpan ext
+    getSpan (Backward ext) = getSpan ext
+    getSpan (Leftward ext) = getSpan ext
+    getSpan (Rightward ext) = getSpan ext
+    getSpan (Sideway ext) = getSpan ext
+    getSpan (Vertically ext) = getSpan ext
+    getSpan (All ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (Behaviour p) where
+    getSpan (Behaviour _ _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (BehaviourKind p) where
+    getSpan (Capture ext) = getSpan ext
+    getSpan (Leap ext) = getSpan ext
+    getSpan (Initial ext) = getSpan ext
+    getSpan (Jump ext) = getSpan ext
+    getSpan (Move ext) = getSpan ext
+    getSpan (NoJump ext) = getSpan ext
+    getSpan (Hop ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (BehaviourModality p) where
+    getSpan (Once ext) = getSpan ext
+    getSpan (Twice ext) = getSpan ext
+    getSpan (Any ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (Exponent p) where
+    getSpan (Exponent _ _ _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (ExponentKind p) where
+    getSpan (Infinite ext) = getSpan ext
+    getSpan (Slippery ext) = getSpan ext
+    getSpan (Repeat _ ext) = getSpan ext
+
+instance (SpanX p) => HasSpan (Label p) where
+    getSpan (Upper _ ext) = getSpan ext
+    getSpan (Descriptor _ ext) = getSpan ext
+    getSpan (Leaper _ _ ext) = getSpan ext
