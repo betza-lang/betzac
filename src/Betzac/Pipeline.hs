@@ -5,7 +5,8 @@ module Betzac.Pipeline (
     PipelineError (..),
 ) where
 
-import Betzac.AST as B (BetzaProgram, Ps)
+import Betzac.AST.Phases as B (Ps)
+import Betzac.AST.Types as B (BetzaProgram)
 import qualified Betzac.Lexer.Lexer as B (runLexer)
 import Betzac.Located
 import qualified Betzac.Parser.BetzaTokenStream as B (BetzaTokenStream (..))

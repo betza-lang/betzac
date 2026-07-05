@@ -2,13 +2,14 @@
 
 module Betzac.Parser.Parser (parseTokens) where
 
-import Betzac.AST (Ps, PsX (..))
-import qualified Betzac.AST as B
+import Betzac.AST.Phases (Ps, PsX (..))
+import qualified Betzac.AST.Types as B
+
 import Betzac.Alphabet.Expr (alphanum)
 import Betzac.Parser.Core
+import Betzac.Span (Span (..))
 import qualified Betzac.Token as B
 
-import Betzac.Located (Span (..))
 import Control.Applicative (asum)
 import Data.Char (isDigit)
 import qualified Data.List.NonEmpty as NE

@@ -29,10 +29,12 @@ library
       Betzac.Alphabet.Expr
       Betzac.Alphabet.Stmt
       Betzac.AST
+      Betzac.AST.Phases
+      Betzac.AST.Strip
+      Betzac.AST.Types
       Betzac.Debug.Dot.Dot
       Betzac.Debug.Dot.Visitor
       Betzac.Debug.PrettyPrint
-      Betzac.Debug.Strip
       Betzac.Lexer.Core
       Betzac.Lexer.Lexer
       Betzac.Lexer.Space
@@ -45,6 +47,7 @@ library
       Betzac.Semantic.Direction.All
       Betzac.Semantic.Direction.AmalgamatedDirection
       Betzac.Semantic.Passes
+      Betzac.Span
       Betzac.Token
       LangServer.Config
       LangServer.Handlers.Core

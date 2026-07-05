@@ -2,7 +2,8 @@
 
 module Betzac.Debug.Dot.Visitor (toDot) where
 
-import Betzac.AST
+import Betzac.AST.Phases
+import Betzac.AST.Types
 import Betzac.Debug.Dot.Dot
 import Betzac.Debug.PrettyPrint (Summarizable (summarize))
 

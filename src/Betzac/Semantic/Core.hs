@@ -10,7 +10,7 @@ module Betzac.Semantic.Core (
     runPass,
 ) where
 
-import Betzac.Located (HasSpan (..), Span)
+import Betzac.Span (HasSpan (..), Span)
 import Control.Monad.Trans.Writer (Writer, execWriter, tell)
 
 import Betzac.Debug.PrettyPrint (PrettyPrint (..))

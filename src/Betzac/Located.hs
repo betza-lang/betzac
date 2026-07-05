@@ -1,11 +1,10 @@
 module Betzac.Located (
-    Span (..),
-    HasSpan (..),
     Located (..),
     liftLocated,
     located,
 ) where
 
+import Betzac.Span (HasSpan (..), Span (..))
 import Text.Megaparsec (
     MonadParsec,
     SourcePos,
@@ -13,15 +12,6 @@ import Text.Megaparsec (
     getSourcePos,
     initialPos,
  )
-
-data Span
-    = RealSpan SourcePos SourcePos
-    | Generated
-    deriving (Eq, Show)
-
--- For uniform error reporting
-class HasSpan x where
-    getSpan :: x -> Span
 
 -- TODO: Located should likely contain a Span
 data Located a = Located

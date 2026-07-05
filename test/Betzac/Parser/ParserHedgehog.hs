@@ -4,8 +4,7 @@
 
 module Parser.ParserHedgehog (spec, genProgram, unparse) where
 
-import Betzac.AST
-import Betzac.Debug.Strip (strip)
+import Betzac.AST as B
 import Betzac.Located
 import Betzac.Parser.BetzaTokenStream
 import Betzac.Parser.Parser
@@ -404,10 +403,10 @@ hasAmalgamated =
 hasMultiUnion :: BetzaExpr p -> Bool
 hasMultiUnion = anyChainExpr $ \(ChainExpr (UnionExpr ne _) _ _) -> length ne >= 2
 
-hasModality :: (EqX p) => ChainModality p -> BetzaExpr p -> Bool
+hasModality :: ChainModality p -> BetzaExpr p -> Bool
 hasModality m =
     anyChainExpr $ \(ChainExpr _ ml _) ->
-        maybe False (\(ChainLeg (ChainOperator _ m' _) _ _) -> m' == m) ml
+        maybe False (\(ChainLeg (ChainOperator _ m' _) _ _) -> m `stripEq` m') ml
 
 hasSequence :: BetzaExpr p -> Bool
 hasSequence =
@@ -480,7 +479,7 @@ prop_parseUndoesUnparse = do
     cover 5 "has Paren atom" $ anyInProg hasParenAtom prog
     cover 5 "has exponent on atom" $ anyInProg hasAtomExponent prog
 
-    (strip <$> parse parseTokens "<test>" stream) === Right prog
+    (map strip <$> parse parseTokens "<test>" stream) === Right prog
 
 -- spec
 spec :: Spec
