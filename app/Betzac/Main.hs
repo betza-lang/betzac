@@ -21,9 +21,7 @@ import qualified System.IO as S
 showLexResults :: Options -> B.PipelineResult -> IO StageResult
 showLexResults _ p = case B.lexResult p of
     Nothing -> return notRun
-    Just (Left bundle) -> do
-        hPutBundlePretty S.stderr bundle
-        return $ err mempty
+    Just (Left bundle) -> return $ err $ hPutBundlePretty S.stderr bundle
     Just (Right ts) ->
         return
             ok
@@ -35,9 +33,8 @@ showLexResults _ p = case B.lexResult p of
 showParseResults :: Options -> B.PipelineResult -> IO StageResult
 showParseResults o p = case B.parseResult p of
     Nothing -> return notRun
-    Just (Left bundle) -> do
-        hPutBundlePretty S.stderr bundle
-        return $ err mempty
+    Just (Left bundle) ->
+        return $ err $ hPutBundlePretty S.stderr bundle
     Just (Right program) -> do
         case emitDot o of
             Just "/dev/null" -> mempty
