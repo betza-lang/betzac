@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -9,16 +10,17 @@ module Betzac.AST.Phases (
 
 import Betzac.AST.Types
 import Betzac.Span (HasSpan (..), Span (Generated))
+import Data.Data (Data)
 
 -- Phase indices
-data Stripped -- all extensions are unit type
-data Ps -- parsed
+data Stripped deriving (Data) -- all extensions are unit type
+data Ps deriving (Data) -- parsed
 -- data Ds -- desugared
 
 -- Global extension records
 -- for Ps
 data PsX = PsX {psSpan :: Span}
-    deriving (Eq, Show)
+    deriving (Eq, Show, Data)
 
 -- Stripped phase instances
 type instance XOverride Stripped = ()

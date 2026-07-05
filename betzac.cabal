@@ -29,6 +29,7 @@ library
       Betzac.Alphabet.Expr
       Betzac.Alphabet.Stmt
       Betzac.AST
+      Betzac.AST.Generic
       Betzac.AST.Phases
       Betzac.AST.Strip
       Betzac.AST.Types

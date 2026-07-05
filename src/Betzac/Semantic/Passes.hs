@@ -1,12 +1,16 @@
 module Betzac.Semantic.Passes (runAllPasses) where
 
-import Betzac.AST.Phases
-import Betzac.AST.Types
+import Betzac.AST
 import Betzac.Semantic.Core
+import Betzac.Semantic.Direction.AmalgamatedDirection (analysisAmalgamatedDirection)
+
+checkAmalgamatedDirections :: BetzaProgram Ps -> Pass ()
+checkAmalgamatedDirections prog =
+    mapM_ analysisAmalgamatedDirection (universeOf prog)
 
 runAllPasses :: BetzaProgram Ps -> [SemanticProblem]
-runAllPasses _ = runPass $ do
-    -- checkAmalgamatedDirections ast
+runAllPasses ast = runPass $ do
+    checkAmalgamatedDirections ast
     -- checkAllInFirstLeg ast
     -- etc.
     return ()

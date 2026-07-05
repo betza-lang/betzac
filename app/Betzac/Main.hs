@@ -3,18 +3,22 @@
 
 module Main (main) where
 
+import Options
+
 import Betzac.Debug.Dot.Visitor (toDot)
 import qualified Betzac.Pipeline as B (PipelineResult (..), fromScratch)
+
+import Betzac.Debug.PrettyPrint (PrettyPrint (..))
+import Betzac.Located (Located (tokenVal))
+import Betzac.Semantic.Core (SemanticProblem (..), Severity (Error))
 
 import Control.Exception (IOException, try)
 import Control.Monad (when)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import Options
 import Text.Megaparsec hiding (failure, try)
 
-import Betzac.Located (Located (tokenVal))
 import qualified System.Exit as S
 import qualified System.IO as S
 
@@ -50,7 +54,16 @@ showParseResults o p = case B.parseResult p of
         return ok{stageDetail = dotNote}
 
 showAnalysis :: Options -> B.PipelineResult -> IO StageResult
-showAnalysis _ _ = return notRun
+showAnalysis _ p = case B.semanticResult p of
+    Nothing -> return notRun
+    Just problems
+        | any ((== Error) . semSev) problems ->
+            return $ err $ mapM_ (hPutIndentLn S.stderr . renderProblem) problems
+        | otherwise ->
+            return ok{stageDetail = mapM_ (hPutIndentLn S.stderr . renderProblem) problems}
+  where
+    renderProblem sp =
+        "[" ++ show (semSev sp) ++ "] " ++ prettyPrint (semKind sp) ++ " at " ++ show (semSpan sp)
 
 data StageResult = StageResult
     { stageStatus :: String

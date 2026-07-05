@@ -36,4 +36,4 @@ invalidateBadAmalgamatedDirectionCombination n@(Amalgamated d1 d2 _) = when (bad
 invalidateBadAmalgamatedDirectionCombination (Single _ _) = return ()
 
 analysisAmalgamatedDirection :: DirectionModifier Ps -> Pass ()
-analysisAmalgamatedDirection = invalidateBadAmalgamatedDirection >> invalidateBadAmalgamatedDirectionCombination
+analysisAmalgamatedDirection dm = invalidateBadAmalgamatedDirection dm >> invalidateBadAmalgamatedDirectionCombination dm

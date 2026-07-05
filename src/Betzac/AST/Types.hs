@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -85,6 +86,7 @@ module Betzac.AST.Types (
 
 import Betzac.Span (HasSpan (..))
 
+import Data.Data (Data, Typeable)
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 
@@ -249,7 +251,7 @@ data Label p
 
 type Number = Int
 
--- Eq and Show
+-- Eq, Show, and Data
 type EqX p =
     ( Eq (XOverride p)
     , Eq (XPlain p)
@@ -401,6 +403,84 @@ deriving instance (ShowX p) => Show (BehaviourModality p)
 deriving instance (ShowX p) => Show (Exponent p)
 deriving instance (ShowX p) => Show (ExponentKind p)
 deriving instance (ShowX p) => Show (Label p)
+
+type DataX p =
+    ( Typeable p
+    , Data p
+    , Data (XOverride p)
+    , Data (XPlain p)
+    , Data (XUsing p)
+    , Data (XExport p)
+    , Data (XBare p)
+    , Data (XAssign p)
+    , Data (XAnonymous p)
+    , Data (XBetzaExpr p)
+    , Data (XChainExpr p)
+    , Data (XChainLeg p)
+    , Data (XUnionExpr p)
+    , Data (XModifierExpr p)
+    , Data (XExponentExpr p)
+    , Data (XParen p)
+    , Data (XFrom p)
+    , Data (XDirectional p)
+    , Data (XBehavioural p)
+    , Data (XAmalgamated p)
+    , Data (XSingle p)
+    , Data (XForward p)
+    , Data (XBackward p)
+    , Data (XLeftward p)
+    , Data (XRightward p)
+    , Data (XSideway p)
+    , Data (XVertically p)
+    , Data (XAll p)
+    , Data (XBehaviour p)
+    , Data (XCapture p)
+    , Data (XLeap p)
+    , Data (XInitial p)
+    , Data (XJump p)
+    , Data (XMove p)
+    , Data (XNoJump p)
+    , Data (XHop p)
+    , Data (XOnce p)
+    , Data (XTwice p)
+    , Data (XAny p)
+    , Data (XChainOperator p)
+    , Data (XStep p)
+    , Data (XSequence p)
+    , Data (XMandatory p)
+    , Data (XIffUnblocked p)
+    , Data (XChoose p)
+    , Data (XExponent p)
+    , Data (XInfinite p)
+    , Data (XSlippery p)
+    , Data (XRepeat p)
+    , Data (XUpper p)
+    , Data (XDescriptor p)
+    , Data (XLeaper p)
+    )
+
+deriving instance (DataX p) => Data (QualifiedStmt p)
+deriving instance (DataX p) => Data (Directive p)
+deriving instance (DataX p) => Data (BetzaStmt p)
+deriving instance (DataX p) => Data (BetzaExpr p)
+deriving instance (DataX p) => Data (ChainExpr p)
+deriving instance (DataX p) => Data (ChainLeg p)
+deriving instance (DataX p) => Data (UnionExpr p)
+deriving instance (DataX p) => Data (ModifierExpr p)
+deriving instance (DataX p) => Data (ExponentExpr p)
+deriving instance (DataX p) => Data (AtomExpr p)
+deriving instance (DataX p) => Data (ChainOperator p)
+deriving instance (DataX p) => Data (ChainKind p)
+deriving instance (DataX p) => Data (ChainModality p)
+deriving instance (DataX p) => Data (Modifier p)
+deriving instance (DataX p) => Data (DirectionModifier p)
+deriving instance (DataX p) => Data (Direction p)
+deriving instance (DataX p) => Data (Behaviour p)
+deriving instance (DataX p) => Data (BehaviourKind p)
+deriving instance (DataX p) => Data (BehaviourModality p)
+deriving instance (DataX p) => Data (Exponent p)
+deriving instance (DataX p) => Data (ExponentKind p)
+deriving instance (DataX p) => Data (Label p)
 
 -- HasSpan
 type SpanX p =
