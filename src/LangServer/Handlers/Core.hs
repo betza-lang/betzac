@@ -84,5 +84,6 @@ toRange Generated = Range (Position 0 0) (Position 0 0)
 toRange (RealSpan s e) = sourcePosPairToRange s e
 
 getLspSeverity :: SemanticProblem -> DiagnosticSeverity
+getLspSeverity (SemanticProblem Info _ _) = DiagnosticSeverity_Information
 getLspSeverity (SemanticProblem Warning _ _) = DiagnosticSeverity_Warning
 getLspSeverity (SemanticProblem Error _ _) = DiagnosticSeverity_Error

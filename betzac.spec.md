@@ -317,7 +317,7 @@ The main function of `betzac` is to compile betza files into betza objects. This
 
 2.6.4 - The `-Werror=` flag may be passed more than one time with different arguments. This will have the effect of turning the warnings controlled by all the specifiers into errors at compilation.
 
-2.6.4.1 - If a specifier is used more than once as an argument to the `-Werror=` flag, it will have no effect.
+2.6.4.1 - If a specifier is used more than once as an argument to the `-Werror=` flag, it will have the same effect as if it had only been present once.
 
 2.6.5 - The `-Wfatal-errors` flag may be passed to `betzac` to terminate compilation immediately when the first error log is produced.
 

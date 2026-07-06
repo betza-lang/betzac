@@ -6,18 +6,24 @@ module Main (main) where
 import Options
 
 import Betzac.Debug.Dot.Visitor (toDot)
-import qualified Betzac.Pipeline as B (PipelineResult (..), fromScratch)
+import qualified Betzac.Pipeline as B (PipelineResult (..))
 
+import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
+import Betzac.Compilation.Driver (discover, resolveScopes)
+import Betzac.Compilation.Flag (optionsFromFlags)
 import Betzac.Debug.PrettyPrint (PrettyPrint (..))
 import Betzac.Located (Located (tokenVal))
-import Betzac.Semantic.Core (SemanticProblem (..), Severity (Error))
+import Betzac.Semantic.Core (SemanticProblem (..), Severity (Error), causeOf)
 
-import Control.Exception (IOException, try)
 import Control.Monad (when)
+import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import Text.Megaparsec hiding (failure, try)
+
+import System.FilePath (takeDirectory)
 
 import qualified System.Exit as S
 import qualified System.IO as S
@@ -65,6 +71,49 @@ showAnalysis _ p = case B.semanticResult p of
     renderProblem sp =
         "[" ++ show (semSev sp) ++ "] " ++ prettyPrint (semKind sp) ++ " at " ++ show (semSpan sp)
 
+-- | Summarize the whole discovered dependency tree: every file's own lex/parse/
+-- analysis outcome (each file in the tree had to be lexed and parsed to discover it
+-- in the first place, not just the target) plus its directive-level diagnostics, and
+-- the target's resolved effective scope.
+showDependencies :: CompilationContext -> IO StageResult
+showDependencies ctx = do
+    let entries = Map.toList (ccFiles ctx)
+        hasError = any (entryHasError . snd) entries
+        detail = do
+            mapM_ (hPutIndentLn S.stderr . describeFile) entries
+            case feEffective =<< Map.lookup (ccTarget ctx) (ccFiles ctx) of
+                Just eff -> hPutIndentLn S.stderr ("Target effective scope labels: " ++ show (Map.keys eff))
+                Nothing -> mempty
+    return $ if hasError then err detail else ok{stageDetail = detail}
+  where
+    entryHasError entry =
+        any ((== Error) . semSev) (feDiagnostics entry)
+            || bundleFailed (B.lexResult (fePipeline entry))
+            || bundleFailed (B.parseResult (fePipeline entry))
+            || maybe False (any ((== Error) . semSev)) (B.semanticResult (fePipeline entry))
+
+    describeFile (path, entry) =
+        path
+            ++ " ["
+            ++ show (feStatus entry)
+            ++ "]"
+            ++ " lex="
+            ++ resultTag (B.lexResult (fePipeline entry))
+            ++ " parse="
+            ++ resultTag (B.parseResult (fePipeline entry))
+            ++ " analysis="
+            ++ maybe passed (\ps -> if any ((== Error) . semSev) ps then failure else success) (B.semanticResult (fePipeline entry))
+            ++ concatMap ((" " ++) . describeDiag) (feDiagnostics entry)
+
+    describeDiag d = "(" ++ show (semSev d) ++ " " ++ causeOf (semKind d) ++ ")"
+
+    bundleFailed (Just (Left _)) = True
+    bundleFailed _ = False
+
+    resultTag Nothing = passed
+    resultTag (Just (Left _)) = failure
+    resultTag (Just (Right _)) = success
+
 data StageResult = StageResult
     { stageStatus :: String
     , stageDetail :: IO ()
@@ -106,22 +155,28 @@ main :: IO ()
 main = do
     opts <- getOptions
     let fp = inputFile opts
-    f <- try (T.readFile fp) :: IO (Either IOException T.Text)
-    case f of
-        Left e -> do
-            when (verbosity opts >= Verbose) $ S.hPutStrLn S.stderr ("IO: " ++ failure)
-            hPutIndentLn S.stderr $ "Could not read file: " ++ show e
+        root = fromMaybe (takeDirectory fp) (workspace opts)
+        copts = optionsFromFlags []
+    -- Discovery lexes and parses the whole `using` dependency tree (not just the
+    -- target) to even find out what that tree is, so it runs before, and subsumes,
+    -- the target's own single-file LEXER/PARSER/ANALYSIS stages below.
+    result <- discover root fp copts
+    case result of
+        Left problem -> do
+            S.hPutStrLn S.stderr $ "Fatal: " ++ causeOf (semKind problem)
             S.exitFailure
-        Right src -> do
-            when (verbosity opts >= Verbose) $ S.hPutStrLn S.stderr ("IO: " ++ success)
-            whenVeryVerbose opts $
-                T.hPutStrLn S.stderr $
-                    (T.unlines . map ("    " <>) . T.lines) src
-            case B.fromScratch fp src of
-                Left e -> do
-                    S.hPutStrLn S.stderr $ "Fatal pipeline error: " ++ show e
+        Right ctx0 -> do
+            let ctx = resolveScopes ctx0
+            case Map.lookup (ccTarget ctx) (ccFiles ctx) of
+                Nothing -> do
+                    S.hPutStrLn S.stderr "Fatal: target file missing from discovered context"
                     S.exitFailure
-                Right results -> do
+                Just targetEntry -> do
+                    let results = fePipeline targetEntry
+                    whenVeryVerbose opts $
+                        T.hPutStrLn S.stderr $
+                            (T.unlines . map ("    " <>) . T.lines) (B.sourceText results)
                     hPutStage opts "LEXER" $ showLexResults opts results
                     hPutStage opts "PARSER" $ showParseResults opts results
                     hPutStage opts "ANALYSIS" $ showAnalysis opts results
+                    hPutStage opts "DEPENDENCIES" $ showDependencies ctx

@@ -3,6 +3,7 @@ module Options (
     Verbosity (..),
     inputFile,
     emitDot,
+    workspace,
     verbosity,
     getOptions,
 ) where
@@ -15,6 +16,7 @@ data Verbosity = Silent | Verbose | VeryVerbose deriving (Eq, Ord)
 data Options = Options
     { inputFile :: FilePath
     , emitDot :: Maybe FilePath
+    , workspace :: Maybe FilePath
     , verbosity :: Verbosity
     }
 
@@ -39,6 +41,12 @@ optionsParser =
                     <> value "/dev/null"
                     <> showDefault
                     <> help "Write AST as dot graph to FILE, or - for stdout"
+            )
+        <*> optional
+            ( strOption $
+                long "workspace"
+                    <> metavar "DIR"
+                    <> help "Workspace directory `using` directives resolve against (defaults to the input file's directory)"
             )
         <*> verbosityParser
 

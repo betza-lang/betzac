@@ -26,6 +26,9 @@ dependencies:
   - lens
   - lsp
   - megaparsec
+  - containers
+  - directory
+  - filepath
 
 ghc-options:
   - -Wall
@@ -76,6 +79,9 @@ tests:
       - hedgehog
       - hspec-hedgehog
       - betzac
+      - temporary
+      - directory
+      - filepath
   bls-test:
     main: Spec.hs
     source-dirs: test/Bls

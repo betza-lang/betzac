@@ -33,6 +33,11 @@ library
       Betzac.AST.Phases
       Betzac.AST.Strip
       Betzac.AST.Types
+      Betzac.Compilation.Context
+      Betzac.Compilation.Diagnostic
+      Betzac.Compilation.Driver
+      Betzac.Compilation.Flag
+      Betzac.Compilation.Scope
       Betzac.Debug.Dot.Dot
       Betzac.Debug.Dot.Visitor
       Betzac.Debug.PrettyPrint
@@ -62,6 +67,9 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , containers
+    , directory
+    , filepath
     , lens
     , lsp
     , megaparsec
@@ -80,6 +88,9 @@ executable betzac
   build-depends:
       base >=4.7 && <5
     , betzac
+    , containers
+    , directory
+    , filepath
     , lens
     , lsp
     , megaparsec
@@ -98,6 +109,9 @@ executable bls
   build-depends:
       base >=4.7 && <5
     , betzac
+    , containers
+    , directory
+    , filepath
     , lens
     , lsp
     , megaparsec
@@ -110,6 +124,8 @@ test-suite betzac-test
   main-is: Spec.hs
   other-modules:
       Arbitrary
+      Compilation.DriverSpec
+      Compilation.ScopeSpec
       Lexer.LexerQC
       Lexer.LexerSpec
       Parser.ParserHedgehog
@@ -121,12 +137,16 @@ test-suite betzac-test
       QuickCheck
     , base >=4.7 && <5
     , betzac
+    , containers
+    , directory
+    , filepath
     , hedgehog
     , hspec
     , hspec-hedgehog
     , lens
     , lsp
     , megaparsec
+    , temporary
     , text
     , transformers
   default-language: Haskell2010
@@ -143,6 +163,9 @@ test-suite bls-test
   build-depends:
       base >=4.7 && <5
     , betzac
+    , containers
+    , directory
+    , filepath
     , hspec
     , lens
     , lsp
