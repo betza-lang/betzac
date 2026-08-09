@@ -125,6 +125,7 @@ test-suite betzac-test
   other-modules:
       Arbitrary
       Compilation.DriverSpec
+      Compilation.FlagSpec
       Compilation.ScopeSpec
       Lexer.LexerQC
       Lexer.LexerSpec

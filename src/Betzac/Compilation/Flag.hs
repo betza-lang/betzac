@@ -4,7 +4,13 @@ module Betzac.Compilation.Flag (
     WarningLevel (..),
     CompilerOptions (..),
     optionsFromFlags,
+    specifierOf,
+    applyOptions,
 ) where
+
+import Data.Maybe (mapMaybe)
+
+import qualified Betzac.Semantic.Core as Sem
 
 data Wspecifier
     = Wunused
@@ -47,3 +53,35 @@ optionsFromFlags flags =
             , langLevel = specifierLevel Wlang
             , terminateOnFirstError = any (== TerminateOnFirstError) flags
             }
+
+levelFor :: CompilerOptions -> Wspecifier -> WarningLevel
+levelFor opts Wunused = unusedLevel opts
+levelFor opts Wdirective = directiveLevel opts
+levelFor opts Wlang = langLevel opts
+
+{- | The warning-flag specifier that governs a problem kind, if any. Kinds with no
+governing specifier are unconditional (always reported, regardless of any flag) —
+this covers hard correctness errors (ill-formed syntax, unresolved/circular/unknown
+references, system failures) and job-level info logs.
+-}
+specifierOf :: Sem.SemanticProblemKind -> Maybe Wspecifier
+specifierOf (Sem.UnusedLabel _) = Just Wunused
+specifierOf Sem.UnusedExpression = Just Wunused
+specifierOf Sem.DuplicateLabel = Just Wunused
+specifierOf Sem.DuplicateDirective = Just Wdirective
+specifierOf _ = Nothing
+
+{- | Apply the compiler's warning-flag configuration to a batch of diagnostics: drop
+any whose specifier is configured 'Silent', and force the severity of the rest to
+match their specifier's configured level. Diagnostics with no governing specifier
+pass through unchanged.
+-}
+applyOptions :: CompilerOptions -> [Sem.SemanticProblem] -> [Sem.SemanticProblem]
+applyOptions opts = mapMaybe adjust
+  where
+    adjust problem = case specifierOf (Sem.semKind problem) of
+        Nothing -> Just problem
+        Just spec -> case levelFor opts spec of
+            Silent -> Nothing
+            Warning -> Just problem{Sem.semSev = Sem.Warning}
+            Error -> Just problem{Sem.semSev = Sem.Error}

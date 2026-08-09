@@ -10,10 +10,10 @@ import qualified Betzac.Pipeline as B (PipelineResult (..))
 
 import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
 import Betzac.Compilation.Driver (discover, resolveScopes)
-import Betzac.Compilation.Flag (optionsFromFlags)
+import Betzac.Compilation.Flag (CompilerOptions (terminateOnFirstError), applyOptions, optionsFromFlags)
 import Betzac.Debug.PrettyPrint (PrettyPrint (..))
 import Betzac.Located (Located (tokenVal))
-import Betzac.Semantic.Core (SemanticProblem (..), Severity (Error), causeOf)
+import Betzac.Semantic.Core (SemanticProblem (..), SemanticProblemKind (CompilationSucceeded), Severity (Error), causeOf)
 
 import Control.Monad (when)
 import qualified Data.Map.Strict as Map
@@ -117,28 +117,60 @@ showDependencies ctx = do
 data StageResult = StageResult
     { stageStatus :: String
     , stageDetail :: IO ()
-    , stageExit :: IO ()
+    , stageFailed :: Bool
     }
 
 ok, notRun :: StageResult
-ok = StageResult success mempty mempty
-notRun = StageResult passed mempty mempty
+ok = StageResult success mempty False
+notRun = StageResult passed mempty False
 
 err :: IO () -> StageResult
-err details = StageResult failure details S.exitFailure
+err details = StageResult failure details True
 
 success, failure, passed :: String
 success = "Ok"
 failure = "Fail"
 passed = "(not run)"
 
-hPutStage :: Options -> String -> IO StageResult -> IO ()
+-- | Run one stage, print its status/detail per verbosity, and report whether it
+-- failed. Unlike the old behaviour, this no longer exits the process itself — only a
+-- @system@-cause failure or, with @-Wfatal-errors@, the first failing stage does that
+-- (cf. 'runStages').
+hPutStage :: Options -> String -> IO StageResult -> IO Bool
 hPutStage o lbl action = do
-    StageResult status detail exit <- action
+    StageResult status detail failed <- action
     when (verbosity o >= Verbose) $
         S.hPutStrLn S.stderr (lbl ++ ": " ++ status)
     whenVeryVerbose o detail
-    exit
+    pure failed
+
+{- | Run a sequence of labelled stages, collecting whether any of them failed.
+Without @-Wfatal-errors@, every stage runs regardless of earlier failures (so all
+diagnostics across the whole target get reported, per 2.1's spirit of not stopping
+prematurely); with it, stop at the first failing stage.
+-}
+runStages :: Options -> CompilerOptions -> [(String, IO StageResult)] -> IO Bool
+runStages opts copts = go False
+  where
+    go anyFailed [] = pure anyFailed
+    go anyFailed ((lbl, action) : rest) = do
+        failed <- hPutStage opts lbl action
+        let anyFailed' = anyFailed || failed
+        if failed && terminateOnFirstError copts
+            then pure anyFailed'
+            else go anyFailed' rest
+
+-- | Apply the compiler's warning-flag configuration to every discovered file's
+-- diagnostics, both the directive-level ones and each file's own semantic-pass
+-- results, before anything gets displayed.
+applyOptionsToContext :: CompilerOptions -> CompilationContext -> CompilationContext
+applyOptionsToContext copts ctx = ctx{ccFiles = Map.map adjustEntry (ccFiles ctx)}
+  where
+    adjustEntry entry =
+        entry
+            { feDiagnostics = applyOptions copts (feDiagnostics entry)
+            , fePipeline = (fePipeline entry){B.semanticResult = fmap (applyOptions copts) (B.semanticResult (fePipeline entry))}
+            }
 
 hPutIndentLn :: S.Handle -> String -> IO ()
 hPutIndentLn h s = S.hPutStrLn h $ "    " ++ s
@@ -156,17 +188,18 @@ main = do
     opts <- getOptions
     let fp = inputFile opts
         root = fromMaybe (takeDirectory fp) (workspace opts)
-        copts = optionsFromFlags []
+        copts = optionsFromFlags (compilerFlags opts)
     -- Discovery lexes and parses the whole `using` dependency tree (not just the
     -- target) to even find out what that tree is, so it runs before, and subsumes,
     -- the target's own single-file LEXER/PARSER/ANALYSIS stages below.
     result <- discover root fp copts
     case result of
+        -- A `system`-cause failure always terminates immediately, regardless of flags.
         Left problem -> do
             S.hPutStrLn S.stderr $ "Fatal: " ++ causeOf (semKind problem)
             S.exitFailure
         Right ctx0 -> do
-            let ctx = resolveScopes ctx0
+            let ctx = applyOptionsToContext copts (resolveScopes ctx0)
             case Map.lookup (ccTarget ctx) (ccFiles ctx) of
                 Nothing -> do
                     S.hPutStrLn S.stderr "Fatal: target file missing from discovered context"
@@ -176,7 +209,15 @@ main = do
                     whenVeryVerbose opts $
                         T.hPutStrLn S.stderr $
                             (T.unlines . map ("    " <>) . T.lines) (B.sourceText results)
-                    hPutStage opts "LEXER" $ showLexResults opts results
-                    hPutStage opts "PARSER" $ showParseResults opts results
-                    hPutStage opts "ANALYSIS" $ showAnalysis opts results
-                    hPutStage opts "DEPENDENCIES" $ showDependencies ctx
+                    anyFailed <-
+                        runStages
+                            opts
+                            copts
+                            [ ("LEXER", showLexResults opts results)
+                            , ("PARSER", showParseResults opts results)
+                            , ("ANALYSIS", showAnalysis opts results)
+                            , ("DEPENDENCIES", showDependencies ctx)
+                            ]
+                    if anyFailed
+                        then S.exitFailure
+                        else S.hPutStrLn S.stderr ("[Info] " ++ causeOf CompilationSucceeded)
