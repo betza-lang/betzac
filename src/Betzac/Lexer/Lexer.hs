@@ -10,7 +10,6 @@ import qualified Betzac.Token as B
 import Betzac.Lexer.Core
 import Betzac.Lexer.Space
 
-import Data.Char (isAlphaNum, isUpper)
 import Data.Void (Void)
 
 import Text.Megaparsec
@@ -47,12 +46,12 @@ lexToken =
         <?> "valid character as part of a token"
 
 lexAtom :: Lexer B.Token
-lexAtom = B.TokAtom <$> satisfy isUpper
+lexAtom = B.TokAtom <$> satisfy (`elem` B.upper)
 
 lexDescriptor :: Lexer B.Token
 lexDescriptor = try $ B.TokDescriptor <$> (char ':' *> descriptor <* char ':')
   where
-    descriptor = takeWhile1P (Just "descriptor character") (\c -> c `elem` [',', B.space] || isAlphaNum c)
+    descriptor = takeWhile1P (Just "descriptor character") (\c -> c `elem` [',', B.space] || c `elem` B.alphanum)
 
 lexDirection :: Lexer B.Token
 lexDirection = B.TokDirection <$> satisfy (`elem` B.direction)
@@ -118,4 +117,4 @@ lexUsing :: Lexer B.Token
 lexUsing = B.TokUsing <$> (string "using" *> lexIgnoreSome *> path)
   where
     path = (<>) <$> part <*> (concat <$> (many $ try $ (:) <$> char '.' <*> part))
-    part = takeWhile1P (Just "path character") isAlphaNum
+    part = takeWhile1P (Just "path character") (`elem` B.alphanum)
