@@ -50,10 +50,11 @@ labelText (Upper c _) = [c]
 labelText (Descriptor s _) = s
 labelText (Leaper m n _) = show m ++ "," ++ show n
 
--- | The literal source text of an expression, sliced via its span — used to build the
--- synthetic label for an exported anonymous statement.
+{- | The literal source text of an expression, sliced via its span — used to build the
+synthetic label for an exported anonymous statement.
+-}
 exprSourceText :: Text -> BetzaExpr Ps -> String
-exprSourceText src expr = T.unpack (sourceSlice src (getSpan expr))
+exprSourceText src expr = T.unpack $ sourceSlice src $ getSpan expr
 
 sourceSlice :: Text -> Span -> Text
 sourceSlice _ Generated = ""
@@ -71,8 +72,9 @@ sourceSlice src (RealSpan s e) =
                         ++ [T.take ec (ls !! el)]
                     )
 
--- | One statement in a file, tagged with whether it (or its directive) is wrapped in
--- an override, and whether it's exported.
+{- | One statement in a file, tagged with whether it (or its directive) is wrapped in
+an override, and whether it's exported.
+-}
 statementOf :: QualifiedStmt Ps -> Maybe (BetzaStmt Ps, Bool, Bool)
 statementOf (Plain (Bare stmt _) _) = Just (stmt, False, False)
 statementOf (Override (Bare stmt _) _) = Just (stmt, True, False)
@@ -91,29 +93,32 @@ bareLabelRef (Anonymous (BetzaExpr (ChainExpr (UnionExpr (me :| []) _) Nothing _
         Just lbl
 bareLabelRef _ = Nothing
 
--- | The label a statement defines, if any. A bare label-resolving reference never
--- defines anything (see 'bareLabelRef'). Any other anonymous expression only defines
--- a (synthetic) label when exported; otherwise it's an ignored, unlabelled statement.
+{- | The label a statement defines, if any. A bare label-resolving reference never
+defines anything (see 'bareLabelRef'). Any other anonymous expression only defines
+a (synthetic) label when exported; otherwise it's an ignored, unlabelled statement.
+-}
 labelOf :: Text -> Bool -> BetzaStmt Ps -> Maybe String
-labelOf _ _ (Assign lbl _ _) = Just (labelText lbl)
+labelOf _ _ (Assign lbl _ _) = Just $ labelText lbl
 labelOf _ _ stmt@(Anonymous _ _) | Just _ <- bareLabelRef stmt = Nothing
-labelOf src True (Anonymous expr _) = Just (exprSourceText src expr)
+labelOf src True (Anonymous expr _) = Just $ exprSourceText src expr
 labelOf _ False (Anonymous _ _) = Nothing
 
--- | All Assign-defined (or exported-anonymous) labels within a single file,
--- independent of whether they are exported — the candidate pool for that file's own
--- local scope.
+{- | All Assign-defined (or exported-anonymous) labels within a single file,
+independent of whether they are exported — the candidate pool for that file's own
+local scope.
+-}
 localDefs :: Text -> BetzaProgram Ps -> [ExportedDef]
 localDefs src prog = mapMaybe (uncurry build) (zip [0 ..] prog)
   where
     build i qs = do
         (stmt, isOverride, isExported) <- statementOf qs
         lbl <- labelOf src isExported stmt
-        pure (ExportedDef lbl stmt isOverride i)
+        return $ ExportedDef lbl stmt isOverride i
 
--- | One candidate definition contending for a label, tagged with its origin file, its
--- precedence class (0 = override, highest priority), and its position for
--- tie-breaking among candidates of equal class.
+{- | One candidate definition contending for a label, tagged with its origin file, its
+precedence class (0 = override, highest priority), and its position for
+tie-breaking among candidates of equal class.
+-}
 data Candidate = Candidate
     { candFrom :: FilePath
     , candDef :: ExportedDef
@@ -124,35 +129,30 @@ data Candidate = Candidate
 classOf :: Bool -> Int
 classOf isOverride = if isOverride then 0 else 1
 
--- | Pick the winning candidate for a label by priority: override beats plain; among
--- equal precedence, earliest position wins.
+{- | Pick the winning candidate for a label by priority: override beats plain; among
+equal precedence, earliest position wins.
+-}
 resolvePriority :: NonEmpty Candidate -> (Candidate, [Candidate])
 resolvePriority cands = case sortOn (\c -> (candClass c, candOrder c)) (foldr (:) [] cands) of
     (w : ls) -> (w, ls)
     [] -> error "resolvePriority: unreachable, NonEmpty is never empty"
 
--- | The winning local definition for a label, by the same priority rule as
--- 'resolvePriority' — used to resolve a bare label-resolving export against the
--- definition it refers to, rather than the (contentless) reference statement itself.
+{- | The winning local definition for a label, by the same priority rule as
+'resolvePriority' — used to resolve a bare label-resolving export against the
+definition it refers to, rather than the (contentless) reference statement itself.
+-}
 localWinner :: [ExportedDef] -> String -> Maybe ExportedDef
 localWinner locals lbl = case [d | d <- locals, edLabel d == lbl] of
     [] -> Nothing
-    (d : ds) ->
-        Just
-            ( candDef
-                ( fst
-                    ( resolvePriority
-                        (fmap (\x -> Candidate "" x (classOf (edIsOverride x)) (0, edOrder x)) (d :| ds))
-                    )
-                )
-            )
+    (d : ds) -> Just $ candDef $ fst $ resolvePriority $ fmap (\x -> Candidate "" x (classOf $ edIsOverride x) (0, edOrder x)) (d :| ds)
 
--- | The labels a file exposes to other files via export. A same-label export repeated
--- within one file yields only the highest-priority definition; the rest are ignored
--- and warned as a duplicate directive. A bare label-resolving export (@export A;@)
--- exposes whatever locally wins for that label, rather than exporting the reference
--- statement itself; if the label has no local definition at all, it's an unresolved
--- label.
+{- | The labels a file exposes to other files via export. A same-label export repeated
+within one file yields only the highest-priority definition; the rest are ignored
+and warned as a duplicate directive. A bare label-resolving export (@export A;@)
+exposes whatever locally wins for that label, rather than exporting the reference
+statement itself; if the label has no local definition at all, it's an unresolved
+label.
+-}
 exportedScope :: Text -> BetzaProgram Ps -> ([ExportedDef], [SemanticProblem])
 exportedScope src prog =
     let (defs, dupProbs) = Map.foldr collect ([], []) grouped
@@ -176,7 +176,7 @@ exportedScope src prog =
     grouped =
         Map.fromListWith
             (<>)
-            [(lbl, Candidate "" def (classOf (edIsOverride def)) (0, edOrder def) :| []) | (lbl, def) <- entries]
+            [(lbl, Candidate "" def (classOf $ edIsOverride def) (0, edOrder def) :| []) | (lbl, def) <- entries]
 
     collect cands (defs, probs) =
         let (winner, losers) = resolvePriority cands
@@ -184,33 +184,35 @@ exportedScope src prog =
 
     dupWarning c = mkProblem Warning DuplicateDirective (getSpan (edStmt (candDef c)))
 
--- | Resolve a file's effective scope: local statements plus each dependency's
--- exported scope, picking exactly one definition per label by priority (override
--- beats plain; among equal precedence, earliest position wins).
---
--- Note on cross-file order: there's no single lexical order spanning multiple files,
--- so this implementation ranks local candidates ahead of imported ones at equal
--- precedence, and ranks imported candidates by the position of the @using@ directive
--- that introduced them, then by their own position in the origin file.
---
--- An imported definition's precedence class depends only on whether it was pulled in
--- via an overriding @using@ — a definition's own override status in its origin file
--- only affects resolution *within that file* (i.e. which definition becomes its
--- exported entry), and isn't itself carried across the @using@ boundary.
-effectiveScope
-    :: FilePath
-    -> [ExportedDef]
-    -> [(FilePath, Bool, Map.Map String ExportedDef)]
-    -- ^ (dependency path, was pulled in via an overriding @using@, dependency's
-    -- exported scope), one entry per @using@ directive, in lexical order.
-    -> (Map.Map String ResolvedDef, [SemanticProblem])
+{- | Resolve a file's effective scope: local statements plus each dependency's
+exported scope, picking exactly one definition per label by priority (override
+beats plain; among equal precedence, earliest position wins).
+
+Note on cross-file order: there's no single lexical order spanning multiple files,
+so this implementation ranks local candidates ahead of imported ones at equal
+precedence, and ranks imported candidates by the position of the @using@ directive
+that introduced them, then by their own position in the origin file.
+
+An imported definition's precedence class depends only on whether it was pulled in
+via an overriding @using@ — a definition's own override status in its origin file
+only affects resolution *within that file* (i.e. which definition becomes its
+exported entry), and isn't itself carried across the @using@ boundary.
+-}
+effectiveScope ::
+    FilePath ->
+    [ExportedDef] ->
+    {- | (dependency path, was pulled in via an overriding @using@, dependency's
+    exported scope), one entry per @using@ directive, in lexical order.
+    -}
+    [(FilePath, Bool, Map.Map String ExportedDef)] ->
+    (Map.Map String ResolvedDef, [SemanticProblem])
 effectiveScope self localCandidates deps = Map.foldrWithKey resolve (Map.empty, []) grouped
   where
     grouped :: Map.Map String (NonEmpty Candidate)
     grouped = Map.fromListWith (<>) (localEntries ++ importedEntries)
 
     localEntries =
-        [ (edLabel d, Candidate self d (classOf (edIsOverride d)) (0, edOrder d) :| [])
+        [ (edLabel d, Candidate self d (classOf $ edIsOverride d) (0, edOrder d) :| [])
         | d <- localCandidates
         ]
 
@@ -231,4 +233,4 @@ effectiveScope self localCandidates deps = Map.foldrWithKey resolve (Map.empty, 
     -- definition it's overriding.
     loserWarning winner loser
         | candFrom loser /= self && candClass winner == 0 = Nothing
-        | otherwise = Just (mkProblem Warning DuplicateLabel (getSpan (edStmt (candDef loser))))
+        | otherwise = Just . mkProblem Warning DuplicateLabel . getSpan . edStmt . candDef $ loser
