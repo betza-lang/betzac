@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Betzac.Compilation.Scope (
+module Betzac.Compilation.Label.Scope (
+    LabelTable,
     Candidate (..),
     labelText,
     exportedScope,
@@ -25,6 +26,7 @@ import Betzac.AST.Types (
     Directive (..),
     ExponentExpr (ExponentExpr),
     Label (..),
+    Labelling,
     ModifierExpr (ModifierExpr),
     QualifiedStmt (..),
     UnionExpr (UnionExpr),
@@ -44,8 +46,10 @@ import Text.Megaparsec.Pos (SourcePos (..), unPos)
 -- unused-expression, and unused-file detection are not implemented here — planned as
 -- follow-up work.
 
+type LabelTable a = Map.Map Labelling a
+
 -- | Normalized text of a label, used as the key into scope maps.
-labelText :: Label p -> String
+labelText :: Label p -> Labelling
 labelText (Upper c _) = [c]
 labelText (Descriptor s _) = s
 labelText (Leaper m n _) = show m ++ "," ++ show n
@@ -172,7 +176,7 @@ exportedScope src prog =
                 Nothing -> (accEntries, accProbs)
         _ -> (accEntries, accProbs)
 
-    grouped :: Map.Map String (NonEmpty Candidate)
+    grouped :: LabelTable (NonEmpty Candidate)
     grouped =
         Map.fromListWith
             (<>)
@@ -204,11 +208,11 @@ effectiveScope ::
     {- | (dependency path, was pulled in via an overriding @using@, dependency's
     exported scope), one entry per @using@ directive, in lexical order.
     -}
-    [(FilePath, Bool, Map.Map String ExportedDef)] ->
-    (Map.Map String ResolvedDef, [SemanticProblem])
+    [(FilePath, Bool, LabelTable ExportedDef)] ->
+    (LabelTable ResolvedDef, [SemanticProblem])
 effectiveScope self localCandidates deps = Map.foldrWithKey resolve (Map.empty, []) grouped
   where
-    grouped :: Map.Map String (NonEmpty Candidate)
+    grouped :: LabelTable (NonEmpty Candidate)
     grouped = Map.fromListWith (<>) (localEntries ++ importedEntries)
 
     localEntries =

@@ -33,11 +33,14 @@ library
       Betzac.AST.Phases
       Betzac.AST.Strip
       Betzac.AST.Types
+      Betzac.AST.Utils
       Betzac.Compilation.Context
       Betzac.Compilation.Diagnostic
       Betzac.Compilation.Driver
       Betzac.Compilation.Flag
-      Betzac.Compilation.Scope
+      Betzac.Compilation.Label.Liveness
+      Betzac.Compilation.Label.Resolution
+      Betzac.Compilation.Label.Scope
       Betzac.Debug.Dot.Dot
       Betzac.Debug.Dot.Visitor
       Betzac.Debug.PrettyPrint

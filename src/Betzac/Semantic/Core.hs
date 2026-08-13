@@ -33,6 +33,7 @@ data SemanticProblemKind
     | IllFormedDirective
     | UsingUnknown FilePath
     | UsingCircular [FilePath]
+    | CircularLabel [String]
     | DuplicateDirective
     | DuplicateLabel
     | CompilationSucceeded
@@ -52,6 +53,7 @@ causeOf UnusedExpression = "unused expression"
 causeOf IllFormedDirective = "ill-formed directive"
 causeOf (UsingUnknown _) = "using unknown"
 causeOf (UsingCircular _) = "using circular"
+causeOf (CircularLabel _) = "circular label"
 causeOf DuplicateDirective = "duplicate directive"
 causeOf DuplicateLabel = "duplicate label"
 causeOf CompilationSucceeded = "success"
@@ -68,8 +70,9 @@ data SemanticProblem = SemanticProblem
 instance HasSpan SemanticProblem where
     getSpan = semSpan
 
--- | Build a 'SemanticProblem' directly, for call sites (e.g. multi-file discovery)
--- that aren't running inside a per-node 'Pass' traversal.
+{- | Build a 'SemanticProblem' directly, for call sites (e.g. multi-file discovery)
+that aren't running inside a per-node 'Pass' traversal.
+-}
 mkProblem :: Severity -> SemanticProblemKind -> Span -> SemanticProblem
 mkProblem = SemanticProblem
 

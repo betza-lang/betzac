@@ -130,9 +130,14 @@ In the `:value:` form, `value` is a nonempty string of latin alphanumeric charac
 
 2.3.7.1 - If the `-Wunused` flag is set, a warning log will be produced with cause `unused label`, resp. `unused expression`.
 
-2.3.8 - If the `-Wunused` flag is set, `betzac` will produce a warning log whenever there is an alias statement with no directive keyword and which is not referenced in the file. That log will have cause `unused label`.
+2.3.8 - If the `-Wunused` flag is set, `betzac` will produce a warning log with cause `unused label` for every label of the local scope that is unreachable from the exported scope (cf. 2.3.9), regardless of whether that label's statement is an expression assignment or an alias.
 
-2.3.9 - A label is considered referenced if it is used in a statement, expression, or directive that requires its resolution. The label is considered unreferenced otherwise.
+2.3.9 - A label of the local scope is reachable from the exported scope if:
+
+1. it is exported; or
+2. the expression of its defining statement is referenced, directly or transitively, from the expression of a label that is reachable from the exported scope.
+
+A label that is not reachable by this definition is unreachable, even if some other unreachable label's expression happens to reference it — a chain of labels that only reference each other, with no path back to anything exported, is unreachable in its entirety.
 
 ---
 

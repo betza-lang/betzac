@@ -82,6 +82,7 @@ module Betzac.AST.Types (
     ExponentKind (..),
     Label (..),
     Number,
+    Labelling,
 ) where
 
 import Betzac.Span (HasSpan (..))
@@ -246,10 +247,12 @@ data ExponentKind p
 
 data Label p
     = Upper Char (XUpper p)
-    | Descriptor String (XDescriptor p)
+    | Descriptor Labelling (XDescriptor p)
     | Leaper Number Number (XLeaper p)
 
 type Number = Int
+
+type Labelling = String
 
 -- Eq, Show, and Data
 type EqX p =

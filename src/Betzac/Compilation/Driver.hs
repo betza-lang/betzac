@@ -17,7 +17,7 @@ import Betzac.Compilation.Context (
     emptyContext,
  )
 import Betzac.Compilation.Flag (CompilerOptions)
-import Betzac.Compilation.Scope (effectiveScope, exportedScope, localDefs)
+import Betzac.Compilation.Label.Scope (effectiveScope, exportedScope, localDefs)
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
 import Betzac.Semantic.Core (
     SemanticProblem,
