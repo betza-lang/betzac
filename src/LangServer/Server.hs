@@ -8,6 +8,7 @@ import Control.Monad.IO.Class (liftIO)
 import LangServer.Config (ConfigBLS, defaultConfigBLS, optionsBLS)
 import LangServer.Handlers.OnChange
 import LangServer.Handlers.OnOpen
+import LangServer.Handlers.OnSemanticTokens (onSemanticTokens)
 import Language.LSP.Protocol.Message
 import Language.LSP.Protocol.Types
 import Language.LSP.Server
@@ -21,6 +22,7 @@ handlers =
             , notificationHandler SMethod_TextDocumentDidClose $ const mempty
             , notificationHandler SMethod_WorkspaceDidChangeConfiguration $ const mempty
             , notificationHandler SMethod_Initialized $ const mempty
+            , requestHandler SMethod_TextDocumentSemanticTokensFull onSemanticTokens
             ]
 
 serverBLS :: ServerDefinition ConfigBLS

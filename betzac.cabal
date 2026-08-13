@@ -65,6 +65,7 @@ library
       LangServer.Handlers.Core
       LangServer.Handlers.OnChange
       LangServer.Handlers.OnOpen
+      LangServer.Handlers.OnSemanticTokens
       LangServer.Server
   other-modules:
       Paths_betzac
