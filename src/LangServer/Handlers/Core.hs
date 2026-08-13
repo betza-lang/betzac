@@ -4,7 +4,7 @@ module LangServer.Handlers.Core (publishDiagnostics, makeDiagnostic) where
 
 import Betzac.Debug.PrettyPrint (prettyPrint)
 import qualified Betzac.Pipeline as B (PipelineResult (..), fromScratch)
-import Betzac.Semantic.Core (SemanticProblem (..), Severity (..))
+import Betzac.Diagnostic (SemanticProblem (..), Severity (..))
 import Betzac.Span (Span (..))
 
 import Text.Megaparsec

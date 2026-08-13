@@ -13,7 +13,7 @@ import qualified Betzac.Parser.BetzaTokenStream as B (BetzaTokenStream (..))
 import qualified Betzac.Parser.Parser as B (parseTokens)
 import qualified Betzac.Token as B (Token)
 
-import Betzac.Semantic.Core (SemanticProblem)
+import Betzac.Diagnostic (SemanticProblem)
 import Betzac.Semantic.Passes (runAllPasses)
 import Control.Monad.Trans.State.Strict (StateT, execStateT, gets, modify)
 import Data.Text (Text, unpack)

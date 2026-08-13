@@ -5,8 +5,9 @@ import Betzac.AST.Types as B
 import Betzac.AST.Utils
 import Betzac.Compilation.Context
 import Betzac.Compilation.Label.Scope
-import Betzac.Semantic.Core
+import Betzac.Diagnostic
 import Betzac.Span
+
 import Data.Foldable
 import qualified Data.Map as Map
 import qualified Data.Set as Set

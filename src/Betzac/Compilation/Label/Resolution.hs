@@ -3,8 +3,9 @@ module Betzac.Compilation.Label.Resolution (resolveLabelBody) where
 import Betzac.AST
 import Betzac.Compilation.Context (ExportedDef (edStmt), ResolvedDef (..))
 import Betzac.Compilation.Label.Scope
-import Betzac.Semantic.Core
+import Betzac.Diagnostic
 import Betzac.Span (HasSpan (getSpan))
+
 import Data.Foldable (Foldable (toList))
 import qualified Data.Map as Map
 

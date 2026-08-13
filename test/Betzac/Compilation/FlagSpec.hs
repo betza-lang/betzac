@@ -6,7 +6,7 @@ import Betzac.Compilation.Flag (
     applyOptions,
     optionsFromFlags,
  )
-import Betzac.Semantic.Core (
+import Betzac.Diagnostic (
     SemanticProblem (..),
     SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel),
     Severity (Error, Warning),

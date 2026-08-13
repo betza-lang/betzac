@@ -9,7 +9,7 @@ import System.IO.Temp (withSystemTempDirectory)
 import Betzac.Compilation.Context (CompilationContext (..), FileEntry (feDiagnostics))
 import qualified Betzac.Compilation.Driver as Driver
 import Betzac.Compilation.Flag (optionsFromFlags)
-import Betzac.Semantic.Core (SemanticProblem (semKind), causeOf)
+import Betzac.Diagnostic (SemanticProblem (semKind), causeOf)
 
 import Hedgehog
 import qualified Hedgehog.Gen as Gen

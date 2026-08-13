@@ -1,7 +1,8 @@
 {-# LANGUAGE InstanceSigs #-}
 
-module Betzac.Semantic.Core (
+module Betzac.Diagnostic (
     Pass,
+    Stage,
     SemanticProblem (..),
     Severity (..),
     SemanticProblemKind (..),
@@ -10,14 +11,29 @@ module Betzac.Semantic.Core (
     emitErrorAt,
     emitWarningAt,
     runPass,
+    stage,
+    logProblems,
+    runStage,
+    runStage_,
 ) where
 
-import Betzac.Span (HasSpan (..), Span)
-import Control.Monad.Trans.Writer (Writer, execWriter, tell)
-
 import Betzac.Debug.PrettyPrint (PrettyPrint (..))
+import Betzac.Span (HasSpan (..), Span)
 
-type Pass a = Writer [SemanticProblem] a
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
+import Control.Monad.Trans.Writer (Writer, execWriter, runWriter, tell)
+
+{- | A single-file semantic pass: accumulates 'SemanticProblem's as it goes, never
+halts early.
+-}
+type Pass = Writer [SemanticProblem]
+
+{- | One step of a cross-file diagnostic-producing pipeline: 'MaybeT' over 'Pass', so
+diagnostics from every step run so far always accumulate, and 'stage' can signal "halt
+the rest of the chain".
+-}
+type Stage = MaybeT Pass
 
 data Severity = Info | Warning | Error
     deriving (Show, Eq, Ord)
@@ -88,7 +104,25 @@ emitWarningAt = emitAt Warning
 runPass :: Pass () -> [SemanticProblem]
 runPass = execWriter
 
--- pretty print problems
+{- | Log 'ps'; halt the rest of the 'Stage' chain (later steps never get forced) if any
+of 'ps' is Error-level, otherwise continue with 'a'.
+-}
+stage :: a -> [SemanticProblem] -> Stage a
+stage a ps
+    | any ((== Error) . semSev) ps = MaybeT (tell ps >> return Nothing)
+    | otherwise = MaybeT (tell ps >> return (Just a))
+
+{- | Log 'ps' without ever halting the chain — for combining independent diagnostic
+sources uniformly with genuinely-gated 'stage' steps.
+-}
+logProblems :: [SemanticProblem] -> Stage ()
+logProblems = lift . tell
+
+runStage :: Stage a -> (Maybe a, [SemanticProblem])
+runStage = runWriter . runMaybeT
+
+runStage_ :: Stage a -> [SemanticProblem]
+runStage_ = snd . runStage
 
 instance PrettyPrint SemanticProblemKind where
     prettyPrint (InvalidValue s) = "Invalid Value: " <> s

@@ -38,6 +38,7 @@ library
       Betzac.Compilation.Diagnostic
       Betzac.Compilation.Driver
       Betzac.Compilation.Flag
+      Betzac.Compilation.Label
       Betzac.Compilation.Label.Liveness
       Betzac.Compilation.Label.Resolution
       Betzac.Compilation.Label.Scope

@@ -13,7 +13,7 @@ import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaStmt)
 import Betzac.Compilation.Flag (CompilerOptions)
 import Betzac.Pipeline (PipelineResult)
-import Betzac.Semantic.Core (SemanticProblem)
+import Betzac.Diagnostic (SemanticProblem)
 
 -- | One label's exported definition within a single file's exported scope.
 data ExportedDef = ExportedDef

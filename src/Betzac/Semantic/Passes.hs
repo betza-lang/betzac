@@ -1,7 +1,7 @@
 module Betzac.Semantic.Passes (runAllPasses) where
 
 import Betzac.AST
-import Betzac.Semantic.Core
+import Betzac.Diagnostic
 import Betzac.Semantic.Direction.AmalgamatedDirection (analysisAmalgamatedDirection)
 
 checkAmalgamatedDirections :: BetzaProgram Ps -> Pass ()

@@ -10,7 +10,7 @@ module Betzac.Compilation.Flag (
 
 import Data.Maybe (mapMaybe)
 
-import qualified Betzac.Semantic.Core as Sem
+import qualified Betzac.Diagnostic as Sem
 
 data Wspecifier
     = Wunused

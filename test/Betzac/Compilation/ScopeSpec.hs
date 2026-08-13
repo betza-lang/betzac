@@ -9,9 +9,9 @@ import qualified Data.Text as T
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaProgram)
 import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..))
-import Betzac.Compilation.Scope (effectiveScope, exportedScope, localDefs)
+import Betzac.Compilation.Label.Scope (effectiveScope, exportedScope, localDefs)
 import Betzac.Pipeline (PipelineResult (parseResult), fromScratch)
-import Betzac.Semantic.Core (SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel), causeOf, semKind)
+import Betzac.Diagnostic (SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel), causeOf, semKind)
 
 import Hedgehog
 import qualified Hedgehog.Gen as Gen

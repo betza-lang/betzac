@@ -7,7 +7,7 @@ module Betzac.Compilation.Diagnostic (
     renderDiagnostic,
 ) where
 
-import Betzac.Semantic.Core (
+import Betzac.Diagnostic (
     SemanticProblem (..),
     SemanticProblemKind (CompilationSucceeded),
     Severity (Info),

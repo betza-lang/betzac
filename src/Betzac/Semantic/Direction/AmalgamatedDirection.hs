@@ -2,7 +2,7 @@ module Betzac.Semantic.Direction.AmalgamatedDirection (analysisAmalgamatedDirect
 
 import Betzac.AST.Phases
 import Betzac.AST.Types
-import Betzac.Semantic.Core
+import Betzac.Diagnostic
 
 import Betzac.AST.Strip
 import Betzac.Debug.PrettyPrint (summarize)

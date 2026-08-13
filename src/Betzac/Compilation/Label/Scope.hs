@@ -32,7 +32,7 @@ import Betzac.AST.Types (
     UnionExpr (UnionExpr),
  )
 import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..))
-import Betzac.Semantic.Core (
+import Betzac.Diagnostic (
     SemanticProblem,
     SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel),
     Severity (Error, Warning),
