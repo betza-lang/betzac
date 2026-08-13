@@ -1,9 +1,9 @@
-module Betzac.Compilation.Driver.Discovery (discover) where
+module Betzac.Compilation.Driver.Discovery (SourceReader, discover) where
 
 import Control.Exception (IOException, try)
 import Control.Monad (foldM)
 import qualified Data.Map.Strict as Map
-import qualified Data.Text.IO as TIO
+import Data.Text (Text)
 import System.Directory (canonicalizePath, doesDirectoryExist, doesFileExist)
 import System.FilePath (isAbsolute, (</>))
 
@@ -24,6 +24,10 @@ import Betzac.Diagnostic (
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
 import Betzac.Span (Span (Generated))
 
+-- | A source-reading action, injected so callers can serve live editor buffers before
+-- falling back to disk (bls) or just read disk unconditionally (the betzac CLI).
+type SourceReader = FilePath -> IO Text
+
 {- | Discover the full dependency graph reachable from a target file's @using@
 directives: resolves each path against the workspace root, and records
 @using unknown@/@using circular@ diagnostics on the referencing file as they're
@@ -39,8 +43,8 @@ Sibling @using@ targets have no data dependency on each other during discovery (
 file's read+parse is independent); a future parallel version could fan discovery out
 per unique path while keeping this cycle-detection step sequential.
 -}
-discover :: FilePath -> FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
-discover workspaceRoot target opts = do
+discover :: SourceReader -> FilePath -> FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
+discover readSource workspaceRoot target opts = do
     rootExists <- doesDirectoryExist workspaceRoot
     if not rootExists
         then return $ Left $ systemError $ "workspace directory not found: " ++ workspaceRoot
@@ -50,7 +54,7 @@ discover workspaceRoot target opts = do
             targetExists <- doesFileExist absTarget
             if not targetExists
                 then return $ Left $ systemError $ "target file not found: " ++ absTarget
-                else visit absTarget $ emptyContext absRoot absTarget opts
+                else visit readSource absTarget $ emptyContext absRoot absTarget opts
   where
     systemError msg = mkProblem Error (SystemFailure msg) Generated
 
@@ -58,11 +62,11 @@ discover workspaceRoot target opts = do
 failure (the file existed a moment ago per its caller's existence check, but couldn't
 actually be read — permissions, a race, etc.) is reported as a system-level failure.
 -}
-visit :: FilePath -> CompilationContext -> IO (Either SemanticProblem CompilationContext)
-visit path ctx
+visit :: SourceReader -> FilePath -> CompilationContext -> IO (Either SemanticProblem CompilationContext)
+visit readSource path ctx
     | Map.member path (ccFiles ctx) = return $ Right ctx
     | otherwise = do
-        readResult <- try $ TIO.readFile path
+        readResult <- try $ readSource path
         case readResult of
             Left ioErr ->
                 return $ Left $ mkProblem Error (SystemFailure $ "could not read " ++ path ++ ": " ++ show (ioErr :: IOException)) Generated
@@ -81,7 +85,7 @@ visit path ctx
                                 , feStatus = Discovered
                                 }
                         ctx0 = ctx{ccFiles = Map.insert path placeholder $ ccFiles ctx}
-                    (ctx1, deps) <- foldM (processTarget path) (ctx0, []) $ rawUsingTargets pr
+                    (ctx1, deps) <- foldM (processTarget readSource path) (ctx0, []) $ rawUsingTargets pr
                     let finalEntry =
                             placeholder
                                 { feUsingDeps = map fst deps
@@ -98,11 +102,12 @@ target — a broken dependency doesn't stop discovery of the referrer's other
 directives.
 -}
 processTarget ::
+    SourceReader ->
     FilePath ->
     (CompilationContext, [(FilePath, Bool)]) ->
     (FilePath, Bool) ->
     IO (CompilationContext, [(FilePath, Bool)])
-processTarget referrer (ctx, deps) (rel, isOverride) = do
+processTarget readSource referrer (ctx, deps) (rel, isOverride) = do
     resolved <- resolveUsingTarget (ccWorkspaceRoot ctx) rel
     case resolved of
         Nothing -> return (addDiagnostic referrer (mkProblem Error (UsingUnknown rel) Generated) ctx, deps)
@@ -111,7 +116,7 @@ processTarget referrer (ctx, deps) (rel, isOverride) = do
                 | feStatus entry == Discovered ->
                     return (addDiagnostic referrer (mkProblem Error (UsingCircular [referrer, path]) Generated) ctx, deps)
             _ -> do
-                visited <- visit path ctx
+                visited <- visit readSource path ctx
                 case visited of
                     Left problem -> return (addDiagnostic referrer problem ctx, deps)
                     Right ctx' -> return (ctx', deps ++ [(path, isOverride)])

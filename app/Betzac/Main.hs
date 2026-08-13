@@ -13,7 +13,7 @@ import Betzac.Compilation.Driver (discover, resolveScopes)
 import Betzac.Compilation.Flag (CompilerOptions (terminateOnFirstError), applyOptions, optionsFromFlags)
 import Betzac.Debug.PrettyPrint (PrettyPrint (..))
 import Betzac.Located (Located (tokenVal))
-import Betzac.Semantic.Core (SemanticProblem (..), SemanticProblemKind (CompilationSucceeded), Severity (Error), causeOf)
+import Betzac.Diagnostic (SemanticProblem (..), SemanticProblemKind (CompilationSucceeded), Severity (Error), causeOf)
 
 import Control.Monad (when)
 import qualified Data.Map.Strict as Map
@@ -192,7 +192,7 @@ main = do
     -- Discovery lexes and parses the whole `using` dependency tree (not just the
     -- target) to even find out what that tree is, so it runs before, and subsumes,
     -- the target's own single-file LEXER/PARSER/ANALYSIS stages below.
-    result <- discover root fp copts
+    result <- discover T.readFile root fp copts
     case result of
         -- A `system`-cause failure always terminates immediately, regardless of flags.
         Left problem -> do
