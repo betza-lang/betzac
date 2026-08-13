@@ -6,6 +6,8 @@ import Betzac.AST.Phases (Ps, PsX (..))
 import qualified Betzac.AST.Types as B
 
 import Betzac.Alphabet.Expr (alphanum)
+import Betzac.Located (Located (endPos))
+import Betzac.Parser.BetzaTokenStream (BetzaTokenStream (unBetzaTokenStream))
 import Betzac.Parser.Core
 import Betzac.Span (Span (..))
 import qualified Betzac.Token as B
@@ -18,11 +20,25 @@ import Text.Megaparsec
 
 -- helpers
 
+{- | 'getSourcePos', over a custom token stream, reports the *start* of whatever
+token is next in line (see 'Betzac.Parser.BetzaTokenStream.reachOffset') — correct
+for error-position reporting, but not what a span's end marker wants once
+inter-token whitespace isn't part of any token's own span (cf. the lexer's
+'Betzac.Lexer.Lexer.lexSource'): the position right after the last thing 'p' parsed
+is generally *not* the same as the start of whatever comes after it once there was
+skipped whitespace/comments in between. Use the last actually-consumed token's own
+'endPos' instead.
+-}
 spanning :: Parser (PsX -> a) -> Parser a
 spanning p = do
     s <- getSourcePos
+    before <- unBetzaTokenStream <$> getInput
     f <- p
-    e <- getSourcePos
+    after <- unBetzaTokenStream <$> getInput
+    let consumed = length before - length after
+        e
+            | consumed <= 0 = s
+            | otherwise = endPos (before !! (consumed - 1))
     return $ f $ PsX $ RealSpan s e
 
 withModality ::

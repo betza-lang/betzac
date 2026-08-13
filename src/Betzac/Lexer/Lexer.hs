@@ -19,8 +19,11 @@ import qualified Text.Megaparsec.Char.Lexer as L
 runLexer :: FilePath -> String -> Either (ParseErrorBundle String Void) [Located B.Token]
 runLexer = parse lexSource
 
+-- | 'spanned' wraps only 'lexToken'' (not the trailing 'lexIgnore') so a token's
+-- captured span ends exactly at its own last character, not after whatever
+-- whitespace/comment happens to follow it.
 lexSource :: Lexer [Located B.Token]
-lexSource = lexIgnore *> many (spanned $ lexToken' <* lexIgnore) <* hidden eof
+lexSource = lexIgnore *> many (spanned lexToken' <* lexIgnore) <* hidden eof
   where
     lexToken' = lexDirective <|> lexToken
 
