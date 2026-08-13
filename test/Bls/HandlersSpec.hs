@@ -3,8 +3,13 @@
 module HandlersSpec (spec) where
 
 import Control.Lens
+import Control.Monad (replicateM)
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (pack)
+import System.Directory (canonicalizePath)
+import System.FilePath ((</>))
+import System.IO.Temp (withSystemTempDirectory)
+
 import Language.LSP.Protocol.Lens hiding (context, length)
 import Language.LSP.Protocol.Types
 import Language.LSP.Test
@@ -138,3 +143,23 @@ spec = describe "bls handlers" $ do
                         ]
                     diags <- waitForDiagnostics
                     liftIO $ diags `shouldBe` []
+
+    describe "multi-file compilation" $
+        it "reports a diagnostic in a using-dependency at the dependency's own location, not the file you opened" $
+            withSystemTempDirectory "bls-handlers-spec" $ \rawDir -> do
+                dir <- canonicalizePath rawDir
+                -- Q is never defined, so dep's own body has exactly one unresolved
+                -- reference — but that doesn't block dep.betza from parsing or from
+                -- exporting X (a statement's own body being semantically broken doesn't
+                -- prevent the statement itself from being exported), so main.betza's
+                -- reference to X still resolves and main.betza itself stays clean.
+                writeFile (dir </> "dep.betza") "export X = Q;\n"
+                writeFile (dir </> "main.betza") "using dep;\nexport Y = X;\n"
+                let depUri = filePathToUri (dir </> "dep.betza")
+                    mainUri = filePathToUri (dir </> "main.betza")
+                runSession "bls" fullLatestClientCaps dir $ do
+                    _ <- openDoc "main.betza" betzaKind
+                    notes <- replicateM 2 publishDiagnosticsNotification
+                    let diagsFor u = concat [n ^. params . diagnostics | n <- notes, n ^. params . uri == u]
+                    liftIO $ length (diagsFor depUri) `shouldBe` 1
+                    liftIO $ diagsFor mainUri `shouldBe` []

@@ -37,6 +37,8 @@ library
       Betzac.Compilation.Context
       Betzac.Compilation.Diagnostic
       Betzac.Compilation.Driver
+      Betzac.Compilation.Driver.Discovery
+      Betzac.Compilation.Driver.Resolve
       Betzac.Compilation.Flag
       Betzac.Compilation.Label
       Betzac.Compilation.Label.Liveness
@@ -45,6 +47,7 @@ library
       Betzac.Debug.Dot.Dot
       Betzac.Debug.Dot.Visitor
       Betzac.Debug.PrettyPrint
+      Betzac.Diagnostic
       Betzac.Lexer.Core
       Betzac.Lexer.Lexer
       Betzac.Lexer.Space
@@ -53,7 +56,6 @@ library
       Betzac.Parser.Core
       Betzac.Parser.Parser
       Betzac.Pipeline
-      Betzac.Semantic.Core
       Betzac.Semantic.Direction.All
       Betzac.Semantic.Direction.AmalgamatedDirection
       Betzac.Semantic.Passes
@@ -176,6 +178,7 @@ test-suite bls-test
     , lsp
     , lsp-test
     , megaparsec
+    , temporary
     , text
     , transformers
   default-language: Haskell2010

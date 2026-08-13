@@ -93,3 +93,6 @@ tests:
       - betzac
       - hspec
       - lsp-test
+      - temporary
+      - directory
+      - filepath
