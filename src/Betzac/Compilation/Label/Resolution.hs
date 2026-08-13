@@ -25,6 +25,9 @@ resolveLabelBody' eff file trail (BetzaExpr ce _) = resolveChainExpr ce
 
 resolveAtomExpr :: LabelTable ResolvedDef -> FilePath -> Trail -> AtomExpr Ps -> [SemanticProblem]
 resolveAtomExpr eff file trail (Paren expr _) = resolveLabelBody' eff file trail expr
+-- A leaper label (e.g. `:1,1:`) is a literal geometric value, not a name — nothing
+-- ever "defines" it, so it must never be looked up in the effective scope.
+resolveAtomExpr _ _ _ (From (Leaper _ _ _) _) = []
 resolveAtomExpr eff file trail (From lbl _) =
     let name = labelText lbl
      in case Map.lookup name eff of
