@@ -51,9 +51,7 @@ resolveFileStage :: FilePath -> CompilationContext -> Stage (Map.Map String Expo
 resolveFileStage path ctx1 = do
     let entry1 = ccFiles ctx1 Map.! path
         src = sourceText $ fePipeline entry1
-        prog = case parseResult $ fePipeline entry1 of
-            Just (Right p) -> p
-            _ -> []
+        prog = maybe [] fst (parseResult $ fePipeline entry1)
 
         (exported, exportProbs) = exportedScope src prog
         exportedMap = Map.fromList [(edLabel d, d) | d <- exported]

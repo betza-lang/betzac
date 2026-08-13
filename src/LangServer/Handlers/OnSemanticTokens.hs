@@ -38,9 +38,7 @@ onSemanticTokens req responder = do
     mvf <- getVirtualFile (toNormalizedUri u)
     let src = maybe T.empty virtualFileText mvf
         prog = case fromScratch fp src of
-            Right pr -> case parseResult pr of
-                Just (Right p) -> p
-                _ -> []
+            Right pr -> maybe [] fst (parseResult pr)
             Left _ -> []
         toks = sortOn (\(SemanticTokenAbsolute l c _ _ _) -> (l, c)) (collectTokens prog)
     responder $ Right $ case makeSemanticTokens defaultSemanticTokensLegend toks of

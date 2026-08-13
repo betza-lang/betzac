@@ -49,24 +49,26 @@ semiLexableExpr = (<>) <$> (unlex <$> listOf1 arbitrary) <*> listOf1 badChar
 prop_lexableNeverFails :: Property
 prop_lexableNeverFails = forAll (unlex <$> listOf1 arbitrary) $ \s ->
     case runLexer "<test>" s of
-        Left _ -> False
-        Right _ -> True
+        (_, Just _) -> False
+        (_, Nothing) -> True
 
+-- | Garbage triggers recovery (an error is still reported) rather than being
+-- silently swallowed, even though the tokens lexed around it survive.
 prop_failOnGarbage :: Property
 prop_failOnGarbage = forAll semiLexableExpr $ \s ->
     case runLexer "<test>" s of
-        Left _ -> True
-        Right _ -> False
+        (_, Just _) -> True
+        (_, Nothing) -> False
 
 prop_roundTrip :: Property
 prop_roundTrip = forAll (listOf1 arbitrary) $ \tokens ->
     case runLexer "<test>" (unlex tokens) of
-        Left _ -> False
-        Right ts -> (tokenVal <$> ts) == tokens
+        (_, Just _) -> False
+        (ts, Nothing) -> (tokenVal <$> ts) == tokens
 
 spec :: Spec
 spec = describe "Lexer.Core" $ do
     describe "lexer" $ do
         prop "never fails on lexable strings" prop_lexableNeverFails
-        prop "fails on garbage characters" prop_failOnGarbage
+        prop "still reports an error on garbage characters" prop_failOnGarbage
         prop "lex . unlex = id" prop_roundTrip

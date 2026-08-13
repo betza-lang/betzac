@@ -147,9 +147,7 @@ addDiagnostic path diag ctx =
 with whether each came from an @override using@ directive.
 -}
 rawUsingTargets :: PipelineResult -> [(FilePath, Bool)]
-rawUsingTargets pr = case parseResult pr of
-    Just (Right prog) -> concatMap go prog
-    _ -> []
+rawUsingTargets pr = maybe [] (concatMap go . fst) (parseResult pr)
   where
     go (Plain (Using fp _) _) = [(fp, False)]
     go (Override (Using fp _) _) = [(fp, True)]

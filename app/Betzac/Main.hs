@@ -17,7 +17,7 @@ import Betzac.Diagnostic (SemanticProblem (..), SemanticProblemKind (Compilation
 
 import Control.Monad (when)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -31,11 +31,11 @@ import qualified System.IO as S
 showLexResults :: Options -> B.PipelineResult -> IO StageResult
 showLexResults _ p = case B.lexResult p of
     Nothing -> return notRun
-    Just (Left bundle) -> return $ err $ hPutBundlePretty S.stderr bundle
-    Just (Right ts) ->
+    Just (ts, mbundle) ->
         return
-            ok
+            (maybe ok (const $ err $ mempty) mbundle)
                 { stageDetail = do
+                    mapM_ (hPutBundlePretty S.stderr) mbundle
                     mapM_ (hPutIndentLn S.stderr . show . tokenVal) ts
                     S.hPutStrLn S.stderr ""
                 }
@@ -43,9 +43,7 @@ showLexResults _ p = case B.lexResult p of
 showParseResults :: Options -> B.PipelineResult -> IO StageResult
 showParseResults o p = case B.parseResult p of
     Nothing -> return notRun
-    Just (Left bundle) ->
-        return $ err $ hPutBundlePretty S.stderr bundle
-    Just (Right program) -> do
+    Just (program, mbundle) -> do
         case emitDot o of
             Just "/dev/null" -> mempty
             Just "stdout" -> T.hPutStr S.stdout (toDot program)
@@ -57,7 +55,10 @@ showParseResults o p = case B.parseResult p of
                     | path `notElem` ["/dev/null", "stdout", "-"] ->
                         hPutIndentLn S.stderr ("Wrote AST to " ++ path)
                 _ -> mempty
-        return ok{stageDetail = dotNote}
+        return
+            (maybe ok (const $ err mempty) mbundle)
+                { stageDetail = mapM_ (hPutBundlePretty S.stderr) mbundle >> dotNote
+                }
 
 showAnalysis :: Options -> B.PipelineResult -> IO StageResult
 showAnalysis _ p = case B.semanticResult p of
@@ -107,12 +108,11 @@ showDependencies ctx = do
 
     describeDiag d = "(" ++ show (semSev d) ++ " " ++ causeOf (semKind d) ++ ")"
 
-    bundleFailed (Just (Left _)) = True
-    bundleFailed _ = False
+    bundleFailed = maybe False (isJust . snd)
 
     resultTag Nothing = passed
-    resultTag (Just (Left _)) = failure
-    resultTag (Just (Right _)) = success
+    resultTag (Just (_, Just _)) = failure
+    resultTag (Just (_, Nothing)) = success
 
 data StageResult = StageResult
     { stageStatus :: String

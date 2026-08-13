@@ -1,12 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Betzac.Parser.Parser (parseTokens) where
+module Betzac.Parser.Parser (parseTokens, parseTokensRecovering) where
 
 import Betzac.AST.Phases (Ps, PsX (..))
 import qualified Betzac.AST.Types as B
 
 import Betzac.Alphabet.Expr (alphanum)
-import Betzac.Located (Located (endPos))
+import Betzac.Located (Located (endPos), tokenVal)
 import Betzac.Parser.BetzaTokenStream (BetzaTokenStream (unBetzaTokenStream))
 import Betzac.Parser.Core
 import Betzac.Span (Span (..))
@@ -14,8 +14,10 @@ import qualified Betzac.Token as B
 
 import Control.Applicative (asum)
 import Data.Char (isDigit)
+import Data.Either (partitionEithers)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
+import Data.Void (Void)
 import Text.Megaparsec
 
 -- helpers
@@ -74,8 +76,37 @@ withOptionalModality noOp withOp = optional (withModality withOp withOp withOp) 
 
 -- parsing
 
+-- | Plain best-effort AST, ignoring any recovered errors (used where callers
+-- already know their input is well-formed, e.g. the parser round-trip test).
 parseTokens :: Parser (B.BetzaProgram Ps)
-parseTokens = many parseQualifiedStmt <* hidden eof
+parseTokens = fst <$> parseTokensRecovering
+
+{- | Best-effort AST paired with every error recovered along the way. Errors
+are threaded through as plain 'Either' values rather than via megaparsec's own
+'registerParseError'/'stateParseErrors' machinery: registering an error from
+inside a recovered branch, even though documented as non-failing, was
+observed to make the *whole* parse fail outright once wrapped in 'manyTill' —
+so accumulation is done by hand here instead.
+-}
+parseTokensRecovering :: Parser (B.BetzaProgram Ps, [ParseError BetzaTokenStream Void])
+parseTokensRecovering = do
+    results <- manyTill recoverableStmt (hidden eof)
+    let (errs, stmts) = partitionEithers results
+    return (stmts, errs)
+
+{- | One statement, best-effort: 'Right' on success; on failure, 'Left' the
+error after skipping tokens up to and including the next ';' (or eof,
+whichever comes first) — the same statement boundary 'parseQualifiedStmt'
+itself requires.
+-}
+recoverableStmt :: Parser (Either (ParseError BetzaTokenStream Void) (B.QualifiedStmt Ps))
+recoverableStmt =
+    withRecovery (\e -> Left e <$ recover) (Right <$> parseQualifiedStmt)
+  where
+    recover = do
+        _ <- takeWhileP (Just "recovery: skipped tokens") ((/= B.TokEndStmt) . tokenVal)
+        _ <- optional (tok B.TokEndStmt)
+        return ()
 
 parseQualifiedStmt :: Parser (B.QualifiedStmt Ps)
 parseQualifiedStmt = spanning $ (parseOverride' <|> parseDirective') <* parseEndStmt

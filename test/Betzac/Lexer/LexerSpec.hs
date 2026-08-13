@@ -9,8 +9,8 @@ import Test.Hspec
 
 tok :: String -> Either String [Token]
 tok s = case runLexer "<test>" s of
-    Left e -> Left (show e)
-    Right ts -> Right (tokenVal <$> ts)
+    (_, Just bundle) -> Left (show bundle)
+    (ts, Nothing) -> Right (tokenVal <$> ts)
 
 spec :: Spec
 spec = describe "Lexer.Lexer" $ do

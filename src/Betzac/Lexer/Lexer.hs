@@ -10,22 +10,66 @@ import qualified Betzac.Token as B
 import Betzac.Lexer.Core
 import Betzac.Lexer.Space
 
+import Data.Either (partitionEithers)
+import qualified Data.List.NonEmpty as NE
 import Data.Void (Void)
 
 import Text.Megaparsec
 import Text.Megaparsec.Char (char, string)
 import qualified Text.Megaparsec.Char.Lexer as L
 
-runLexer :: FilePath -> String -> Either (ParseErrorBundle String Void) [Located B.Token]
-runLexer = parse lexSource
+{- | Best-effort: tokens up to and around any failure are always returned. A
+failure inside one token is recovered by skipping to the next ';' (or eof) —
+see 'recoverableToken' — so the accumulated errors (if any) come back
+alongside the tokens rather than short-circuiting them. Errors are threaded
+through as plain 'Either' values rather than via megaparsec's own
+'registerParseError'/'stateParseErrors' machinery: registering an error from
+inside a recovered branch, even though documented as non-failing, was
+observed to make the *whole* parse fail outright once wrapped in 'manyTill' —
+so accumulation is done by hand here instead.
+-}
+runLexer :: FilePath -> String -> ([Located B.Token], Maybe (ParseErrorBundle String Void))
+runLexer f src = case parse lexSource f src of
+    Left bundle -> ([], Just bundle)
+    Right results ->
+        let (errs, toks) = partitionEithers results
+         in (toks, toErrorBundle f src errs)
+
+toErrorBundle :: FilePath -> String -> [ParseError String Void] -> Maybe (ParseErrorBundle String Void)
+toErrorBundle f src errs = case NE.nonEmpty errs of
+    Nothing -> Nothing
+    Just ne -> Just $ ParseErrorBundle (NE.sortWith errorOffset ne) initPosState
+  where
+    initPosState =
+        PosState
+            { pstateInput = src
+            , pstateOffset = 0
+            , pstateSourcePos = initialPos f
+            , pstateTabWidth = defaultTabWidth
+            , pstateLinePrefix = ""
+            }
+
+{- | One token, best-effort: 'Right' on success; on failure, 'Left' the error
+after skipping input up to and including the next ';' (or eof, whichever comes
+first) — the same statement boundary the parser itself resyncs on.
+-}
+recoverableToken :: Lexer (Either (ParseError String Void) (Located B.Token))
+recoverableToken =
+    withRecovery
+        (\e -> Left e <$ recover)
+        (Right <$> (spanned lexToken' <* lexIgnore))
+  where
+    lexToken' = lexDirective <|> lexToken
+    recover = do
+        _ <- takeWhileP (Just "recovery: skipped input") (/= B.stmtEnd)
+        _ <- optional (char B.stmtEnd)
+        lexIgnore
 
 -- | 'spanned' wraps only 'lexToken'' (not the trailing 'lexIgnore') so a token's
 -- captured span ends exactly at its own last character, not after whatever
 -- whitespace/comment happens to follow it.
-lexSource :: Lexer [Located B.Token]
-lexSource = lexIgnore *> many (spanned lexToken' <* lexIgnore) <* hidden eof
-  where
-    lexToken' = lexDirective <|> lexToken
+lexSource :: Lexer [Either (ParseError String Void) (Located B.Token)]
+lexSource = lexIgnore *> manyTill recoverableToken (hidden eof)
 
 lexDirective :: Lexer B.Token
 lexDirective = lexExport <|> lexUsing <|> lexOverride <?> "directive keyword"

@@ -26,8 +26,8 @@ parseProgram :: Text -> BetzaProgram Ps
 parseProgram src = case fromScratch "<test>" src of
     Left e -> error ("pipeline error: " ++ show e)
     Right pr -> case parseResult pr of
-        Just (Right prog) -> prog
-        Just (Left bundle) -> error ("parse error: " ++ show bundle)
+        Just (prog, Nothing) -> prog
+        Just (_, Just bundle) -> error ("parse error: " ++ show bundle)
         Nothing -> error "parser did not run"
 
 spec :: Spec

@@ -137,6 +137,7 @@ test-suite betzac-test
       Lexer.LexerQC
       Lexer.LexerSpec
       Parser.ParserHedgehog
+      Pipeline.RecoverySpec
       Paths_betzac
   hs-source-dirs:
       test/Betzac

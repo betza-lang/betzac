@@ -119,14 +119,10 @@ fileDiagnostics entry =
         <> map semanticProblemToDiagnostic (feDiagnostics entry)
 
 lexDiags :: B.PipelineResult -> [Diagnostic]
-lexDiags result = case B.lexResult result of
-    Just (Left bundle) -> bundleToDiagnostics bundle
-    _ -> []
+lexDiags result = maybe [] (foldMap bundleToDiagnostics . snd) (B.lexResult result)
 
 parseDiags :: B.PipelineResult -> [Diagnostic]
-parseDiags result = case B.parseResult result of
-    Just (Left bundle) -> bundleToDiagnostics bundle
-    _ -> []
+parseDiags result = maybe [] (foldMap bundleToDiagnostics . snd) (B.parseResult result)
 
 bundleToDiagnostics ::
     (VisualStream s, TraversableStream s, ShowErrorComponent e) =>

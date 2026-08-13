@@ -10,15 +10,24 @@ import Betzac.AST.Types as B (BetzaProgram)
 import qualified Betzac.Lexer.Lexer as B (runLexer)
 import Betzac.Located
 import qualified Betzac.Parser.BetzaTokenStream as B (BetzaTokenStream (..))
-import qualified Betzac.Parser.Parser as B (parseTokens)
+import qualified Betzac.Parser.Parser as B (parseTokensRecovering)
 import qualified Betzac.Token as B (Token)
 
 import Betzac.Diagnostic (SemanticProblem)
 import Betzac.Semantic.Passes (runAllPasses)
 import Control.Monad.Trans.State.Strict (StateT, execStateT, gets, modify)
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text, unpack)
 import Data.Void
-import Text.Megaparsec
+import Text.Megaparsec (
+    ParseError,
+    ParseErrorBundle (..),
+    PosState (..),
+    defaultTabWidth,
+    errorOffset,
+    initialPos,
+    parse,
+ )
 import Prelude hiding (length)
 
 type LexBundle = ParseErrorBundle String Void
@@ -26,11 +35,17 @@ type ParseBundle = ParseErrorBundle B.BetzaTokenStream Void
 
 type Pipeline a = StateT PipelineResult (Either PipelineError) a
 
+{- | Best-effort: tokens/AST are always present once their stage has run. A
+lex or parse failure recovers at the next ';'/statement boundary rather than
+aborting the whole file, so later stages always have *something* to work
+with. The bundle, when present, carries every error accumulated during
+recovery.
+-}
 data PipelineResult = PipelineResult
     { sourceText :: Text
     , filePath :: FilePath
-    , lexResult :: Maybe (Either LexBundle [Located B.Token])
-    , parseResult :: Maybe (Either ParseBundle (BetzaProgram Ps))
+    , lexResult :: Maybe ([Located B.Token], Maybe LexBundle)
+    , parseResult :: Maybe (BetzaProgram Ps, Maybe ParseBundle)
     , semanticResult :: Maybe [SemanticProblem]
     }
     deriving (Show)
@@ -66,18 +81,35 @@ parseStage :: Pipeline ()
 parseStage = do
     src <- gets $ unpack . sourceText
     mlex <- gets lexResult
-    case mlex >>= either (const Nothing) Just of
+    case fst <$> mlex of
         Nothing -> return ()
         Just ts -> do
+            f <- gets filePath
             let stream = B.BetzaTokenStream src ts
             modify $ \r ->
                 r
-                    { parseResult = Just $ parse B.parseTokens (filePath r) stream
+                    { parseResult = Just $ case parse B.parseTokensRecovering f stream of
+                        Left bundle -> ([], Just bundle)
+                        Right (prog, errs) -> (prog, toErrorBundle f stream errs)
                     }
+
+toErrorBundle :: FilePath -> B.BetzaTokenStream -> [ParseError B.BetzaTokenStream Void] -> Maybe ParseBundle
+toErrorBundle f stream errs = case NE.nonEmpty errs of
+    Nothing -> Nothing
+    Just ne -> Just $ ParseErrorBundle (NE.sortWith errorOffset ne) initPosState
+  where
+    initPosState =
+        PosState
+            { pstateInput = stream
+            , pstateOffset = 0
+            , pstateSourcePos = initialPos f
+            , pstateTabWidth = defaultTabWidth
+            , pstateLinePrefix = ""
+            }
 
 semanticStage :: Pipeline ()
 semanticStage = do
     mparse <- gets parseResult
-    case mparse >>= either (const Nothing) Just of
+    case fst <$> mparse of
         Nothing -> return ()
         Just ast -> modify $ \r -> r{semanticResult = Just $ runAllPasses ast}
