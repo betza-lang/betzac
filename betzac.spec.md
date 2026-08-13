@@ -226,6 +226,8 @@ A label that is not reachable by this definition is unreachable, even if some ot
 
 2.4.26.1 - Warnings for ignored definitions originating from the imported scope will be suppressed when the selected definition is part of an override directive.
 
+2.4.26.2 - If the `-Wdirective` flag is set, `betzac` will produce a warning log with cause `unnecessary override` for a definition that is part of an `override` directive whose selected status (cf. 2.4.24) would be unaffected if it were treated as a plain (non-override) definition instead — i.e. no other candidate exists for the same label, or none that would otherwise have outranked it on position alone.
+
 ---
 
 ### 2.5 Compilation Data
@@ -328,7 +330,7 @@ The main function of `betzac` is to compile betza files into betza objects. This
 
 2.6.6 - A `-Wunused` flag may be passed to `betzac` to produce warning logs when a statement is ignored during compilation. This flag has specifier `unused`.
 
-2.6.7 - A `-Wdirective` flag may be passed to `betzac` to produce warning logs when a duplicate directive is identified during compilation. This flag has specifier `directive`.
+2.6.7 - A `-Wdirective` flag may be passed to `betzac` to produce warning logs related to directive usage during compilation — currently duplicate directives (cf. 2.4.8.1, 2.4.20.1) and unnecessary overrides (cf. 2.4.26.2). This flag has specifier `directive`.
 
 2.6.8 - A `-Wlang` flag may be passed to `betzac` to produce warning logs when a non fatal betza language issue is detected (cf. [Section 3](#3-betza-expressions)). This flag has specifier `lang`.
 

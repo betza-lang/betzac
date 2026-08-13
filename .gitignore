@@ -2,6 +2,7 @@
 dist-newstyle/
 .vscode/
 *~
+TODO
 
 # Test files
 *.betza
