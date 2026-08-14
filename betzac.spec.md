@@ -102,12 +102,11 @@ All following requirements are in relation to the `betzac` system. Unless otherw
 
 ### 2.3 Statements
 
-2.3.1 - A well-formed statement will be of one of the four (4) following forms:
+2.3.1 - A well-formed statement will be of one of the three (3) following forms:
 
 1. `label=expression;` (expression assignment)
 2. `label=alias;` (alias)
 3. `label;` (label resolving)
-4. `expression;` (anonymous expression)
 
 where `label` and `alias` are any valid labels and `expression` is any valid expression (cf. [Section 3](#3-betza-expressions)).
 
@@ -126,9 +125,9 @@ In the `:value:` form, `value` is a nonempty string of latin alphanumeric charac
 
 2.3.6 - Whitespace characters that appear outside of a label (if applicable), including standard spaces, newlines, carriage returns, tabulations, and EOF will be ignored by `betzac` when parsing a statement.
 
-2.3.7 - `betzac` will ignore label resolving, resp. anonymous expression statements (cf. 2.3.1) if they are not part of a directive.
+2.3.7 - `betzac` will ignore label resolving statements (cf. 2.3.1) if they are not part of a directive.
 
-2.3.7.1 - If the `-Wunused` flag is set, a warning log will be produced with cause `unused label`, resp. `unused expression`.
+2.3.7.1 - If the `-Wunused` flag is set, a warning log will be produced with cause `unused label`.
 
 2.3.8 - If the `-Wunused` flag is set, `betzac` will produce a warning log with cause `unused label` for every label of the local scope that is unreachable from the exported scope (cf. 2.3.9), regardless of whether that label's statement is an expression assignment or an alias.
 
@@ -158,8 +157,6 @@ A label that is not reachable by this definition is unreachable, even if some ot
 2.4.5 - An `export` directive will expose a label to other source files.
 
 2.4.6 - If the exported statement has a label, that label will be exposed.
-
-2.4.7 - If the exported statement is an anonymous expression, it will be exposed with label `:expression:` where `expression` is the statement’s expression.
 
 2.4.8 - An `export` directive whose statement has a label which has already been exported from the current file will be ignored by `betzac`.
 
@@ -513,9 +510,7 @@ We present a grammar for betzac semantics (without comments) in Backus-Naur form
 
 <override-arg> ::= <betza-stmt> | <export-directive> | <using-directive>
 
-<betza-stmt> ::= <label> "=" <betza-expr> ";" | <betza-expr> ";"
+<betza-stmt> ::= <label> "=" <betza-expr> ";" | <label> ";"
 ```
 
 We will ignore comments (which start with `"#"` and and with `"\n"` or `"EOF"`) either as a preprocessing step or by modifying the above grammar.
-
-Note that all statement types described in [Section 2.3](#23-statements) can be realized as `<betza-stmt>` where `<betza-expr>` may reduce to `<label>`.

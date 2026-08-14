@@ -1,6 +1,7 @@
 module Betzac.Compilation.Label.Resolution (resolveLabelBody) where
 
 import Betzac.AST
+import Betzac.AST.Utils (exprOf)
 import Betzac.Compilation.Context (ExportedDef (edStmt), ResolvedDef (..))
 import Betzac.Compilation.Label.Scope
 import Betzac.Diagnostic
@@ -35,7 +36,4 @@ resolveAtomExpr eff file trail (From lbl _) =
             Just (ResolvedDef from _) | from /= file -> [] -- imported: not our problem
             Just (ResolvedDef _ def)
                 | name `elem` trail -> [mkProblem Error (CircularLabel $ dropWhile (/= name) trail ++ [name]) $ getSpan lbl]
-                | otherwise -> resolveLabelBody' eff file (trail ++ [name]) $ exprOf $ edStmt def
-  where
-    exprOf (Assign _ e _) = e
-    exprOf (Anonymous e _) = e
+                | otherwise -> maybe [] (resolveLabelBody' eff file (trail ++ [name])) $ exprOf $ edStmt def

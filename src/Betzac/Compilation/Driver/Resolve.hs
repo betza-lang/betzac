@@ -50,12 +50,11 @@ They're lifted by logProblems, which never halts the chain.
 resolveFileStage :: FilePath -> CompilationContext -> Stage (Map.Map String ExportedDef, Map.Map String ResolvedDef)
 resolveFileStage path ctx1 = do
     let entry1 = ccFiles ctx1 Map.! path
-        src = sourceText $ fePipeline entry1
         prog = maybe [] fst (parseResult $ fePipeline entry1)
 
-        (exported, exportProbs) = exportedScope src prog
+        (exported, exportProbs) = exportedScope prog
         exportedMap = Map.fromList [(edLabel d, d) | d <- exported]
-        localCands = localDefs src prog
+        localCands = localDefs prog
 
         depsInfo =
             [ (dp, dp `elem` feOverrideUsingDeps entry1, depExported dp)

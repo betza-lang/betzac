@@ -44,7 +44,7 @@ unparseFilePath f = (\c -> if c == '/' then '.' else c) <$> f
 
 unparseStmt :: BetzaStmt Stripped -> [B.Token]
 unparseStmt (Assign l e _) = unparseLabel l : B.TokAssign : unparseExpr e
-unparseStmt (Anonymous e _) = unparseExpr e
+unparseStmt (LabelRef l _) = [unparseLabel l]
 
 unparseLabel :: Label Stripped -> B.Token
 unparseLabel (Upper c _) = B.TokAtom c
@@ -285,7 +285,7 @@ genExpr = BetzaExpr <$> genChain <*> genVoid
 genStmt :: Gen (BetzaStmt Stripped)
 genStmt =
     Gen.choice
-        [ Anonymous <$> genExpr <*> genVoid
+        [ LabelRef <$> genLabel <*> genVoid
         , Assign <$> genLabel <*> genExpr <*> genVoid
         ]
 
@@ -329,8 +329,8 @@ isBare :: (Directive p) -> Bool
 isBare (Bare _ _) = True; isBare _ = False
 isAssign :: (BetzaStmt p) -> Bool
 isAssign (Assign _ _ _) = True; isAssign _ = False
-isAnonymous :: (BetzaStmt p) -> Bool
-isAnonymous (Anonymous _ _) = True; isAnonymous _ = False
+isLabelRef :: (BetzaStmt p) -> Bool
+isLabelRef (LabelRef _ _) = True; isLabelRef _ = False
 isSequence :: (ChainKind p) -> Bool
 isSequence (Sequence _) = True; isSequence _ = False
 
@@ -427,7 +427,7 @@ anyInProg predicate = any (maybe False predicate . exprOf)
     exprOfDirective (Export s _) = exprOfStmt s
     exprOfDirective (Using _ _) = Nothing
     exprOfStmt (Assign _ e _) = Just e
-    exprOfStmt (Anonymous e _) = Just e
+    exprOfStmt (LabelRef _ _) = Nothing
 
 -- props
 
@@ -459,7 +459,7 @@ prop_parseUndoesUnparse = do
 
     -- stmt
     classify "has Assign" $ any (hasStmt isAssign) prog
-    classify "has Anonymous" $ any (hasStmt isAnonymous) prog
+    classify "has LabelRef" $ any (hasStmt isLabelRef) prog
 
     -- chain structure
     classify "has chain leg" $ anyInProg hasChainLeg prog

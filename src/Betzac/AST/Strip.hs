@@ -23,7 +23,7 @@ instance Extensible Directive where
 
 instance Extensible BetzaStmt where
     strip (Assign l e _) = Assign (strip l) (strip e) ()
-    strip (Anonymous e _) = Anonymous (strip e) ()
+    strip (LabelRef l _) = LabelRef (strip l) ()
 
 instance Extensible BetzaExpr where
     strip (BetzaExpr c _) = BetzaExpr (strip c) ()

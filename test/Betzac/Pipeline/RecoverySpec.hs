@@ -71,12 +71,12 @@ spec = describe "Pipeline recovery" $ do
                     semanticResult pr `shouldSatisfy` isJust
 
         it "repairs a statement with a lexer-corrupted character instead of dropping it, leaving its own ';' for the parser" $
-            case fromScratch "<test>" "A;\nfW~;\nB;\n" of
+            case fromScratch "<test>" "A;\nX~;\nB;\n" of
                 Left e -> expectationFailure (show e)
                 Right pr -> do
-                    -- "fW~;" recovers to the valid statement "fW;" once the bad
+                    -- "X~;" recovers to the valid statement "X;" once the bad
                     -- character is skipped without swallowing its own ';' — so
-                    -- all three statements (A;, fW;, B;) survive.
+                    -- all three statements (A;, X;, B;) survive.
                     fmap (length . fst) (parseResult pr) `shouldBe` Just 3
                     fmap (isJust . snd) (lexResult pr) `shouldBe` Just True
 
@@ -88,7 +88,7 @@ spec = describe "Pipeline recovery" $ do
                     fmap (isJust . snd) (lexResult pr) `shouldBe` Just True
 
         it "leaves a clean file with no recovered errors and a semantic pass that runs" $
-            case fromScratch "<test>" "fW;\n" of
+            case fromScratch "<test>" "X = fW;\n" of
                 Left e -> expectationFailure (show e)
                 Right pr -> do
                     hadAnyRecoveredError pr `shouldBe` False

@@ -13,7 +13,7 @@ module Betzac.AST.Types (
     XExport,
     XBare,
     XAssign,
-    XAnonymous,
+    XLabelRef,
     XBetzaExpr,
     XChainExpr,
     XChainLeg,
@@ -100,7 +100,7 @@ type family XUsing (p :: Type) :: Type
 type family XExport (p :: Type) :: Type
 type family XBare (p :: Type) :: Type
 type family XAssign (p :: Type) :: Type
-type family XAnonymous (p :: Type) :: Type
+type family XLabelRef (p :: Type) :: Type
 
 -- Expression level
 type family XBetzaExpr (p :: Type) :: Type
@@ -166,7 +166,7 @@ data Directive p
 
 data BetzaStmt p
     = Assign (Label p) (BetzaExpr p) (XAssign p)
-    | Anonymous (BetzaExpr p) (XAnonymous p)
+    | LabelRef (Label p) (XLabelRef p)
 
 data BetzaExpr p = BetzaExpr (ChainExpr p) (XBetzaExpr p)
 
@@ -262,7 +262,7 @@ type EqX p =
     , Eq (XExport p)
     , Eq (XBare p)
     , Eq (XAssign p)
-    , Eq (XAnonymous p)
+    , Eq (XLabelRef p)
     , Eq (XBetzaExpr p)
     , Eq (XChainExpr p)
     , Eq (XChainLeg p)
@@ -338,7 +338,7 @@ type ShowX p =
     , Show (XExport p)
     , Show (XBare p)
     , Show (XAssign p)
-    , Show (XAnonymous p)
+    , Show (XLabelRef p)
     , Show (XBetzaExpr p)
     , Show (XChainExpr p)
     , Show (XChainLeg p)
@@ -416,7 +416,7 @@ type DataX p =
     , Data (XExport p)
     , Data (XBare p)
     , Data (XAssign p)
-    , Data (XAnonymous p)
+    , Data (XLabelRef p)
     , Data (XBetzaExpr p)
     , Data (XChainExpr p)
     , Data (XChainLeg p)
@@ -493,7 +493,7 @@ type SpanX p =
     , HasSpan (XExport p)
     , HasSpan (XBare p)
     , HasSpan (XAssign p)
-    , HasSpan (XAnonymous p)
+    , HasSpan (XLabelRef p)
     , HasSpan (XBetzaExpr p)
     , HasSpan (XChainExpr p)
     , HasSpan (XChainLeg p)
@@ -550,7 +550,7 @@ instance (SpanX p) => HasSpan (Directive p) where
 
 instance (SpanX p) => HasSpan (BetzaStmt p) where
     getSpan (Assign _ _ ext) = getSpan ext
-    getSpan (Anonymous _ ext) = getSpan ext
+    getSpan (LabelRef _ ext) = getSpan ext
 
 instance (SpanX p) => HasSpan (BetzaExpr p) where
     getSpan (BetzaExpr _ ext) = getSpan ext

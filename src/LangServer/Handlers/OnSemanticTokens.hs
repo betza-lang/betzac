@@ -114,7 +114,7 @@ assignLabelOfDirective (Using _ _) = Nothing
 
 assignLabelOfStmt :: BetzaStmt Ps -> Maybe (Label Ps)
 assignLabelOfStmt (Assign lbl _ _) = Just lbl
-assignLabelOfStmt (Anonymous _ _) = Nothing
+assignLabelOfStmt (LabelRef _ _) = Nothing
 
 {- | A token spanning a whole (single-line) node. Everything here except
 keywords/labels (which have own narrower helpers): directions, behaviours,

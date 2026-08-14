@@ -66,7 +66,6 @@ references, system failures) and job-level info logs.
 -}
 specifierOf :: Sem.SemanticProblemKind -> Maybe Wspecifier
 specifierOf (Sem.UnusedLabel _) = Just Wunused
-specifierOf Sem.UnusedExpression = Just Wunused
 specifierOf Sem.DuplicateLabel = Just Wunused
 specifierOf Sem.DuplicateDirective = Just Wdirective
 specifierOf _ = Nothing

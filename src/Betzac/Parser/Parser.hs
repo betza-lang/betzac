@@ -138,9 +138,9 @@ parseExport :: Parser (B.Directive Ps)
 parseExport = spanning $ B.Export <$> (tok B.TokExport *> parseStmt)
 
 parseStmt :: Parser (B.BetzaStmt Ps)
-parseStmt = spanning $ try parseAssign <|> parseAnonymous
+parseStmt = spanning $ try parseAssign <|> parseLabelRef
   where
-    parseAnonymous = B.Anonymous <$> parseExpr
+    parseLabelRef = B.LabelRef <$> parseLabel
     parseAssign = B.Assign <$> parseLabel <* tok B.TokAssign <*> parseExpr
 
 parseExpr :: Parser (B.BetzaExpr Ps)

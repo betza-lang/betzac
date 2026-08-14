@@ -18,4 +18,4 @@ checkLabels eff exported file = runStage_ $ do
     stage () (checkDeadLabels eff exported file)
   where
     locals = [(name, def) | (name, ResolvedDef from def) <- Map.toList eff, from == file]
-    correctnessProbs = concatMap (\(name, def) -> resolveLabelBody eff file name (exprOf $ edStmt def)) locals
+    correctnessProbs = concatMap (\(name, def) -> maybe [] (resolveLabelBody eff file name) (exprOf $ edStmt def)) locals

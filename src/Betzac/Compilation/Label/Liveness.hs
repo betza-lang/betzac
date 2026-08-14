@@ -21,7 +21,7 @@ checkDeadLabels eff exported file =
     ]
   where
     roots = Map.keysSet exported -- exported names are live by definition
-    live = foldl' (\l def -> walkExpr eff file l $ exprOf $ edStmt def) roots $ Map.elems exported
+    live = foldl' (\l def -> maybe l (walkExpr eff file l) (exprOf $ edStmt def)) roots $ Map.elems exported
 
 walkExpr :: LabelTable ResolvedDef -> FilePath -> Set.Set Labelling -> BetzaExpr Ps -> Set.Set Labelling
 walkExpr eff file live (BetzaExpr ce _) = walkChainExpr live ce
@@ -41,4 +41,4 @@ walkAtomExpr eff file live (From lbl _) =
             Just (ResolvedDef from _) | from /= file -> live -- imported, so cannot be considered dead in this file
             Just (ResolvedDef _ def)
                 | name `Set.member` live -> live
-                | otherwise -> walkExpr eff file (Set.insert name live) (exprOf $ edStmt def)
+                | otherwise -> maybe live (walkExpr eff file (Set.insert name live)) (exprOf $ edStmt def)

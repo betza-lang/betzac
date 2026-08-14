@@ -1,7 +1,9 @@
 module Betzac.AST.Utils (exprOf) where
 
-import Betzac.AST.Types (BetzaExpr, BetzaStmt (Anonymous, Assign))
+import Betzac.AST.Types (BetzaExpr, BetzaStmt (Assign, LabelRef))
 
-exprOf :: BetzaStmt p -> BetzaExpr p
-exprOf (Assign _ e _) = e
-exprOf (Anonymous e _) = e
+-- | The expression a statement defines, if any — a bare label reference (@label;@)
+-- doesn't introduce one of its own.
+exprOf :: BetzaStmt p -> Maybe (BetzaExpr p)
+exprOf (Assign _ e _) = Just e
+exprOf (LabelRef _ _) = Nothing

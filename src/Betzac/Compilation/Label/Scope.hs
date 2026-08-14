@@ -13,23 +13,15 @@ import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
-import Data.Text (Text)
-import qualified Data.Text as T
 
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (
-    AtomExpr (From),
-    BetzaExpr (BetzaExpr),
     BetzaProgram,
     BetzaStmt (..),
-    ChainExpr (ChainExpr),
     Directive (..),
-    ExponentExpr (ExponentExpr),
     Label (..),
     Labelling,
-    ModifierExpr (ModifierExpr),
     QualifiedStmt (..),
-    UnionExpr (UnionExpr),
  )
 import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..))
 import Betzac.Diagnostic (
@@ -38,13 +30,11 @@ import Betzac.Diagnostic (
     Severity (Error, Warning),
     mkProblem,
  )
-import Betzac.Span (HasSpan (..), Span (..))
-import Text.Megaparsec.Pos (SourcePos (..), unPos)
+import Betzac.Span (HasSpan (..))
 
 -- Note: this module resolves which definition wins per label. It does not yet track
--- whether a label/expression/using target is ever referenced, so unused-label,
--- unused-expression, and unused-file detection are not implemented here — planned as
--- follow-up work.
+-- whether a label/using target is ever referenced, so unused-label and unused-file
+-- detection are not implemented here — planned as follow-up work.
 
 type LabelTable a = Map.Map Labelling a
 
@@ -53,28 +43,6 @@ labelText :: Label p -> Labelling
 labelText (Upper c _) = [c]
 labelText (Descriptor s _) = s
 labelText (Leaper m n _) = show m ++ "," ++ show n
-
-{- | The literal source text of an expression, sliced via its span — used to build the
-synthetic label for an exported anonymous statement.
--}
-exprSourceText :: Text -> BetzaExpr Ps -> String
-exprSourceText src expr = T.unpack $ sourceSlice src $ getSpan expr
-
-sourceSlice :: Text -> Span -> Text
-sourceSlice _ Generated = ""
-sourceSlice src (RealSpan s e) =
-    let ls = T.lines src
-        (sl, sc) = (unPos (sourceLine s) - 1, unPos (sourceColumn s) - 1)
-        (el, ec) = (unPos (sourceLine e) - 1, unPos (sourceColumn e) - 1)
-     in if sl == el
-            then T.take (ec - sc) (T.drop sc (ls !! sl))
-            else
-                T.intercalate
-                    "\n"
-                    ( T.drop sc (ls !! sl)
-                        : take (el - sl - 1) (drop (sl + 1) ls)
-                        ++ [T.take ec (ls !! el)]
-                    )
 
 {- | One statement in a file, tagged with whether it (or its directive) is wrapped in
 an override, and whether it's exported.
@@ -92,31 +60,25 @@ doesn't define anything new; it only points at a label defined elsewhere, so an
 export of one re-exposes that label rather than introducing a fresh definition.
 -}
 bareLabelRef :: BetzaStmt p -> Maybe (Label p)
-bareLabelRef (Anonymous (BetzaExpr (ChainExpr (UnionExpr (me :| []) _) Nothing _) _) _)
-    | ModifierExpr False [] (ExponentExpr (From lbl _) Nothing _) _ <- me =
-        Just lbl
+bareLabelRef (LabelRef lbl _) = Just lbl
 bareLabelRef _ = Nothing
 
 {- | The label a statement defines, if any. A bare label-resolving reference never
-defines anything (see 'bareLabelRef'). Any other anonymous expression only defines
-a (synthetic) label when exported; otherwise it's an ignored, unlabelled statement.
+defines anything (see 'bareLabelRef') — it only points at a label defined elsewhere.
 -}
-labelOf :: Text -> Bool -> BetzaStmt Ps -> Maybe String
-labelOf _ _ (Assign lbl _ _) = Just $ labelText lbl
-labelOf _ _ stmt@(Anonymous _ _) | Just _ <- bareLabelRef stmt = Nothing
-labelOf src True (Anonymous expr _) = Just $ exprSourceText src expr
-labelOf _ False (Anonymous _ _) = Nothing
+labelOf :: BetzaStmt Ps -> Maybe String
+labelOf (Assign lbl _ _) = Just $ labelText lbl
+labelOf (LabelRef _ _) = Nothing
 
-{- | All Assign-defined (or exported-anonymous) labels within a single file,
-independent of whether they are exported — the candidate pool for that file's own
-local scope.
+{- | All Assign-defined labels within a single file, independent of whether they are
+exported — the candidate pool for that file's own local scope.
 -}
-localDefs :: Text -> BetzaProgram Ps -> [ExportedDef]
-localDefs src prog = mapMaybe (uncurry build) (zip [0 ..] prog)
+localDefs :: BetzaProgram Ps -> [ExportedDef]
+localDefs prog = mapMaybe (uncurry build) (zip [0 ..] prog)
   where
     build i qs = do
-        (stmt, isOverride, isExported) <- statementOf qs
-        lbl <- labelOf src isExported stmt
+        (stmt, isOverride, _) <- statementOf qs
+        lbl <- labelOf stmt
         return $ ExportedDef lbl stmt isOverride i
 
 {- | One candidate definition contending for a label, tagged with its origin file, its
@@ -157,12 +119,12 @@ exposes whatever locally wins for that label, rather than exporting the referenc
 statement itself; if the label has no local definition at all, it's an unresolved
 label.
 -}
-exportedScope :: Text -> BetzaProgram Ps -> ([ExportedDef], [SemanticProblem])
-exportedScope src prog =
+exportedScope :: BetzaProgram Ps -> ([ExportedDef], [SemanticProblem])
+exportedScope prog =
     let (defs, dupProbs) = Map.foldr collect ([], []) grouped
      in (defs, dupProbs ++ reverse refProbs)
   where
-    locals = localDefs src prog
+    locals = localDefs prog
 
     (entries, refProbs) = foldl' step ([], []) (zip [0 :: Int ..] prog)
 
@@ -171,7 +133,7 @@ exportedScope src prog =
             Just lbl -> case localWinner locals (labelText lbl) of
                 Just def -> ((edLabel def, def) : accEntries, accProbs)
                 Nothing -> (accEntries, mkProblem Error (UnresolvedLabel) (getSpan stmt) : accProbs)
-            Nothing -> case labelOf src True stmt of
+            Nothing -> case labelOf stmt of
                 Just lbl -> ((lbl, ExportedDef lbl stmt isOverride i) : accEntries, accProbs)
                 Nothing -> (accEntries, accProbs)
         _ -> (accEntries, accProbs)

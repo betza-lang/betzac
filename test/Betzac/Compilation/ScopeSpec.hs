@@ -35,14 +35,14 @@ spec = describe "Compilation.Scope" $ do
     describe "exportedScope" $ do
         it "yields one definition per exported label" $ do
             let prog = parseProgram "export A = fW;\nexport B = fF;\n"
-                (defs, probs) = exportedScope "export A = fW;\nexport B = fF;\n" prog
+                (defs, probs) = exportedScope prog
             map edLabel defs `shouldBe` ["A", "B"]
             length probs `shouldBe` 0
 
         it "resolves a bare label-resolving export against the local winner, not a synthetic label" $ do
             let src = "override N = fA;\nN = fW;\nexport N;\n"
                 prog = parseProgram src
-                (defs, probs) = exportedScope src prog
+                (defs, probs) = exportedScope prog
             map edLabel defs `shouldBe` ["N"]
             map edIsOverride defs `shouldBe` [True]
             length probs `shouldBe` 0
@@ -50,14 +50,14 @@ spec = describe "Compilation.Scope" $ do
         it "reports an unresolved label for a bare export with no local definition" $ do
             let src = "export Q;\n"
                 prog = parseProgram src
-                (defs, probs) = exportedScope src prog
+                (defs, probs) = exportedScope prog
             length defs `shouldBe` 0
             map (causeOf . semKind) probs `shouldBe` [causeOf UnresolvedLabel]
 
         it "keeps only the highest-priority definition for a same-label export repeated in one file, warning on the rest" $ do
             let src = "export A = fW;\noverride export A = fF;\n"
                 prog = parseProgram src
-                (defs, probs) = exportedScope src prog
+                (defs, probs) = exportedScope prog
             map edIsOverride defs `shouldBe` [True]
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateDirective]
 
@@ -65,7 +65,7 @@ spec = describe "Compilation.Scope" $ do
         it "prefers override over plain regardless of lexical order" $ do
             let src = "A = fW;\noverride A = fF;\n"
                 prog = parseProgram src
-                locals = localDefs src prog
+                locals = localDefs prog
                 (resolved, probs) = effectiveScope "<test>" locals []
             fmap (edIsOverride . rdDef) (Map.lookup "A" resolved) `shouldBe` Just True
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateLabel]
@@ -73,18 +73,18 @@ spec = describe "Compilation.Scope" $ do
         it "picks the earliest definition among equal precedence" $ do
             let src = "A = fW;\nA = fF;\n"
                 prog = parseProgram src
-                locals = localDefs src prog
+                locals = localDefs prog
                 (resolved, _probs) = effectiveScope "<test>" locals []
             fmap (edOrder . rdDef) (Map.lookup "A" resolved) `shouldBe` Just 0
 
         it "promotes every export from an overriding using to override-class" $ do
             let depSrc = "export N = fW;\n"
                 depProg = parseProgram depSrc
-                (depExported, _) = exportedScope depSrc depProg
+                (depExported, _) = exportedScope depProg
                 depExportedMap = Map.fromList [(edLabel d, d) | d <- depExported]
                 src = "N = fF;\n"
                 prog = parseProgram src
-                locals = localDefs src prog
+                locals = localDefs prog
                 (resolved, probs) = effectiveScope "main" locals [("dep", True, depExportedMap)]
             fmap (rdFrom) (Map.lookup "N" resolved) `shouldBe` Just "dep"
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateLabel]
@@ -92,11 +92,11 @@ spec = describe "Compilation.Scope" $ do
         it "suppresses the duplicate-label warning for an imported loser when the winner is override-class" $ do
             let depSrc = "export N = fW;\n"
                 depProg = parseProgram depSrc
-                (depExported, _) = exportedScope depSrc depProg
+                (depExported, _) = exportedScope depProg
                 depExportedMap = Map.fromList [(edLabel d, d) | d <- depExported]
                 src = "override N = fF;\n"
                 prog = parseProgram src
-                locals = localDefs src prog
+                locals = localDefs prog
                 (resolved, probs) = effectiveScope "main" locals [("dep", False, depExportedMap)]
             fmap (rdFrom) (Map.lookup "N" resolved) `shouldBe` Just "main"
             length probs `shouldBe` 0
@@ -108,7 +108,7 @@ spec = describe "Compilation.Scope" $ do
                 let stmts = [(if ov then "override " else "") <> "A = fW;\n" | ov <- flags]
                     src = T.concat stmts
                     prog = parseProgram src
-                    locals = localDefs src prog
+                    locals = localDefs prog
                     (resolved, probs) = effectiveScope "<test>" locals []
                     expectedWinnerIx = case [i | (i, True) <- zip [0 :: Int ..] flags] of
                         (i : _) -> i

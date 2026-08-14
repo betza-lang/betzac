@@ -21,7 +21,7 @@ instance Summarizable (Directive p) where
 
 instance Summarizable (BetzaStmt p) where
     summarize (Assign _ _ _) = "Assign :: BetzaStmt"
-    summarize (Anonymous _ _) = "Anonymous :: BetzaStmt"
+    summarize (LabelRef _ _) = "LabelRef :: BetzaStmt"
 
 instance Summarizable (BetzaExpr p) where
     summarize = const "BetzaExpr"

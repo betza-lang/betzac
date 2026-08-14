@@ -39,7 +39,7 @@ filePathNode = leafNode
 stmtNode :: BetzaStmt Ps -> DotNode
 stmtNode = \case
     n@(Assign l e _) -> myNode n [labelNode l, exprNode e]
-    n@(Anonymous e _) -> myNode n [exprNode e]
+    n@(LabelRef l _) -> myNode n [labelNode l]
   where
     myNode = (midNode 3) . summarize
 
