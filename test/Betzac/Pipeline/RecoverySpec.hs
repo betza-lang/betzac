@@ -10,9 +10,11 @@ import Betzac.Pipeline (PipelineResult (..), fromScratch)
 import Lexer.LexerQC (unlex)
 import Parser.ParserHedgehog (genProgram, unparse)
 
+import Text.Megaparsec (errorBundlePretty)
+
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
-import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe, shouldSatisfy)
+import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe, shouldContain, shouldSatisfy)
 import Test.Hspec.Hedgehog (hedgehog)
 
 -- | A statement that fails during lexing itself (an unrecognized character) —
@@ -93,3 +95,10 @@ spec = describe "Pipeline recovery" $ do
                 Right pr -> do
                     hadAnyRecoveredError pr `shouldBe` False
                     semanticResult pr `shouldSatisfy` isJust
+
+        it "reports a malformed assignment's own error, not a misleading \"expecting ';'\" from backtracking into a bare label reference" $
+            case fromScratch "<test>" ":hello: = f;\n" of
+                Left e -> expectationFailure (show e)
+                Right pr -> case parseResult pr of
+                    Just (_, Just bundle) -> errorBundlePretty bundle `shouldContain` "atom"
+                    _ -> expectationFailure "expected a recorded parse error"

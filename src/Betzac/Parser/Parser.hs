@@ -137,11 +137,18 @@ toRelativePath = map (\c -> if c == '.' then '/' else c)
 parseExport :: Parser (B.Directive Ps)
 parseExport = spanning $ B.Export <$> (tok B.TokExport *> parseStmt)
 
+{- | A label, either alone (a bare reference) or followed by @= expr@ (an
+assignment). Parsing the label once up front, rather than wrapping a full
+@label = expr@ attempt in 'try', means a real mistake inside 'expr' (e.g. a
+dangling modifier with no atom after it) surfaces as its own specific error at
+the point it actually occurs, instead of being silently discarded by backtracking
+into "well, maybe this was just a bare reference" and reporting a confusing
+"expecting ';'" back at the '='.
+-}
 parseStmt :: Parser (B.BetzaStmt Ps)
-parseStmt = spanning $ try parseAssign <|> parseLabelRef
+parseStmt = spanning $ parseLabel >>= continue
   where
-    parseLabelRef = B.LabelRef <$> parseLabel
-    parseAssign = B.Assign <$> parseLabel <* tok B.TokAssign <*> parseExpr
+    continue lbl = (B.Assign lbl <$> (tok B.TokAssign *> parseExpr)) <|> pure (B.LabelRef lbl)
 
 parseExpr :: Parser (B.BetzaExpr Ps)
 parseExpr = (spanning $ B.BetzaExpr <$> parseChainExpr) <?> "expression"
