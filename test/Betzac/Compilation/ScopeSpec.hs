@@ -9,9 +9,9 @@ import qualified Data.Text as T
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaProgram)
 import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..))
-import Betzac.Compilation.Label.Scope (effectiveScope, exportedScope, localDefs)
+import Betzac.Compilation.Label.Scope (checkLabelRefs, effectiveScope, exportedScope, localDefs)
 import Betzac.Pipeline (PipelineResult (parseResult), fromScratch)
-import Betzac.Diagnostic (SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel), causeOf, semKind)
+import Betzac.Diagnostic (SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel, UnusedLabel), causeOf, semKind)
 
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -60,6 +60,28 @@ spec = describe "Compilation.Scope" $ do
                 (defs, probs) = exportedScope prog
             map edIsOverride defs `shouldBe` [True]
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateDirective]
+
+    describe "checkLabelRefs" $ do
+        it "flags an unresolved label for an unexported bare reference to an undefined label" $ do
+            let src = "Q;\n"
+                prog = parseProgram src
+                (eff, _) = effectiveScope "<test>" (localDefs prog) []
+                probs = checkLabelRefs eff prog
+            map (causeOf . semKind) probs `shouldBe` [causeOf UnresolvedLabel]
+
+        it "flags an unexported bare reference to a label that does resolve as unused" $ do
+            let src = "W = :1,1:;\nW;\n"
+                prog = parseProgram src
+                (eff, _) = effectiveScope "<test>" (localDefs prog) []
+                probs = checkLabelRefs eff prog
+            map (causeOf . semKind) probs `shouldBe` [causeOf (UnusedLabel "W")]
+
+        it "does not flag an exported bare reference, since exportedScope handles those instead" $ do
+            let src = "W = :1,1:;\nexport W;\n"
+                prog = parseProgram src
+                (eff, _) = effectiveScope "<test>" (localDefs prog) []
+                probs = checkLabelRefs eff prog
+            length probs `shouldBe` 0
 
     describe "effectiveScope" $ do
         it "prefers override over plain regardless of lexical order" $ do

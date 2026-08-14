@@ -7,6 +7,7 @@ module Betzac.Compilation.Label.Scope (
     exportedScope,
     localDefs,
     effectiveScope,
+    checkLabelRefs,
 ) where
 
 import Data.List (sortOn)
@@ -26,7 +27,7 @@ import Betzac.AST.Types (
 import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..))
 import Betzac.Diagnostic (
     SemanticProblem,
-    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel),
+    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel, UnusedLabel),
     Severity (Error, Warning),
     mkProblem,
  )
@@ -149,6 +150,26 @@ exportedScope prog =
          in (candDef winner : defs, probs ++ map dupWarning losers)
 
     dupWarning c = mkProblem Warning DuplicateDirective (getSpan (edStmt (candDef c)))
+
+{- | Diagnostics for every *unexported* bare label-resolving reference statement in a
+file (@label;@ with no @export@): checked against the same effective scope as any
+other reference, so a label that resolves nowhere is 'UnresolvedLabel' just as it
+would be from inside any other statement's body. Referencing a label from an
+unexported, unlabelled statement has no observable effect on the rest of the file, so
+one that does resolve is always reported 'UnusedLabel' instead. An exported bare
+reference never reaches here — 'exportedScope' re-exports the local winner for that
+label rather than treating the reference statement itself as a target of these checks.
+-}
+checkLabelRefs :: LabelTable ResolvedDef -> BetzaProgram Ps -> [SemanticProblem]
+checkLabelRefs eff prog =
+    [ problem
+    | qs <- prog
+    , Just (stmt, _, False) <- [statementOf qs]
+    , Just lbl <- [bareLabelRef stmt]
+    , let problem = case Map.lookup (labelText lbl) eff of
+            Nothing -> mkProblem Error UnresolvedLabel (getSpan stmt)
+            Just _ -> mkProblem Warning (UnusedLabel (labelText lbl)) (getSpan stmt)
+    ]
 
 {- | Resolve a file's effective scope: local statements plus each dependency's
 exported scope, picking exactly one definition per label by priority (override
