@@ -4,7 +4,7 @@ module Betzac.Lexer.Lexer (lexSource, runLexer) where
 
 import qualified Betzac.Alphabet.Expr as B
 import qualified Betzac.Alphabet.Stmt as B
-import Betzac.Located (Located (..))
+import Betzac.Located (Located (..), tokenVal)
 import qualified Betzac.Token as B
 
 import Betzac.Lexer.Core
@@ -50,11 +50,15 @@ toErrorBundle f src errs = case NE.nonEmpty errs of
             }
 
 {- | One token, best-effort: 'Right' on success; on failure, 'Left' the error
-after skipping input up to and including the next ';' (or eof, whichever comes
-first) — the same statement boundary the parser itself resyncs on.
+after skipping input up to (but not including) the next ';' -- *unless*
+'hasContent' says nothing has been lexed yet for the statement currently in
+progress, in which case there's nothing worth preserving and the ';' is
+consumed too (matching what 'recoverableStmt' in the parser would otherwise
+have to reject on its own as an empty statement, doubling up on the same
+underlying typo).
 -}
-recoverableToken :: Lexer (Either (ParseError String Void) (Located B.Token))
-recoverableToken =
+recoverableToken :: Bool -> Lexer (Either (ParseError String Void) (Located B.Token))
+recoverableToken hasContent =
     withRecovery
         (\e -> Left e <$ recover)
         (Right <$> (spanned lexToken' <* lexIgnore))
@@ -62,14 +66,21 @@ recoverableToken =
     lexToken' = lexDirective <|> lexToken
     recover = do
         _ <- takeWhileP (Just "recovery: skipped input") (/= B.stmtEnd)
-        _ <- optional (char B.stmtEnd)
-        lexIgnore
+        if hasContent
+            then return ()
+            else () <$ optional (char B.stmtEnd) <* lexIgnore
 
--- | 'spanned' wraps only 'lexToken'' (not the trailing 'lexIgnore') so a token's
--- captured span ends exactly at its own last character, not after whatever
--- whitespace/comment happens to follow it.
 lexSource :: Lexer [Either (ParseError String Void) (Located B.Token)]
-lexSource = lexIgnore *> manyTill recoverableToken (hidden eof)
+lexSource = lexIgnore *> go False
+  where
+    go :: Bool -> Lexer [Either (ParseError String Void) (Located B.Token)]
+    go hasContent =
+        ([] <$ hidden eof) <|> do
+            result <- recoverableToken hasContent
+            let hasContent' = case result of
+                    Right t -> tokenVal t /= B.TokEndStmt
+                    Left _ -> hasContent
+            (result :) <$> go hasContent'
 
 lexDirective :: Lexer B.Token
 lexDirective = lexExport <|> lexUsing <|> lexOverride <?> "directive keyword"

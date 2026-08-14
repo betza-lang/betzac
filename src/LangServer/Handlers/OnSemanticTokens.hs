@@ -53,54 +53,55 @@ collectTokens prog =
         ++ concatMap chainOperatorToken (universeOf prog :: [ChainOperator Ps])
         ++ labelTokens prog
 
--- | "override"/"export"/"using" don't have their own span-carrying node — each one's
--- extension field spans the *whole* directive it introduces, but the grammar
--- guarantees the keyword itself is exactly what starts that span.
+{- | "override"/"export"/"using" don't have their own span-carrying node — each one's
+extension field spans the *whole* directive it introduces, but the grammar
+guarantees the keyword itself is exactly what starts that span.
+-}
 keywordTokens :: QualifiedStmt Ps -> [SemanticTokenAbsolute]
-keywordTokens (Override d ext) = keywordAt (getSpan ext) "override" ++ directiveKeyword d
+keywordTokens o@(Override d _) = keywordAt (getSpan o) "override" ++ directiveKeyword d
 keywordTokens (Plain d _) = directiveKeyword d
 
 directiveKeyword :: Directive Ps -> [SemanticTokenAbsolute]
-directiveKeyword (Using _ ext) = keywordAt (getSpan ext) "using"
-directiveKeyword (Export _ ext) = keywordAt (getSpan ext) "export"
+directiveKeyword u@(Using _ _) = keywordAt (getSpan u) "using"
+directiveKeyword e@(Export _ _) = keywordAt (getSpan e) "export"
 directiveKeyword (Bare _ _) = []
 
 keywordAt :: Span -> String -> [SemanticTokenAbsolute]
 keywordAt (RealSpan s _) kw =
-    [tokenAt (unPos (sourceLine s)) (unPos (sourceColumn s)) (length kw) SemanticTokenTypes_Keyword []]
+    tokenAt
+        (unPos (sourceLine s))
+        (unPos (sourceColumn s))
+        (length kw)
+        SemanticTokenTypes_Keyword
+        []
 keywordAt Generated _ = []
 
-directionToken :: Direction Ps -> [SemanticTokenAbsolute]
-directionToken d = wholeToken (directionSpan d) SemanticTokenTypes_Operator []
+semanticToken :: (HasSpan a) => SemanticTokenTypes -> [SemanticTokenModifiers] -> a -> [SemanticTokenAbsolute]
+semanticToken semType semMods tok = wholeToken (getSpan tok) semType semMods
 
-directionSpan :: Direction Ps -> Span
-directionSpan (Forward x) = getSpan x
-directionSpan (Backward x) = getSpan x
-directionSpan (Leftward x) = getSpan x
-directionSpan (Rightward x) = getSpan x
-directionSpan (Sideway x) = getSpan x
-directionSpan (Vertically x) = getSpan x
-directionSpan (All x) = getSpan x
+directionToken :: Direction Ps -> [SemanticTokenAbsolute]
+directionToken = semanticToken SemanticTokenTypes_Modifier []
 
 behaviourToken :: Behaviour Ps -> [SemanticTokenAbsolute]
-behaviourToken (Behaviour _ _ x) = wholeToken (getSpan x) SemanticTokenTypes_Operator []
+behaviourToken = semanticToken SemanticTokenTypes_Modifier []
 
 chainOperatorToken :: ChainOperator Ps -> [SemanticTokenAbsolute]
-chainOperatorToken (ChainOperator _ _ x) = wholeToken (getSpan x) SemanticTokenTypes_Operator []
+chainOperatorToken = semanticToken SemanticTokenTypes_Operator []
 
-{- | Every label, tagged 'SemanticTokenModifiers_Definition' if it's the label being
-defined (the LHS of an assignment) and left untagged otherwise (a reference) —
-distinguished by span, since a definition's own label and a reference to it are
-never at the same position.
+{- | Every label, tagged SemanticTokenModifiers_Definition if it's the label being
+defined (the LHS of an assignment) and left untagged otherwise (a reference)
 -}
 labelTokens :: BetzaProgram Ps -> [SemanticTokenAbsolute]
 labelTokens prog = defTokens ++ refTokens
   where
     defs = [lbl | qs <- prog, Just lbl <- [assignLabelOf qs]]
-    defSpans = map labelSpan defs
+    defSpans = map getSpan defs
     defTokens = concatMap (labelToken [SemanticTokenModifiers_Definition]) defs
-    refs = [lbl | lbl <- universeOf prog, labelSpan lbl `notElem` defSpans]
+    refs = [lbl | lbl <- universeOf prog, getSpan lbl `notElem` defSpans]
     refTokens = concatMap (labelToken []) refs
+
+labelToken :: [SemanticTokenModifiers] -> Label Ps -> [SemanticTokenAbsolute]
+labelToken = semanticToken SemanticTokenTypes_Variable
 
 assignLabelOf :: QualifiedStmt Ps -> Maybe (Label Ps)
 assignLabelOf (Override d _) = assignLabelOfDirective d
@@ -115,25 +116,29 @@ assignLabelOfStmt :: BetzaStmt Ps -> Maybe (Label Ps)
 assignLabelOfStmt (Assign lbl _ _) = Just lbl
 assignLabelOfStmt (Anonymous _ _) = Nothing
 
-labelSpan :: Label Ps -> Span
-labelSpan (Upper _ x) = getSpan x
-labelSpan (Descriptor _ x) = getSpan x
-labelSpan (Leaper _ _ x) = getSpan x
-
-labelToken :: [SemanticTokenModifiers] -> Label Ps -> [SemanticTokenAbsolute]
-labelToken mods lbl = wholeToken (labelSpan lbl) SemanticTokenTypes_Variable mods
-
--- | A token spanning a whole (single-line) node — everything here except
--- keywords/labels (which have their own narrower helpers): directions, behaviours,
--- chain operators. Skips anything multi-line or zero-width rather than emit a
--- malformed token.
+{- | A token spanning a whole (single-line) node. Everything here except
+keywords/labels (which have own narrower helpers): directions, behaviours,
+chain operators. Skips anything multi-line or zero-width rather than emit a
+malformed token.
+-}
 wholeToken :: Span -> SemanticTokenTypes -> [SemanticTokenModifiers] -> [SemanticTokenAbsolute]
-wholeToken (RealSpan s e) ty mods
+wholeToken (RealSpan s e) semType semMods
     | sourceLine s == sourceLine e && unPos (sourceColumn e) > unPos (sourceColumn s) =
-        [tokenAt (unPos (sourceLine s)) (unPos (sourceColumn s)) (unPos (sourceColumn e) - unPos (sourceColumn s)) ty mods]
+        tokenAt
+            (unPos (sourceLine s))
+            (unPos (sourceColumn s))
+            (unPos (sourceColumn e) - unPos (sourceColumn s))
+            semType
+            semMods
     | otherwise = []
 wholeToken Generated _ _ = []
 
-tokenAt :: Int -> Int -> Int -> SemanticTokenTypes -> [SemanticTokenModifiers] -> SemanticTokenAbsolute
-tokenAt line col len ty mods =
-    SemanticTokenAbsolute (fromIntegral (line - 1)) (fromIntegral (col - 1)) (fromIntegral len) ty mods
+tokenAt :: Int -> Int -> Int -> SemanticTokenTypes -> [SemanticTokenModifiers] -> [SemanticTokenAbsolute]
+tokenAt line col len semType semMods =
+    [ SemanticTokenAbsolute
+        (fromIntegral (line - 1))
+        (fromIntegral (col - 1))
+        (fromIntegral len)
+        semType
+        semMods
+    ]

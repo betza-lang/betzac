@@ -70,11 +70,14 @@ spec = describe "Pipeline recovery" $ do
                     fmap fst (parseResult pr) `shouldBe` Just []
                     semanticResult pr `shouldSatisfy` isJust
 
-        it "recovers a lexer failure without derailing the statements around it" $
+        it "repairs a statement with a lexer-corrupted character instead of dropping it, leaving its own ';' for the parser" $
             case fromScratch "<test>" "A;\nfW~;\nB;\n" of
                 Left e -> expectationFailure (show e)
                 Right pr -> do
-                    fmap (length . fst) (parseResult pr) `shouldBe` Just 2
+                    -- "fW~;" recovers to the valid statement "fW;" once the bad
+                    -- character is skipped without swallowing its own ';' — so
+                    -- all three statements (A;, fW;, B;) survive.
+                    fmap (length . fst) (parseResult pr) `shouldBe` Just 3
                     fmap (isJust . snd) (lexResult pr) `shouldBe` Just True
 
         it "recovers from several consecutive corrupted statements in a row" $
