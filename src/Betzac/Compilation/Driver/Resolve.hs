@@ -44,16 +44,14 @@ resolveFile path ctx = case Map.lookup path $ ccFiles ctx of
              in ctx1{ccFiles = Map.insert path entry2 $ ccFiles ctx1}
 
 {- | The exported/effective scope computation for one file, as a single Stage
-sequence. exportedScope and effectiveScope are independent of each other and always run.
-They're lifted by logProblems, which never halts the chain.
+sequence, both lifted by logProblems (which never halts the chain). effectiveScope
+runs first — a bare re-export (@export A;@) resolves against the file's *effective*
+scope (local or pulled in via @using@), so exportedScope needs it already computed.
 -}
 resolveFileStage :: FilePath -> CompilationContext -> Stage (Map.Map String ExportedDef, Map.Map String ResolvedDef)
 resolveFileStage path ctx1 = do
     let entry1 = ccFiles ctx1 Map.! path
         prog = maybe [] fst (parseResult $ fePipeline entry1)
-
-        (exported, exportProbs) = exportedScope prog
-        exportedMap = Map.fromList [(edLabel d, d) | d <- exported]
         localCands = localDefs prog
 
         depsInfo =
@@ -63,6 +61,9 @@ resolveFileStage path ctx1 = do
         depExported dp = fromMaybe Map.empty $ feExported =<< Map.lookup dp (ccFiles ctx1)
 
         (effective, effectiveProbs) = effectiveScope path localCands depsInfo
+
+        (exported, exportProbs) = exportedScope effective prog
+        exportedMap = Map.fromList [(edLabel d, d) | d <- exported]
 
     logProblems exportProbs
     logProblems effectiveProbs

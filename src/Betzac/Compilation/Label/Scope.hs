@@ -104,35 +104,24 @@ resolvePriority cands = case sortOn (\c -> (candClass c, candOrder c)) (foldr (:
     (w : ls) -> (w, ls)
     [] -> error "resolvePriority: unreachable, NonEmpty is never empty"
 
-{- | The winning local definition for a label, by the same priority rule as
-'resolvePriority' — used to resolve a bare label-resolving export against the
-definition it refers to, rather than the (contentless) reference statement itself.
--}
-localWinner :: [ExportedDef] -> String -> Maybe ExportedDef
-localWinner locals lbl = case [d | d <- locals, edLabel d == lbl] of
-    [] -> Nothing
-    (d : ds) -> Just $ candDef $ fst $ resolvePriority $ fmap (\x -> Candidate "" x (classOf $ edIsOverride x) (0, edOrder x)) (d :| ds)
-
 {- | The labels a file exposes to other files via export. A same-label export repeated
 within one file yields only the highest-priority definition; the rest are ignored
 and warned as a duplicate directive. A bare label-resolving export (@export A;@)
-exposes whatever locally wins for that label, rather than exporting the reference
-statement itself; if the label has no local definition at all, it's an unresolved
-label.
+exposes whatever wins for that label in the file's effective scope — local or
+imported via @using@ — rather than exporting the reference statement itself; if the
+label doesn't resolve at all, it's an unresolved label.
 -}
-exportedScope :: BetzaProgram Ps -> ([ExportedDef], [SemanticProblem])
-exportedScope prog =
+exportedScope :: LabelTable ResolvedDef -> BetzaProgram Ps -> ([ExportedDef], [SemanticProblem])
+exportedScope eff prog =
     let (defs, dupProbs) = Map.foldr collect ([], []) grouped
      in (defs, dupProbs ++ reverse refProbs)
   where
-    locals = localDefs prog
-
     (entries, refProbs) = foldl' step ([], []) (zip [0 :: Int ..] prog)
 
     step (accEntries, accProbs) (i, qs) = case statementOf qs of
         Just (stmt, isOverride, True) -> case bareLabelRef stmt of
-            Just lbl -> case localWinner locals (labelText lbl) of
-                Just def -> ((edLabel def, def) : accEntries, accProbs)
+            Just lbl -> case Map.lookup (labelText lbl) eff of
+                Just (ResolvedDef _ def) -> ((edLabel def, def) : accEntries, accProbs)
                 Nothing -> (accEntries, mkProblem Error (UnresolvedLabel) (getSpan stmt) : accProbs)
             Nothing -> case labelOf stmt of
                 Just lbl -> ((lbl, ExportedDef lbl stmt isOverride i) : accEntries, accProbs)

@@ -35,29 +35,46 @@ spec = describe "Compilation.Scope" $ do
     describe "exportedScope" $ do
         it "yields one definition per exported label" $ do
             let prog = parseProgram "export A = fW;\nexport B = fF;\n"
-                (defs, probs) = exportedScope prog
+                eff = fst $ effectiveScope "<test>" (localDefs prog) []
+                (defs, probs) = exportedScope eff prog
             map edLabel defs `shouldBe` ["A", "B"]
             length probs `shouldBe` 0
 
-        it "resolves a bare label-resolving export against the local winner, not a synthetic label" $ do
+        it "resolves a bare label-resolving export against the effective winner, not a synthetic label" $ do
             let src = "override N = fA;\nN = fW;\nexport N;\n"
                 prog = parseProgram src
-                (defs, probs) = exportedScope prog
+                eff = fst $ effectiveScope "<test>" (localDefs prog) []
+                (defs, probs) = exportedScope eff prog
             map edLabel defs `shouldBe` ["N"]
             map edIsOverride defs `shouldBe` [True]
             length probs `shouldBe` 0
 
-        it "reports an unresolved label for a bare export with no local definition" $ do
+        it "resolves a bare label-resolving export against a label pulled in via using, not just local definitions" $ do
+            let depSrc = "export N = :2,1:;\n"
+                depProg = parseProgram depSrc
+                depEff = fst $ effectiveScope "dep" (localDefs depProg) []
+                (depExported, _) = exportedScope depEff depProg
+                depExportedMap = Map.fromList [(edLabel d, d) | d <- depExported]
+                src = "using dep;\nexport N;\n"
+                prog = parseProgram src
+                eff = fst $ effectiveScope "main" (localDefs prog) [("dep", False, depExportedMap)]
+                (defs, probs) = exportedScope eff prog
+            map edLabel defs `shouldBe` ["N"]
+            length probs `shouldBe` 0
+
+        it "reports an unresolved label for a bare export with no definition anywhere in scope" $ do
             let src = "export Q;\n"
                 prog = parseProgram src
-                (defs, probs) = exportedScope prog
+                eff = fst $ effectiveScope "<test>" (localDefs prog) []
+                (defs, probs) = exportedScope eff prog
             length defs `shouldBe` 0
             map (causeOf . semKind) probs `shouldBe` [causeOf UnresolvedLabel]
 
         it "keeps only the highest-priority definition for a same-label export repeated in one file, warning on the rest" $ do
             let src = "export A = fW;\noverride export A = fF;\n"
                 prog = parseProgram src
-                (defs, probs) = exportedScope prog
+                eff = fst $ effectiveScope "<test>" (localDefs prog) []
+                (defs, probs) = exportedScope eff prog
             map edIsOverride defs `shouldBe` [True]
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateDirective]
 
@@ -102,7 +119,8 @@ spec = describe "Compilation.Scope" $ do
         it "promotes every export from an overriding using to override-class" $ do
             let depSrc = "export N = fW;\n"
                 depProg = parseProgram depSrc
-                (depExported, _) = exportedScope depProg
+                depEff = fst $ effectiveScope "dep" (localDefs depProg) []
+                (depExported, _) = exportedScope depEff depProg
                 depExportedMap = Map.fromList [(edLabel d, d) | d <- depExported]
                 src = "N = fF;\n"
                 prog = parseProgram src
@@ -114,7 +132,8 @@ spec = describe "Compilation.Scope" $ do
         it "suppresses the duplicate-label warning for an imported loser when the winner is override-class" $ do
             let depSrc = "export N = fW;\n"
                 depProg = parseProgram depSrc
-                (depExported, _) = exportedScope depProg
+                depEff = fst $ effectiveScope "dep" (localDefs depProg) []
+                (depExported, _) = exportedScope depEff depProg
                 depExportedMap = Map.fromList [(edLabel d, d) | d <- depExported]
                 src = "override N = fF;\n"
                 prog = parseProgram src
