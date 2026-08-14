@@ -51,10 +51,7 @@ discover readSource workspaceRoot target opts = do
         else do
             absRoot <- canonicalizePath workspaceRoot
             absTarget <- canonicalizePath target
-            targetExists <- doesFileExist absTarget
-            if not targetExists
-                then return $ Left $ systemError $ "target file not found: " ++ absTarget
-                else visit readSource absTarget $ emptyContext absRoot absTarget opts
+            visit readSource absTarget $ emptyContext absRoot absTarget opts
   where
     systemError msg = mkProblem Error (SystemFailure msg) Generated
 
