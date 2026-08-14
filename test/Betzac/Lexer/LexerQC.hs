@@ -70,5 +70,5 @@ spec :: Spec
 spec = describe "Lexer.Core" $ do
     describe "lexer" $ do
         prop "never fails on lexable strings" prop_lexableNeverFails
-        prop "still reports an error on garbage characters" prop_failOnGarbage
+        prop "reports an error on garbage characters" prop_failOnGarbage
         prop "lex . unlex = id" prop_roundTrip
