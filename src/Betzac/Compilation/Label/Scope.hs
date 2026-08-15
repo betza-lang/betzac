@@ -80,7 +80,7 @@ localDefs prog = mapMaybe (uncurry build) (zip [0 ..] prog)
     build i qs = do
         (stmt, isOverride, _) <- statementOf qs
         lbl <- labelOf stmt
-        return $ ExportedDef lbl stmt isOverride i
+        return $ ExportedDef lbl qs isOverride i
 
 {- | One candidate definition contending for a label, tagged with its origin file, its
 precedence class (0 = override, highest priority), and its position for
@@ -124,7 +124,7 @@ exportedScope eff prog =
                 Just (ResolvedDef _ def) -> ((edLabel def, def) : accEntries, accProbs)
                 Nothing -> (accEntries, mkProblem Error (UnresolvedLabel) (getSpan stmt) : accProbs)
             Nothing -> case labelOf stmt of
-                Just lbl -> ((lbl, ExportedDef lbl stmt isOverride i) : accEntries, accProbs)
+                Just lbl -> ((lbl, ExportedDef lbl qs isOverride i) : accEntries, accProbs)
                 Nothing -> (accEntries, accProbs)
         _ -> (accEntries, accProbs)
 
@@ -138,7 +138,7 @@ exportedScope eff prog =
         let (winner, losers) = resolvePriority cands
          in (candDef winner : defs, probs ++ map dupWarning losers)
 
-    dupWarning c = mkProblem Warning DuplicateDirective (getSpan (edStmt (candDef c)))
+    dupWarning c = mkProblem Warning DuplicateDirective (getSpan (candDef c))
 
 {- | Diagnostics for every *unexported* bare label-resolving reference statement in a
 file (@label;@ with no @export@): checked against the same effective scope as any
@@ -209,4 +209,4 @@ effectiveScope self localCandidates deps = Map.foldrWithKey resolve (Map.empty, 
     -- definition it's overriding.
     loserWarning winner loser
         | candFrom loser /= self && candClass winner == 0 = Nothing
-        | otherwise = Just . mkProblem Warning DuplicateLabel . getSpan . edStmt . candDef $ loser
+        | otherwise = Just . mkProblem Warning DuplicateLabel . getSpan . candDef $ loser

@@ -14,7 +14,7 @@ import qualified Data.Set as Set
 
 checkDeadLabels :: LabelTable ResolvedDef -> LabelTable ExportedDef -> FilePath -> [SemanticProblem]
 checkDeadLabels eff exported file =
-    [ mkProblem Warning (UnusedLabel name) (getSpan $ edStmt def)
+    [ mkProblem Warning (UnusedLabel name) (getSpan def)
     | (name, ResolvedDef from def) <- Map.toList eff
     , from == file
     , not $ name `Set.member` live

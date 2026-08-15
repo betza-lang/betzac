@@ -3,6 +3,7 @@ module Betzac.Compilation.Context (
     FileEntry (..),
     FileStatus (..),
     ExportedDef (..),
+    edStmt,
     ResolvedDef (..),
     emptyContext,
 ) where
@@ -10,15 +11,21 @@ module Betzac.Compilation.Context (
 import qualified Data.Map.Strict as Map
 
 import Betzac.AST.Phases (Ps)
-import Betzac.AST.Types (BetzaStmt)
+import Betzac.AST.Types (BetzaStmt, Directive (..), QualifiedStmt (..))
 import Betzac.Compilation.Flag (CompilerOptions)
-import Betzac.Pipeline (PipelineResult)
 import Betzac.Diagnostic (SemanticProblem)
+import Betzac.Pipeline (PipelineResult)
+import Betzac.Span (HasSpan (..))
 
--- | One label's exported definition within a single file's exported scope.
+{- | One label's exported definition within a single file's exported scope. Stores the
+*whole* qualified statement (not just its inner 'BetzaStmt') so diagnostics about the
+statement as a whole (duplicate directive/label, unused label) can span the entire
+thing — including an @export@/@override@ keyword — rather than just the assignment
+or bare reference inside it. Use 'edStmt' to reach the inner statement.
+-}
 data ExportedDef = ExportedDef
     { edLabel :: String
-    , edStmt :: BetzaStmt Ps
+    , edQualifiedStmt :: QualifiedStmt Ps
     , edIsOverride :: Bool
     , edOrder :: Int
     {- ^ Lexical position of the exporting statement within its file, used as the
@@ -26,6 +33,24 @@ data ExportedDef = ExportedDef
     -}
     }
     deriving (Show)
+
+{- | The span of the whole qualified statement — see 'edQualifiedStmt'. For the inner
+statement's own (narrower) span instead, use @getSpan . edStmt@.
+-}
+instance HasSpan ExportedDef where
+    getSpan = getSpan . edQualifiedStmt
+
+{- | The inner statement an 'ExportedDef' wraps. 'edQualifiedStmt' is always a
+statement-bearing directive (@Bare@ or @Export@, never @Using@), since only those ever
+produce an 'ExportedDef' in the first place (cf. 'Betzac.Compilation.Label.Scope.statementOf').
+-}
+edStmt :: ExportedDef -> BetzaStmt Ps
+edStmt def = case edQualifiedStmt def of
+    Override (Bare stmt _) _ -> stmt
+    Plain (Bare stmt _) _ -> stmt
+    Override (Export stmt _) _ -> stmt
+    Plain (Export stmt _) _ -> stmt
+    _ -> error "edStmt: ExportedDef unexpectedly wrapped a using directive"
 
 {- | A label's winning definition after applying resolution priority, tagged
 with the file that contributed it.

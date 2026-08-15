@@ -2,7 +2,7 @@ module Betzac.Compilation.Label.Resolution (resolveLabelBody) where
 
 import Betzac.AST
 import Betzac.AST.Utils (exprOf)
-import Betzac.Compilation.Context (ExportedDef (edStmt), ResolvedDef (..))
+import Betzac.Compilation.Context (ResolvedDef (..), edStmt)
 import Betzac.Compilation.Label.Scope
 import Betzac.Diagnostic
 import Betzac.Span (HasSpan (getSpan))

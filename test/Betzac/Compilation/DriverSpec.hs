@@ -10,13 +10,15 @@ import System.IO.Temp (withSystemTempDirectory)
 import Betzac.Compilation.Context (CompilationContext (..), FileEntry (feDiagnostics))
 import qualified Betzac.Compilation.Driver as Driver
 import Betzac.Compilation.Flag (optionsFromFlags)
-import Betzac.Diagnostic (SemanticProblem (semKind), causeOf)
+import Betzac.Diagnostic (SemanticProblem (semKind, semSpan), causeOf)
+import Betzac.Span (Span (..))
 
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.Hspec.Hedgehog
+import Text.Megaparsec.Pos (SourcePos (sourceColumn), mkPos)
 
 -- | Every diagnostic recorded on any discovered file.
 allDiagnostics :: CompilationContext -> [SemanticProblem]
@@ -70,6 +72,24 @@ spec = describe "Compilation.Driver" $ do
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> Map.size (ccFiles ctx) `shouldBe` 4
+
+    describe "resolveScopes" $
+        it "spans a duplicate export's diagnostics across the whole statement, including the export keyword" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                writeFile (dir </> "f0.betza") "export X = fW;\nexport X = fB;\n"
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx -> do
+                        let probs = allDiagnostics (Driver.resolveScopes ctx)
+                            startsAtColumn1 p = case semSpan p of
+                                RealSpan s _ -> sourceColumn s == mkPos 1
+                                Generated -> False
+                            onSecondLine = filter (\p -> causeOf (semKind p) `elem` ["duplicate directive", "duplicate label"]) probs
+                        hasCause "duplicate directive" probs `shouldBe` True
+                        hasCause "duplicate label" probs `shouldBe` True
+                        length onSecondLine `shouldBe` 2
+                        all startsAtColumn1 onSecondLine `shouldBe` True
 
     describe "discover on generated dependency chains" $ do
         it "discovers every file in an acyclic chain exactly once, with no errors" $
