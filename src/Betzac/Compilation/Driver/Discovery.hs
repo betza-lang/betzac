@@ -7,6 +7,7 @@ import Data.Text (Text)
 import System.Directory (canonicalizePath, doesDirectoryExist, doesFileExist)
 import System.FilePath (isAbsolute, (</>))
 
+import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (Directive (Using), QualifiedStmt (Override, Plain))
 import Betzac.Compilation.Context (
     CompilationContext (..),
@@ -22,7 +23,7 @@ import Betzac.Diagnostic (
     mkProblem,
  )
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
-import Betzac.Span (Span (Generated))
+import Betzac.Span (HasSpan (getSpan), Span (Generated))
 
 -- | A source-reading action, injected so callers can serve live editor buffers before
 -- falling back to disk (bls) or just read disk unconditionally (the betzac CLI).
@@ -74,8 +75,7 @@ visit readSource path ctx
                     let placeholder =
                             FileEntry
                                 { fePipeline = pr
-                                , feUsingDeps = []
-                                , feOverrideUsingDeps = []
+                                , feUsingTargets = []
                                 , feExported = Nothing
                                 , feEffective = Nothing
                                 , feDiagnostics = []
@@ -85,8 +85,7 @@ visit readSource path ctx
                     (ctx1, deps) <- foldM (processTarget readSource path) (ctx0, []) $ rawUsingTargets pr
                     let finalEntry =
                             placeholder
-                                { feUsingDeps = map fst deps
-                                , feOverrideUsingDeps = [dp | (dp, isOv) <- deps, isOv]
+                                { feUsingTargets = deps
                                 , feDiagnostics = feDiagnostics $ ccFiles ctx1 Map.! path
                                 , feStatus = Parsed
                                 }
@@ -101,10 +100,10 @@ directives.
 processTarget ::
     SourceReader ->
     FilePath ->
-    (CompilationContext, [(FilePath, Bool)]) ->
-    (FilePath, Bool) ->
-    IO (CompilationContext, [(FilePath, Bool)])
-processTarget readSource referrer (ctx, deps) (rel, isOverride) = do
+    (CompilationContext, [(FilePath, Bool, Span)]) ->
+    (FilePath, Bool, Span) ->
+    IO (CompilationContext, [(FilePath, Bool, Span)])
+processTarget readSource referrer (ctx, deps) (rel, isOverride, usingSpan) = do
     resolved <- resolveUsingTarget (ccWorkspaceRoot ctx) rel
     case resolved of
         Nothing -> return (addDiagnostic referrer (mkProblem Error (UsingUnknown rel) Generated) ctx, deps)
@@ -116,7 +115,7 @@ processTarget readSource referrer (ctx, deps) (rel, isOverride) = do
                 visited <- visit readSource path ctx
                 case visited of
                     Left problem -> return (addDiagnostic referrer problem ctx, deps)
-                    Right ctx' -> return (ctx', deps ++ [(path, isOverride)])
+                    Right ctx' -> return (ctx', deps ++ [(path, isOverride, usingSpan)])
 
 -- | Valid betza source extensions, tried in order when resolving a `using` module path.
 sourceExtensions :: [String]
@@ -141,11 +140,13 @@ addDiagnostic path diag ctx =
     ctx{ccFiles = Map.adjust (\e -> e{feDiagnostics = feDiagnostics e ++ [diag]}) path $ ccFiles ctx}
 
 {- | The raw (unresolved), lexically-ordered @using@ targets of a parsed file, paired
-with whether each came from an @override using@ directive.
+with whether each came from an @override using@ directive and the span of the whole
+@using@ statement (including the @override@ keyword, if present).
 -}
-rawUsingTargets :: PipelineResult -> [(FilePath, Bool)]
+rawUsingTargets :: PipelineResult -> [(FilePath, Bool, Span)]
 rawUsingTargets pr = maybe [] (concatMap go . fst) (parseResult pr)
   where
-    go (Plain (Using fp _) _) = [(fp, False)]
-    go (Override (Using fp _) _) = [(fp, True)]
+    go :: QualifiedStmt Ps -> [(FilePath, Bool, Span)]
+    go qs@(Plain (Using fp _) _) = [(fp, False, getSpan qs)]
+    go qs@(Override (Using fp _) _) = [(fp, True, getSpan qs)]
     go _ = []

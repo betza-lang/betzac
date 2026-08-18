@@ -206,20 +206,24 @@ A label that is not reachable by this definition is unreachable, even if some ot
 
 2.4.22.1 - A syntactically invalid `override` directive will produce an error log with cause `ill-formed directive`.
 
-2.4.23 - If there is an `override using filename` directive, then every statement exported from the corresponding source file is considered as though it were part of an override directive **in the local scope** (cf. 2.4.23-2.4.25).
+2.4.23 - If there is an `override using filename` directive, then every statement exported from the corresponding source file is considered part of an override directive, ranked as described in 2.4.24 — but distinctly from, and below, a local override directive.
 
 ---
 
 #### Label Resolution Priority
 
-2.4.24 - For each label in the effective scope, `betzac` will select exactly one defining statement according to the following priority rules:
+2.4.24 - For each label in the effective scope, `betzac` will select exactly one defining statement according to the following priority rules, from highest to lowest:
 
-1. Definitions that are part of an override directive take precedence over those that are not.
-2. Among definitions of equal precedence, the earliest definition in lexical order is selected.
+1. A definition that is part of a local override directive.
+2. A definition pulled in via an `override using` directive (cf. 2.4.23).
+3. A definition pulled in via a plain (non-overriding) `using` directive.
+4. A local definition that is not part of an override directive.
+
+Among definitions of equal precedence, the earliest one in lexical order is selected. For definitions pulled in via `using`, that means ordered by the position of the `using` directive that introduced them, then by their own position in the source file it targets — there being no single lexical order spanning multiple files.
 
 2.4.25 - All non-selected definitions for that label are ignored.
 
-2.4.26 - If the `-Wunused` flag is set, a warning with cause duplicate label will be produced for each ignored definition.
+2.4.26 - If the `-Wunused` flag is set, a warning with cause duplicate label will be produced for each ignored definition. For an ignored definition originating from the imported scope, this warning is attributed to the `using` directive that introduced it — in the file being compiled — rather than to the ignored definition's own location in its source file.
 
 2.4.26.1 - Warnings for ignored definitions originating from the imported scope will be suppressed when the selected definition is part of an override directive.
 

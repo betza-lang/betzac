@@ -2,6 +2,7 @@ module Compilation.DriverSpec (spec) where
 
 import Control.Monad (forM_)
 import Control.Monad.IO.Class (liftIO)
+import Data.List (isSuffixOf)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.IO as TIO
 import System.FilePath ((</>))
@@ -10,7 +11,7 @@ import System.IO.Temp (withSystemTempDirectory)
 import Betzac.Compilation.Context (CompilationContext (..), FileEntry (feDiagnostics))
 import qualified Betzac.Compilation.Driver as Driver
 import Betzac.Compilation.Flag (optionsFromFlags)
-import Betzac.Diagnostic (SemanticProblem (semKind, semSpan), causeOf)
+import Betzac.Diagnostic (SemanticProblem (semKind, semSpan), SemanticProblemKind (DuplicateLabel), causeOf)
 import Betzac.Span (Span (..))
 
 import Hedgehog
@@ -18,7 +19,7 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.Hspec.Hedgehog
-import Text.Megaparsec.Pos (SourcePos (sourceColumn), mkPos)
+import Text.Megaparsec.Pos (SourcePos (sourceColumn, sourceLine), mkPos)
 
 -- | Every diagnostic recorded on any discovered file.
 allDiagnostics :: CompilationContext -> [SemanticProblem]
@@ -26,6 +27,17 @@ allDiagnostics ctx = concatMap feDiagnostics (Map.elems (ccFiles ctx))
 
 hasCause :: String -> [SemanticProblem] -> Bool
 hasCause c = any ((== c) . causeOf . semKind)
+
+-- | Diagnostics recorded specifically on the discovered file whose path ends with
+-- 'suffix' (a plain filename, e.g. "main.betza").
+diagnosticsOn :: String -> CompilationContext -> [SemanticProblem]
+diagnosticsOn suffix ctx =
+    concat [feDiagnostics e | (p, e) <- Map.toList (ccFiles ctx), suffix `isSuffixOf` p]
+
+onLine :: Int -> SemanticProblem -> Bool
+onLine n p = case semSpan p of
+    RealSpan s _ -> sourceLine s == mkPos n
+    Generated -> False
 
 -- | Write a chain @f0 -> f1 -> ... -> f(n-1)@, each file @using@-ing the next, with
 -- its own unique export (a single uppercase letter, per the label grammar). Every
@@ -73,7 +85,7 @@ spec = describe "Compilation.Driver" $ do
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> Map.size (ccFiles ctx) `shouldBe` 4
 
-    describe "resolveScopes" $
+    describe "resolveScopes" $ do
         it "spans a duplicate export's diagnostics across the whole statement, including the export keyword" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "f0.betza") "export X = fW;\nexport X = fB;\n"
@@ -90,6 +102,40 @@ spec = describe "Compilation.Driver" $ do
                         hasCause "duplicate label" probs `shouldBe` True
                         length onSecondLine `shouldBe` 2
                         all startsAtColumn1 onSecondLine `shouldBe` True
+
+        it "warns a local plain definition shadowed by an import on its own statement, not on the import" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                writeFile (dir </> "lib.betza") "export W = :1,1:;\n"
+                writeFile (dir </> "main.betza") "using lib;\nW = :2,2:;\n"
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx0 -> do
+                        let ctx = Driver.resolveScopes ctx0
+                            libDiags = diagnosticsOn "lib.betza" ctx
+                            mainDiags = diagnosticsOn "main.betza" ctx
+                        length libDiags `shouldBe` 0
+                        map (causeOf . semKind) mainDiags `shouldBe` [causeOf DuplicateLabel]
+                        all (onLine 2) mainDiags `shouldBe` True -- "W = :2,2:;" is main.betza's own line 2
+
+        it "warns the losing `using` directive, in the importing file, when two plain imports conflict" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                writeFile (dir </> "libA.betza") "export W = :1,1:;\n"
+                writeFile (dir </> "libB.betza") "export W = :2,2:;\n"
+                writeFile (dir </> "main.betza") "using libA;\nusing libB;\n"
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx0 -> do
+                        let ctx = Driver.resolveScopes ctx0
+                            libADiags = diagnosticsOn "libA.betza" ctx
+                            libBDiags = diagnosticsOn "libB.betza" ctx
+                            mainDiags = diagnosticsOn "main.betza" ctx
+                        length libADiags `shouldBe` 0
+                        length libBDiags `shouldBe` 0
+                        map (causeOf . semKind) mainDiags `shouldBe` [causeOf DuplicateLabel]
+                        -- libA is used first, so it wins; libB's `using` (main.betza line 2) loses.
+                        all (onLine 2) mainDiags `shouldBe` True
 
     describe "discover on generated dependency chains" $ do
         it "discovers every file in an acyclic chain exactly once, with no errors" $

@@ -33,7 +33,7 @@ import Betzac.Diagnostic (
     Severity (Error, Warning),
     mkProblem,
  )
-import Betzac.Span (HasSpan (..))
+import Betzac.Span (HasSpan (..), Span)
 
 -- Note: this module resolves which definition wins per label. It does not yet track
 -- whether a label/using target is ever referenced, so unused-label and unused-file
@@ -94,21 +94,31 @@ localDefs prog = mapMaybe (uncurry build) (zip [0 ..] prog)
         return $ ExportedDef lbl qs isOverride i
 
 {- | One candidate definition contending for a label, tagged with its origin file, its
-precedence class (0 = override, highest priority), and its position for
-tie-breaking among candidates of equal class.
+precedence class (0 = override, highest priority — see 'classOf'; only used to gate
+the imported-loser suppression in 'effectiveScope''s @loserWarning@, per spec
+2.4.26.1), its full priority order (see 'effectiveScope''s @rankOf@) for picking the
+winner among all candidates, and where a diagnostic about it losing should point.
 -}
 data Candidate = Candidate
     { candFrom :: FilePath
     , candDef :: ExportedDef
     , candClass :: Int
-    , candOrder :: (Int, Int)
+    , candOrder :: (Int, Int, Int)
+    , candDiagSpan :: Span
+    {- ^ Where to anchor a diagnostic about this candidate, in a file the current
+    resolution can actually attribute it to: the candidate's own span if it's local,
+    or the @using@ directive that pulled it in if it's imported — never a foreign
+    file's internal coordinates, which no diagnostic here is ever entitled to point
+    into.
+    -}
     }
 
 classOf :: Bool -> Int
 classOf isOverride = if isOverride then 0 else 1
 
-{- | Pick the winning candidate for a label by priority: override beats plain; among
-equal precedence, earliest position wins.
+{- | Pick the winning candidate for a label by priority ('candOrder' — see
+'effectiveScope''s @rankOf@ for what it encodes); among equal order, earliest
+position wins.
 -}
 resolvePriority :: NonEmpty Candidate -> (Candidate, [Candidate])
 resolvePriority cands = case sortOn (\c -> (candClass c, candOrder c)) (foldr (:) [] cands) of
@@ -168,40 +178,54 @@ checkLabelRefs eff prog =
     ]
 
 {- | Resolve a file's effective scope: local statements plus each dependency's
-exported scope, picking exactly one definition per label by priority (override
-beats plain; among equal precedence, earliest position wins).
+exported scope, picking exactly one definition per label by priority — four ranks,
+strongest first:
 
-Note on cross-file order: there's no single lexical order spanning multiple files,
-so this implementation ranks local candidates ahead of imported ones at equal
-precedence, and ranks imported candidates by the position of the @using@ directive
-that introduced them, then by their own position in the origin file.
+  0. Local @override@: the most specific, most deliberate act, physically at the
+     point of conflict — it wins over everything, including an @override using@.
+  1. Imported via @override using@: the tool for resolving conflicts *among*
+     imports (cf. spec 2.4.23), not for beating a local, deliberate override.
+  2. Imported via a plain @using@: already-published, externally-owned content, so
+     it outranks a same-named plain local definition by default — @override@ is the
+     explicit way to say "yes, I meant to replace the imported one."
+  3. Local, plain: weakest — the thing that gets shadowed by default.
 
-An imported definition's precedence class depends only on whether it was pulled in
-via an overriding @using@ — a definition's own override status in its origin file
-only affects resolution *within that file* (i.e. which definition becomes its
-exported entry), and isn't itself carried across the @using@ boundary.
+Within any rank shared by more than one candidate (multiple local overrides of the
+same label; multiple @using@s pulling in the same label at the same rank), the
+earliest one in lexical order wins — for imports, ordered by the position of the
+@using@ directive that introduced them, then by their own position in the origin
+file.
 -}
 effectiveScope ::
     FilePath ->
     [ExportedDef] ->
-    {- | (dependency path, was pulled in via an overriding @using@, dependency's
-    exported scope), one entry per @using@ directive, in lexical order.
+    {- | (dependency path, was pulled in via an overriding @using@, span of the
+    @using@ directive itself, dependency's exported scope), one entry per @using@
+    directive, in lexical order.
     -}
-    [(FilePath, Bool, LabelTable ExportedDef)] ->
+    [(FilePath, Bool, Span, LabelTable ExportedDef)] ->
     (LabelTable ResolvedDef, [SemanticProblem])
 effectiveScope self localCandidates deps = Map.foldrWithKey resolve (Map.empty, []) grouped
   where
     grouped :: LabelTable (NonEmpty Candidate)
     grouped = Map.fromListWith (<>) (localEntries ++ importedEntries)
 
+    -- The four ranks above, folding override-vs-plain and local-vs-imported into one
+    -- ordering in a single place, rather than two independently-reasoned-about axes.
+    rankOf isLocal isOverride = case (isLocal, isOverride) of
+        (True, True) -> 0 :: Int
+        (False, True) -> 1
+        (False, False) -> 2
+        (True, False) -> 3
+
     localEntries =
-        [ (edLabel d, Candidate self d (classOf $ edIsOverride d) (0, edOrder d) :| [])
+        [ (edLabel d, Candidate self d (classOf $ edIsOverride d) (rankOf True (edIsOverride d), 0, edOrder d) (getSpan d) :| [])
         | d <- localCandidates
         ]
 
     importedEntries =
-        [ (edLabel d, Candidate depPath d (classOf isOverrideUsing) (usingOrder + 1, edOrder d) :| [])
-        | (usingOrder, (depPath, isOverrideUsing, exported)) <- zip [0 :: Int ..] deps
+        [ (edLabel d, Candidate depPath d (classOf isOverrideUsing) (rankOf False isOverrideUsing, usingOrder, edOrder d) usingSpan :| [])
+        | (usingOrder, (depPath, isOverrideUsing, usingSpan, exported)) <- zip [0 :: Int ..] deps
         , d <- Map.elems exported
         ]
 
@@ -216,4 +240,4 @@ effectiveScope self localCandidates deps = Map.foldrWithKey resolve (Map.empty, 
     -- definition it's overriding.
     loserWarning winner loser
         | candFrom loser /= self && candClass winner == 0 = Nothing
-        | otherwise = Just . mkProblem Warning DuplicateLabel . getSpan . candDef $ loser
+        | otherwise = Just . mkProblem Warning DuplicateLabel . candDiagSpan $ loser

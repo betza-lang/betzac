@@ -15,7 +15,7 @@ import Betzac.AST.Types (BetzaStmt, Directive (..), QualifiedStmt (..))
 import Betzac.Compilation.Flag (CompilerOptions)
 import Betzac.Diagnostic (SemanticProblem)
 import Betzac.Pipeline (PipelineResult)
-import Betzac.Span (HasSpan (..))
+import Betzac.Span (HasSpan (..), Span)
 
 {- | One label's exported definition within a single file's exported scope. Stores the
 *whole* qualified statement (not just its inner 'BetzaStmt') so diagnostics about the
@@ -71,10 +71,13 @@ is only ever parsed/compiled once.
 -}
 data FileEntry = FileEntry
     { fePipeline :: PipelineResult
-    , feUsingDeps :: [FilePath]
-    -- ^ Resolved absolute paths of this file's @using@ targets, in lexical order.
-    , feOverrideUsingDeps :: [FilePath]
-    -- ^ Subset of 'feUsingDeps' that came from an @override using@ directive.
+    , feUsingTargets :: [(FilePath, Bool, Span)]
+    {- ^ Resolved absolute paths of this file's @using@ targets, in lexical order,
+    each tagged with whether it came from an @override using@ directive and the span
+    of the @using@ statement itself — used to attribute a priority-loss diagnostic
+    for one of its labels to the @using@ directive that pulled it in, not to the
+    losing definition's own (foreign-file) location.
+    -}
     , feExported :: Maybe (Map.Map String ExportedDef)
     , feEffective :: Maybe (Map.Map String ResolvedDef)
     , feDiagnostics :: [SemanticProblem]

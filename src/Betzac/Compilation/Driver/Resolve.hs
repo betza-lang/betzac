@@ -29,7 +29,7 @@ resolveFile path ctx = case Map.lookup path $ ccFiles ctx of
     Just entry -> case feEffective entry of
         Just _ -> ctx
         Nothing ->
-            let ctx1 = foldl' (flip resolveFile) ctx $ feUsingDeps entry
+            let ctx1 = foldl' (flip resolveFile) ctx [dp | (dp, _, _) <- feUsingTargets entry]
                 entry1 = ccFiles ctx1 Map.! path
                 (result, probs) = runStage $ resolveFileStage path ctx1
                 (exportedMap, effective) = fromMaybe (Map.empty, Map.empty) result
@@ -55,8 +55,8 @@ resolveFileStage path ctx1 = do
         localCands = localDefs prog
 
         depsInfo =
-            [ (dp, dp `elem` feOverrideUsingDeps entry1, depExported dp)
-            | dp <- feUsingDeps entry1
+            [ (dp, isOverrideUsing, usingSpan, depExported dp)
+            | (dp, isOverrideUsing, usingSpan) <- feUsingTargets entry1
             ]
         depExported dp = fromMaybe Map.empty $ feExported =<< Map.lookup dp (ccFiles ctx1)
 

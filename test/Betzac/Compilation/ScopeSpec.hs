@@ -12,6 +12,7 @@ import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..))
 import Betzac.Compilation.Label.Scope (checkLabelRefs, effectiveScope, exportedScope, localDefs)
 import Betzac.Pipeline (PipelineResult (parseResult), fromScratch)
 import Betzac.Diagnostic (SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel, UnusedLabel), causeOf, semKind)
+import Betzac.Span (Span (Generated))
 
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -57,7 +58,7 @@ spec = describe "Compilation.Scope" $ do
                 depExportedMap = Map.fromList [(edLabel d, d) | d <- depExported]
                 src = "using dep;\nexport N;\n"
                 prog = parseProgram src
-                eff = fst $ effectiveScope "main" (localDefs prog) [("dep", False, depExportedMap)]
+                eff = fst $ effectiveScope "main" (localDefs prog) [("dep", False, Generated, depExportedMap)]
                 (defs, probs) = exportedScope eff prog
             map edLabel defs `shouldBe` ["N"]
             length probs `shouldBe` 0
@@ -143,7 +144,7 @@ spec = describe "Compilation.Scope" $ do
                 src = "N = fF;\n"
                 prog = parseProgram src
                 locals = localDefs prog
-                (resolved, probs) = effectiveScope "main" locals [("dep", True, depExportedMap)]
+                (resolved, probs) = effectiveScope "main" locals [("dep", True, Generated, depExportedMap)]
             fmap (rdFrom) (Map.lookup "N" resolved) `shouldBe` Just "dep"
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateLabel]
 
@@ -156,8 +157,34 @@ spec = describe "Compilation.Scope" $ do
                 src = "override N = fF;\n"
                 prog = parseProgram src
                 locals = localDefs prog
-                (resolved, probs) = effectiveScope "main" locals [("dep", False, depExportedMap)]
+                (resolved, probs) = effectiveScope "main" locals [("dep", False, Generated, depExportedMap)]
             fmap (rdFrom) (Map.lookup "N" resolved) `shouldBe` Just "main"
+            length probs `shouldBe` 0
+
+        it "prefers a plain import over a plain local definition of the same label" $ do
+            let depSrc = "export N = fW;\n"
+                depProg = parseProgram depSrc
+                depEff = fst $ effectiveScope "dep" (localDefs depProg) []
+                (depExported, _) = exportedScope depEff depProg
+                depExportedMap = Map.fromList [(edLabel d, d) | d <- depExported]
+                src = "N = fF;\n"
+                prog = parseProgram src
+                locals = localDefs prog
+                (resolved, probs) = effectiveScope "main" locals [("dep", False, Generated, depExportedMap)]
+            fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "dep"
+            map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateLabel]
+
+        it "prefers a local override over an import pulled in via override using" $ do
+            let depSrc = "export N = fW;\n"
+                depProg = parseProgram depSrc
+                depEff = fst $ effectiveScope "dep" (localDefs depProg) []
+                (depExported, _) = exportedScope depEff depProg
+                depExportedMap = Map.fromList [(edLabel d, d) | d <- depExported]
+                src = "override N = fF;\n"
+                prog = parseProgram src
+                locals = localDefs prog
+                (resolved, probs) = effectiveScope "main" locals [("dep", True, Generated, depExportedMap)]
+            fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "main"
             length probs `shouldBe` 0
 
     describe "priority resolution property" $
