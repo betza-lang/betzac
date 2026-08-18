@@ -20,12 +20,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Text.Megaparsec.Pos (SourcePos (..), unPos)
 
-{- | A single compilation log, tagged with the file it pertains to.
-'Nothing' for job-level logs with no single owning file (e.g. the compilation-success
-info log, or a workspace-level system failure). Not currently wired into the language
-server (@bls@) — if it is later, note that its per-document @publishDiagnostics@ model
-can't host a 'Nothing'-file diagnostic on any open document's URI; VS Code expects
-workspace-level diagnostics to be published against the workspace-root URI instead.
+{- | A single compilation log. 'diagFile' is 'Nothing' for job-level logs that belong
+to no one file, like the success info log.
 -}
 data Diagnostic = Diagnostic
     { diagFile :: Maybe FilePath

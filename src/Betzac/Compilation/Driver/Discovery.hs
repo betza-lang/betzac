@@ -3,16 +3,19 @@ module Betzac.Compilation.Driver.Discovery (SourceReader, discover) where
 import Control.Exception (IOException, try)
 import Control.Monad (foldM)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import System.Directory (canonicalizePath, doesDirectoryExist, doesFileExist)
 import System.FilePath (isAbsolute, (</>))
 
 import Betzac.AST.Phases (Ps)
-import Betzac.AST.Types (Directive (Using), QualifiedStmt (Override, Plain))
+import Betzac.AST.Types (Directive (Using), QualifiedStmt)
+import Betzac.AST.Utils (directiveOf, isOverride)
 import Betzac.Compilation.Context (
     CompilationContext (..),
     FileEntry (..),
     FileStatus (Discovered, Parsed),
+    UsingTarget (..),
     emptyContext,
  )
 import Betzac.Compilation.Flag (CompilerOptions)
@@ -25,24 +28,12 @@ import Betzac.Diagnostic (
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
 import Betzac.Span (HasSpan (getSpan), Span (Generated))
 
--- | A source-reading action, injected so callers can serve live editor buffers before
--- falling back to disk (bls) or just read disk unconditionally (the betzac CLI).
+-- | Injected so bls can serve live editor buffers where the CLI just reads disk.
 type SourceReader = FilePath -> IO Text
 
-{- | Discover the full dependency graph reachable from a target file's @using@
-directives: resolves each path against the workspace root, and records
-@using unknown@/@using circular@ diagnostics on the referencing file as they're
-found, without aborting discovery of that file's other directives.
-
-Each distinct file is read and parsed at most once (guarded by 'ccFiles'), so a file
-reachable by more than one path (a diamond dependency) is only compiled once. Cycle
-detection works by inserting a file's entry with status 'Discovered' *before*
-descending into its own dependencies, then treating a re-encountered 'Discovered' (not
-yet 'Parsed') entry as the closing edge of a cycle.
-
-Sibling @using@ targets have no data dependency on each other during discovery (each
-file's read+parse is independent); a future parallel version could fan discovery out
-per unique path while keeping this cycle-detection step sequential.
+{- | Discover every file reachable from a target's @using@ directives. Each one is read
+and parsed once, so a diamond dependency is only compiled once; a cycle shows up as a
+target that is already 'Discovered' but not yet 'Parsed'.
 -}
 discover :: SourceReader -> FilePath -> FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
 discover readSource workspaceRoot target opts = do
@@ -56,10 +47,7 @@ discover readSource workspaceRoot target opts = do
   where
     systemError msg = mkProblem Error (SystemFailure msg) Generated
 
-{- | Read, parse, and record one file, then recurse into its @using@ targets. A read
-failure (the file existed a moment ago per its caller's existence check, but couldn't
-actually be read — permissions, a race, etc.) is reported as a system-level failure.
--}
+-- | Read, parse, and record one file, then recurse into its @using@ targets.
 visit :: SourceReader -> FilePath -> CompilationContext -> IO (Either SemanticProblem CompilationContext)
 visit readSource path ctx
     | Map.member path (ccFiles ctx) = return $ Right ctx
@@ -91,22 +79,20 @@ visit readSource path ctx
                                 }
                     return $ Right ctx1{ccFiles = Map.insert path finalEntry $ ccFiles ctx1}
 
-{- | Resolve, existence-check, and (if new) recurse into one @using@ target of the
-file at 'referrer', accumulating successfully-linked dependencies. Diagnostics for an
-unresolvable, circular, or unreadable target are attached to 'referrer', not the
-target — a broken dependency doesn't stop discovery of the referrer's other
-directives.
+{- | Resolve one @using@ target and recurse into it. An unresolvable, circular, or
+unreadable target is reported on 'referrer' and skipped, leaving the rest of its
+directives to be discovered.
 -}
 processTarget ::
     SourceReader ->
     FilePath ->
-    (CompilationContext, [(FilePath, Bool, Span)]) ->
-    (FilePath, Bool, Span) ->
-    IO (CompilationContext, [(FilePath, Bool, Span)])
-processTarget readSource referrer (ctx, deps) (rel, isOverride, usingSpan) = do
-    resolved <- resolveUsingTarget (ccWorkspaceRoot ctx) rel
+    (CompilationContext, [UsingTarget]) ->
+    UsingTarget ->
+    IO (CompilationContext, [UsingTarget])
+processTarget readSource referrer (ctx, deps) t = do
+    resolved <- resolveUsingTarget (ccWorkspaceRoot ctx) (usingPath t)
     case resolved of
-        Nothing -> return (addDiagnostic referrer (mkProblem Error (UsingUnknown rel) Generated) ctx, deps)
+        Nothing -> return (addDiagnostic referrer (mkProblem Error (UsingUnknown $ usingPath t) Generated) ctx, deps)
         Just path -> case Map.lookup path $ ccFiles ctx of
             Just entry
                 | feStatus entry == Discovered ->
@@ -115,15 +101,14 @@ processTarget readSource referrer (ctx, deps) (rel, isOverride, usingSpan) = do
                 visited <- visit readSource path ctx
                 case visited of
                     Left problem -> return (addDiagnostic referrer problem ctx, deps)
-                    Right ctx' -> return (ctx', deps ++ [(path, isOverride, usingSpan)])
+                    Right ctx' -> return (ctx', deps ++ [t{usingPath = path}])
 
 -- | Valid betza source extensions, tried in order when resolving a `using` module path.
 sourceExtensions :: [String]
 sourceExtensions = [".betza", ".btz", ".b"]
 
-{- | Resolve a dotted `using` module path (already dot-to-slash converted by the
-parser, e.g. @my/module/test@ for @using my.module.test;@) against the workspace
-root, trying each valid source extension in turn. 'Nothing' if none of them exist.
+{- | Resolve a @using@ path (already dot-to-slash converted by the parser) against the
+workspace root, trying each source extension in turn.
 -}
 resolveUsingTarget :: FilePath -> FilePath -> IO (Maybe FilePath)
 resolveUsingTarget root rel = go sourceExtensions
@@ -139,14 +124,11 @@ addDiagnostic :: FilePath -> SemanticProblem -> CompilationContext -> Compilatio
 addDiagnostic path diag ctx =
     ctx{ccFiles = Map.adjust (\e -> e{feDiagnostics = feDiagnostics e ++ [diag]}) path $ ccFiles ctx}
 
-{- | The raw (unresolved), lexically-ordered @using@ targets of a parsed file, paired
-with whether each came from an @override using@ directive and the span of the whole
-@using@ statement (including the @override@ keyword, if present).
--}
-rawUsingTargets :: PipelineResult -> [(FilePath, Bool, Span)]
-rawUsingTargets pr = maybe [] (concatMap go . fst) (parseResult pr)
+-- | A parsed file's @using@ targets, in lexical order, still unresolved.
+rawUsingTargets :: PipelineResult -> [UsingTarget]
+rawUsingTargets pr = maybe [] (mapMaybe target . fst) (parseResult pr)
   where
-    go :: QualifiedStmt Ps -> [(FilePath, Bool, Span)]
-    go qs@(Plain (Using fp _) _) = [(fp, False, getSpan qs)]
-    go qs@(Override (Using fp _) _) = [(fp, True, getSpan qs)]
-    go _ = []
+    target :: QualifiedStmt Ps -> Maybe UsingTarget
+    target qs = case directiveOf qs of
+        Using fp _ -> Just $ UsingTarget fp (isOverride qs) (getSpan qs)
+        _ -> Nothing

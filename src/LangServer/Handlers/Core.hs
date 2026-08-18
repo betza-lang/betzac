@@ -31,9 +31,8 @@ import Language.LSP.Server hiding (publishDiagnostics)
 import qualified Language.LSP.Server as LSP (publishDiagnostics)
 import Language.LSP.VFS (VFS (_vfsMap), virtualFileText)
 
-{- | bls's -Wall equivalent: unlike the terse CLI, which defaults to no warnings at
-all (spec 2.6, opt-in only), an editor should surface every optional warning by
-default — a squiggle is cheap to ignore, a missing one is not.
+{- | bls's -Wall equivalent: the CLI defaults to no warnings at all, but an editor
+should surface every optional one — a squiggle is cheap to ignore, a missing one is not.
 -}
 blsOptions :: CompilerOptions
 blsOptions = optionsFromFlags [GenerateWarnings Wunused, GenerateWarnings Wdirective, GenerateWarnings Wlang]
@@ -108,9 +107,10 @@ overlayReader fp src = do
         Just liveContent -> pure liveContent
         Nothing -> TIO.readFile path
 
--- | Every diagnostic belonging to one discovered file: its own lex/parse/single-file
--- semantic-pass results, plus whatever cross-file (scope/label) diagnostics were
--- attributed to it.
+{- | Every diagnostic belonging to one discovered file: its own lex/parse/single-file
+semantic-pass results, plus whatever cross-file (scope/label) diagnostics were
+attributed to it.
+-}
 fileDiagnostics :: FileEntry -> [Diagnostic]
 fileDiagnostics entry =
     lexDiags (fePipeline entry)

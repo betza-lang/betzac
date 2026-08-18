@@ -1,39 +1,31 @@
 module Betzac.Compilation.Label.Resolution (resolveLabelBody) where
 
-import Betzac.AST
-import Betzac.AST.Utils (exprOf)
-import Betzac.Compilation.Context (ResolvedDef (..), edStmt)
-import Betzac.Compilation.Label.Scope
+import Betzac.AST.Phases (Ps)
+import Betzac.AST.Types (BetzaExpr, Label (Leaper))
+import Betzac.AST.Utils (exprLabels)
+import Betzac.Compilation.Context (ResolvedDef (..), edExpr)
+import Betzac.Compilation.Label.Scope (LabelTable, labelText)
 import Betzac.Diagnostic
 import Betzac.Span (HasSpan (getSpan))
 
-import Data.Foldable (Foldable (toList))
 import qualified Data.Map as Map
 
 type Trail = [String] -- labels currently being expanded on a path
 
 resolveLabelBody :: LabelTable ResolvedDef -> FilePath -> String -> BetzaExpr Ps -> [SemanticProblem]
-resolveLabelBody eff file lbl = resolveLabelBody' eff file [lbl]
-
-resolveLabelBody' :: LabelTable ResolvedDef -> FilePath -> Trail -> BetzaExpr Ps -> [SemanticProblem]
-resolveLabelBody' eff file trail (BetzaExpr ce _) = resolveChainExpr ce
+resolveLabelBody eff file lbl = walk [lbl]
   where
-    resolveChainExpr (ChainExpr ue mcl _) = resolveUnionExpr ue ++ concat (resolveChainLeg <$> toList mcl)
-    resolveChainLeg (ChainLeg _ ce' _) = resolveChainExpr ce'
-    resolveUnionExpr (UnionExpr mes _) = concat $ resolveModifierExpr <$> toList mes
-    resolveModifierExpr (ModifierExpr _ _ ee _) = resolveExponentExpr ee
-    resolveExponentExpr (ExponentExpr ae _ _) = resolveAtomExpr eff file trail ae
+    walk :: Trail -> BetzaExpr Ps -> [SemanticProblem]
+    walk trail = concatMap (resolve trail) . exprLabels
 
-resolveAtomExpr :: LabelTable ResolvedDef -> FilePath -> Trail -> AtomExpr Ps -> [SemanticProblem]
-resolveAtomExpr eff file trail (Paren expr _) = resolveLabelBody' eff file trail expr
--- A leaper label (e.g. `:1,1:`) is a literal geometric value, not a name — nothing
--- ever "defines" it, so it must never be looked up in the effective scope.
-resolveAtomExpr _ _ _ (From (Leaper _ _ _) _) = []
-resolveAtomExpr eff file trail (From lbl _) =
-    let name = labelText lbl
-     in case Map.lookup name eff of
-            Nothing -> [mkProblem Error UnresolvedLabel $ getSpan lbl]
-            Just (ResolvedDef from _) | from /= file -> [] -- imported: not our problem
-            Just (ResolvedDef _ def)
-                | name `elem` trail -> [mkProblem Error (CircularLabel $ dropWhile (/= name) trail ++ [name]) $ getSpan lbl]
-                | otherwise -> maybe [] (resolveLabelBody' eff file (trail ++ [name])) $ exprOf $ edStmt def
+    -- A leaper label (e.g. `:1,1:`) is a literal geometric value, not a name.
+    resolve :: Trail -> Label Ps -> [SemanticProblem]
+    resolve _ (Leaper _ _ _) = []
+    resolve trail ref = case Map.lookup name eff of
+        Nothing -> [mkProblem Error UnresolvedLabel $ getSpan ref]
+        Just (ResolvedDef from _) | from /= file -> [] -- imported: not our problem
+        Just (ResolvedDef _ def)
+            | name `elem` trail -> [mkProblem Error (CircularLabel $ dropWhile (/= name) trail ++ [name]) $ getSpan ref]
+            | otherwise -> foldMap (walk $ trail ++ [name]) (edExpr def)
+      where
+        name = labelText ref

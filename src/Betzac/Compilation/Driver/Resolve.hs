@@ -9,9 +9,10 @@ import Betzac.Compilation.Context (
     FileEntry (..),
     FileStatus (ScopesResolved),
     ResolvedDef,
+    UsingTarget (usingPath),
  )
 import Betzac.Compilation.Label (checkLabels)
-import Betzac.Compilation.Label.Scope (effectiveScope, exportedScope, localDefs)
+import Betzac.Compilation.Label.Scope (ImportedScope (..), effectiveScope, exportedScope, localDefs)
 import Betzac.Diagnostic (Stage, logProblems, runStage)
 import Betzac.Pipeline (PipelineResult (..))
 
@@ -29,7 +30,7 @@ resolveFile path ctx = case Map.lookup path $ ccFiles ctx of
     Just entry -> case feEffective entry of
         Just _ -> ctx
         Nothing ->
-            let ctx1 = foldl' (flip resolveFile) ctx [dp | (dp, _, _) <- feUsingTargets entry]
+            let ctx1 = foldl' (flip resolveFile) ctx $ map usingPath $ feUsingTargets entry
                 entry1 = ccFiles ctx1 Map.! path
                 (result, probs) = runStage $ resolveFileStage path ctx1
                 (exportedMap, effective) = fromMaybe (Map.empty, Map.empty) result
@@ -45,7 +46,7 @@ resolveFile path ctx = case Map.lookup path $ ccFiles ctx of
 
 {- | The exported/effective scope computation for one file, as a single Stage
 sequence, both lifted by logProblems (which never halts the chain). effectiveScope
-runs first — a bare re-export (@export A;@) resolves against the file's *effective*
+runs first -- a bare re-export (@export A;@) resolves against the file's *effective*
 scope (local or pulled in via @using@), so exportedScope needs it already computed.
 -}
 resolveFileStage :: FilePath -> CompilationContext -> Stage (Map.Map String ExportedDef, Map.Map String ResolvedDef)
@@ -54,13 +55,10 @@ resolveFileStage path ctx1 = do
         prog = maybe [] fst (parseResult $ fePipeline entry1)
         localCands = localDefs prog
 
-        depsInfo =
-            [ (dp, isOverrideUsing, usingSpan, depExported dp)
-            | (dp, isOverrideUsing, usingSpan) <- feUsingTargets entry1
-            ]
-        depExported dp = fromMaybe Map.empty $ feExported =<< Map.lookup dp (ccFiles ctx1)
+        imports = [ImportedScope t (exportsOf $ usingPath t) | t <- feUsingTargets entry1]
+        exportsOf dp = fromMaybe Map.empty $ feExported =<< Map.lookup dp (ccFiles ctx1)
 
-        (effective, effectiveProbs) = effectiveScope path localCands depsInfo
+        (effective, effectiveProbs) = effectiveScope path localCands imports
 
         (exported, exportProbs) = exportedScope effective prog
         exportedMap = Map.fromList [(edLabel d, d) | d <- exported]
