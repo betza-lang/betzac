@@ -78,6 +78,24 @@ spec = describe "Compilation.Scope" $ do
             map edIsOverride defs `shouldBe` [True]
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateDirective]
 
+        it "publishes the effective winner for a direct assign export, not the exporting statement's own body" $ do
+            let src = "export A = fW;\noverride A = fF;\n"
+                prog = parseProgram src
+                eff = fst $ effectiveScope "<test>" (localDefs prog) []
+                (defs, probs) = exportedScope eff prog
+            map edLabel defs `shouldBe` ["A"]
+            map edIsOverride defs `shouldBe` [True]
+            map edOrder defs `shouldBe` [1] -- the override statement, not the export statement (order 0)
+            length probs `shouldBe` 0
+
+        it "treats `export A = expr;` as sugar for `export A; A = expr;`, publishing identically either way" $ do
+            let exportOf prog = let eff = fst $ effectiveScope "<test>" (localDefs prog) [] in exportedScope eff prog
+                (sugarDefs, sugarProbs) = exportOf $ parseProgram "export A = fW;\noverride A = fF;\n"
+                (desugarDefs, desugarProbs) = exportOf $ parseProgram "A = fW;\nexport A;\noverride A = fF;\n"
+            map edLabel sugarDefs `shouldBe` map edLabel desugarDefs
+            map edIsOverride sugarDefs `shouldBe` map edIsOverride desugarDefs
+            length sugarProbs `shouldBe` length desugarProbs
+
     describe "checkLabelRefs" $ do
         it "flags an unresolved label for an unexported bare reference to an undefined label" $ do
             let src = "Q;\n"

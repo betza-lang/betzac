@@ -12,8 +12,10 @@ module Betzac.Compilation.Label.Scope (
 
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
+import Data.Ord (comparing)
 
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (
@@ -71,6 +73,15 @@ labelOf :: BetzaStmt Ps -> Maybe String
 labelOf (Assign lbl _ _) = Just $ labelText lbl
 labelOf (LabelRef _ _) = Nothing
 
+{- | The label a statement is *about* — the one it defines ('Assign') or the one it
+merely references ('LabelRef'). Unlike 'labelOf', this never returns 'Nothing': every
+statement names some label, whether it's defining fresh content for it or just
+pointing at whatever already resolves for it elsewhere.
+-}
+stmtLabel :: BetzaStmt p -> Label p
+stmtLabel (Assign lbl _ _) = lbl
+stmtLabel (LabelRef lbl _) = lbl
+
 {- | All Assign-defined labels within a single file, independent of whether they are
 exported — the candidate pool for that file's own local scope.
 -}
@@ -104,12 +115,15 @@ resolvePriority cands = case sortOn (\c -> (candClass c, candOrder c)) (foldr (:
     (w : ls) -> (w, ls)
     [] -> error "resolvePriority: unreachable, NonEmpty is never empty"
 
-{- | The labels a file exposes to other files via export. A same-label export repeated
-within one file yields only the highest-priority definition; the rest are ignored
-and warned as a duplicate directive. A bare label-resolving export (@export A;@)
-exposes whatever wins for that label in the file's effective scope — local or
-imported via @using@ — rather than exporting the reference statement itself; if the
-label doesn't resolve at all, it's an unresolved label.
+{- | The labels a file exposes to other files via export. @export label = expr;@ is
+equivalent to @export label; label = expr;@ — the exporting statement's own
+@override@/precedence only affects *which definition wins* for that label (via
+'effectiveScope', same as any other local definition); the export directive itself
+just republishes whatever wins for that label in the file's effective scope, local or
+imported via @using@, never the exporting statement's own body directly. If the label
+doesn't resolve at all, it's an unresolved label. A same-label export repeated within
+one file publishes only once — the earliest occurrence — and warns every later one as
+a duplicate directive.
 -}
 exportedScope :: LabelTable ResolvedDef -> BetzaProgram Ps -> ([ExportedDef], [SemanticProblem])
 exportedScope eff prog =
@@ -119,26 +133,19 @@ exportedScope eff prog =
     (entries, refProbs) = foldl' step ([], []) (zip [0 :: Int ..] prog)
 
     step (accEntries, accProbs) (i, qs) = case statementOf qs of
-        Just (stmt, isOverride, True) -> case bareLabelRef stmt of
-            Just lbl -> case Map.lookup (labelText lbl) eff of
-                Just (ResolvedDef _ def) -> ((edLabel def, def) : accEntries, accProbs)
-                Nothing -> (accEntries, mkProblem Error (UnresolvedLabel) (getSpan stmt) : accProbs)
-            Nothing -> case labelOf stmt of
-                Just lbl -> ((lbl, ExportedDef lbl qs isOverride i) : accEntries, accProbs)
-                Nothing -> (accEntries, accProbs)
+        Just (stmt, _, True) -> case Map.lookup (labelText (stmtLabel stmt)) eff of
+            Just (ResolvedDef _ def) -> ((edLabel def, (i, qs, def)) : accEntries, accProbs)
+            Nothing -> (accEntries, mkProblem Error UnresolvedLabel (getSpan stmt) : accProbs)
         _ -> (accEntries, accProbs)
 
-    grouped :: LabelTable (NonEmpty Candidate)
-    grouped =
-        Map.fromListWith
-            (<>)
-            [(lbl, Candidate "" def (classOf $ edIsOverride def) (0, edOrder def) :| []) | (lbl, def) <- entries]
+    grouped :: LabelTable (NonEmpty (Int, QualifiedStmt Ps, ExportedDef))
+    grouped = Map.fromListWith (<>) [(lbl, occ :| []) | (lbl, occ) <- entries]
 
-    collect cands (defs, probs) =
-        let (winner, losers) = resolvePriority cands
-         in (candDef winner : defs, probs ++ map dupWarning losers)
+    collect occurrences (defs, probs) =
+        case NE.sortBy (comparing (\(i, _, _) -> i)) occurrences of
+            (_, _, def) :| rest -> (def : defs, probs ++ map dupWarning rest)
 
-    dupWarning c = mkProblem Warning DuplicateDirective (getSpan (candDef c))
+    dupWarning (_, qs, _) = mkProblem Warning DuplicateDirective (getSpan qs)
 
 {- | Diagnostics for every *unexported* bare label-resolving reference statement in a
 file (@label;@ with no @export@): checked against the same effective scope as any
