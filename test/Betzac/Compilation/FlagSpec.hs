@@ -8,7 +8,7 @@ import Betzac.Compilation.Flag (
  )
 import Betzac.Diagnostic (
     SemanticProblem (..),
-    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel),
+    SemanticProblemKind (AllInFirstLeg, DuplicateDirective, DuplicateLabel, UnresolvedLabel),
     Severity (Error, Warning),
     mkProblem,
  )
@@ -47,7 +47,15 @@ spec = describe "Compilation.Flag" $ do
             map semSev (applyOptions opts [problem DuplicateDirective]) `shouldBe` [Warning]
             length (applyOptions opts [problem DuplicateLabel]) `shouldBe` 0
 
-        it "leaves an unconditional diagnostic untouched regardless of flags" $ do
+        it "leaves an unconditional error untouched regardless of flags" $ do
             let opts = optionsFromFlags [SuppressWarnings]
                 unconditional = mkProblem Error UnresolvedLabel Generated
             map semSev (applyOptions opts [unconditional]) `shouldBe` [Error]
+
+        it "-w silences a warning that no -W flag governs" $ do
+            let opts = optionsFromFlags [SuppressWarnings]
+            length (applyOptions opts [problem AllInFirstLeg]) `shouldBe` 0
+
+        it "keeps a warning that no -W flag governs when -w is absent" $ do
+            let opts = optionsFromFlags []
+            map semSev (applyOptions opts [problem AllInFirstLeg]) `shouldBe` [Warning]

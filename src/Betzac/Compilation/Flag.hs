@@ -41,13 +41,12 @@ data CompilerOptions = CompilerOptions
 optionsFromFlags :: [CompilerFlag] -> CompilerOptions
 optionsFromFlags flags =
     let warningsAreErrors = PromoteAllWarningsToErrors `elem` flags
-        silentWs = SuppressWarnings `elem` flags
         specifierLevel s
             | warningsAreErrors || PromoteWarningsToError s `elem` flags = Error
-            | not silentWs && GenerateWarnings s `elem` flags = Warning
+            | GenerateWarnings s `elem` flags = Warning
             | otherwise = Silent
      in CompilerOptions
-            { silentWarnings = silentWs
+            { silentWarnings = SuppressWarnings `elem` flags
             , unusedLevel = specifierLevel Wunused
             , directiveLevel = specifierLevel Wdirective
             , langLevel = specifierLevel Wlang
@@ -66,11 +65,11 @@ specifierOf Sem.DuplicateLabel = Just Wunused
 specifierOf Sem.DuplicateDirective = Just Wdirective
 specifierOf _ = Nothing
 
-{- | Drop the diagnostics whose specifier is silenced, and force the rest to their
-configured severity.
+{- | Drop the diagnostics whose specifier is silenced, force the rest to their
+configured severity, then drop whatever is still a warning if -w is set.
 -}
 applyOptions :: CompilerOptions -> [Sem.SemanticProblem] -> [Sem.SemanticProblem]
-applyOptions opts = mapMaybe adjust
+applyOptions opts = filter kept . mapMaybe adjust
   where
     adjust problem = case specifierOf (Sem.semKind problem) of
         Nothing -> Just problem
@@ -78,3 +77,7 @@ applyOptions opts = mapMaybe adjust
             Silent -> Nothing
             Warning -> Just problem{Sem.semSev = Sem.Warning}
             Error -> Just problem{Sem.semSev = Sem.Error}
+
+    -- -w silences every warning, including the ones no -W flag governs. Anything
+    -- promoted to an error on the way through outranks it.
+    kept problem = not (silentWarnings opts) || Sem.semSev problem /= Sem.Warning
