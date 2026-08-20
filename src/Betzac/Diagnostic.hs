@@ -45,6 +45,7 @@ data SemanticProblemKind
     | IllFormedLabel
     | UnresolvedLabel
     | UnusedLabel String
+    | UnusedUsing
     | IllFormedDirective
     | UsingUnknown FilePath
     | UsingCircular [FilePath]
@@ -65,6 +66,7 @@ causeOf IllFormedStatement = "ill-formed statement"
 causeOf IllFormedLabel = "ill-formed label"
 causeOf UnresolvedLabel = "unresolved label"
 causeOf (UnusedLabel _) = "unused label"
+causeOf UnusedUsing = "unused using"
 causeOf IllFormedDirective = "ill-formed directive"
 causeOf (UsingUnknown _) = "using unknown"
 causeOf (UsingCircular _) = "using circular"

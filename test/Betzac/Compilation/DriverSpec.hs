@@ -8,10 +8,14 @@ import qualified Data.Text.IO as TIO
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (feDiagnostics))
+import Betzac.Compilation.Context (
+    CompilationContext (..),
+    FileEntry (feDiagnostics, feUsingTargets),
+    UsingTarget (usingIsOverride),
+ )
 import qualified Betzac.Compilation.Driver as Driver
 import Betzac.Compilation.Flag (optionsFromFlags)
-import Betzac.Diagnostic (SemanticProblem (semKind, semSpan), SemanticProblemKind (DuplicateLabel), causeOf)
+import Betzac.Diagnostic (SemanticProblem (semKind, semSpan), SemanticProblemKind (DuplicateLabel, UnusedUsing), causeOf)
 import Betzac.Span (Span (..))
 
 import Hedgehog
@@ -86,6 +90,49 @@ spec = describe "Compilation.Driver" $ do
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> Map.size (ccFiles ctx) `shouldBe` 4
+
+    describe "using directives" $ do
+        let withDep body =
+                withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                    writeFile (dir </> "dep.betza") "export N = :2,1:;\nexport M = :1,1:;\n"
+                    body dir
+            resolve dir main = do
+                writeFile (dir </> "main.betza") main
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx -> pure (Driver.resolveScopes ctx)
+            targetsOf ctx =
+                concat [feUsingTargets e | (p, e) <- Map.toList (ccFiles ctx), "main.betza" `isSuffixOf` p]
+
+        it "keeps one using per target, reporting the duplicate as a directive rather than a label pile" $
+            withDep $ \dir -> do
+                ctx <- resolve dir "using dep;\nusing dep;\nexport X = N;\n"
+                length (targetsOf ctx) `shouldBe` 1
+                map (causeOf . semKind) (allDiagnostics ctx) `shouldBe` ["duplicate directive"]
+                all (onLine 2) (diagnosticsOn "main.betza" ctx) `shouldBe` True
+
+        it "keeps the overriding one when a target is named both ways" $
+            withDep $ \dir -> do
+                ctx <- resolve dir "using dep;\noverride using dep;\nexport X = N;\n"
+                map usingIsOverride (targetsOf ctx) `shouldBe` [True]
+                hasCause "duplicate directive" (allDiagnostics ctx) `shouldBe` True
+
+        it "warns on a using whose labels are never referenced" $
+            withDep $ \dir -> do
+                ctx <- resolve dir "using dep;\nexport X = :1,0:;\n"
+                map (causeOf . semKind) (allDiagnostics ctx) `shouldBe` ["unused using"]
+                all (onLine 1) (diagnosticsOn "main.betza" ctx) `shouldBe` True
+
+        it "warns on a using whose only referenced label is itself dead" $
+            withDep $ \dir -> do
+                ctx <- resolve dir "using dep;\nY = N;\n"
+                hasCause "unused using" (allDiagnostics ctx) `shouldBe` True
+
+        it "stays quiet about a using that a live definition depends on" $
+            withDep $ \dir -> do
+                ctx <- resolve dir "using dep;\nexport X = N;\n"
+                length (allDiagnostics ctx) `shouldBe` 0
 
     describe "resolveScopes" $ do
         it "spans a duplicate export's diagnostics across the whole statement, including the export keyword" $
@@ -182,7 +229,7 @@ spec = describe "Compilation.Driver" $ do
         it "warns a local plain definition shadowed by an import on its own statement, not on the import" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "lib.betza") "export W = :1,1:;\n"
-                writeFile (dir </> "main.betza") "using lib;\nW = :2,2:;\n"
+                writeFile (dir </> "main.betza") "using lib;\nW = :2,2:;\nexport X = W;\n"
                 result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
@@ -197,7 +244,7 @@ spec = describe "Compilation.Driver" $ do
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "libA.betza") "export W = :1,1:;\n"
                 writeFile (dir </> "libB.betza") "export W = :2,2:;\n"
-                writeFile (dir </> "main.betza") "using libA;\nusing libB;\n"
+                writeFile (dir </> "main.betza") "using libA;\nusing libB;\nexport X = W;\n"
                 result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
@@ -208,7 +255,9 @@ spec = describe "Compilation.Driver" $ do
                             mainDiags = diagnosticsOn "main.betza" ctx
                         length libADiags `shouldBe` 0
                         length libBDiags `shouldBe` 0
-                        map (causeOf . semKind) mainDiags `shouldBe` [causeOf DuplicateLabel]
+                        -- libB lost its only label, so it also carries nothing into main.
+                        map (causeOf . semKind) mainDiags
+                            `shouldBe` [causeOf DuplicateLabel, causeOf UnusedUsing]
                         -- libA is used first, so it wins; libB's `using` (main.betza line 2) loses.
                         all (onLine 2) mainDiags `shouldBe` True
 

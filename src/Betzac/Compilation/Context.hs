@@ -27,7 +27,7 @@ data UsingTarget = UsingTarget
     , usingIsOverride :: Bool
     , usingSpan :: Span
     }
-    deriving (Show)
+    deriving (Eq, Show)
 
 instance HasSpan UsingTarget where
     getSpan = usingSpan

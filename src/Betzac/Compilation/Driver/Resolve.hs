@@ -65,5 +65,5 @@ resolveFileStage path ctx1 = do
 
     logProblems exportProbs
     logProblems effectiveProbs
-    logProblems (checkLabels effective exportedMap path prog)
+    logProblems (checkLabels effective exportedMap path imports prog)
     pure (exportedMap, effective)

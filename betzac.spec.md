@@ -40,7 +40,7 @@ A **betza directive** is a special metaconsideration applied to a betza statemen
 
 A file in the **betza format**, or **betza file**, is a file containing a collection of betza directive and statements. By convention, a betza file will generally have the extension `.betza`, `.btz`, or `.b`.
 
-The **betzac semantics** refers to the betza language — i.e. betza notation proper — _in addition to_ compiler semantics as will be described in [Section 2](#2-compiler-semantics), such as moveset definition, commenting, and more. The **compiler semantics** are all those constructs that are strictly part of the betza format but not the betza language.
+The **betzac semantics** refers to the betza language -- i.e. betza notation proper -- _in addition to_ compiler semantics as will be described in [Section 2](#2-compiler-semantics), such as moveset definition, commenting, and more. The **compiler semantics** are all those constructs that are strictly part of the betza format but not the betza language.
 
 A **betza object** is the artefact produced by `betzac` on a single betza statement, as part of a betza file. The format of the betza object is called the **betza intermediate representation** (**betza IR**).
 
@@ -54,7 +54,7 @@ Finally, a **compilation target** is a source file for which certain betza state
 
 ### 1.4 Objectives
 
-The goal of `betzac` is to accept as input a betza file and produce an object file. The point is that the IR should be efficiently and painlessly interpretable — moreso than a raw collection of betza expressions — by a computer program such as a chess engine or web app backend.
+The goal of `betzac` is to accept as input a betza file and produce an object file. The point is that the IR should be efficiently and painlessly interpretable -- moreso than a raw collection of betza expressions -- by a computer program such as a chess engine or web app backend.
 
 `betzac` is not expected to handle any information pertaining to game rules. And in fact it is expected **not to** handle such data. That is, the betza language should relate only to _geometric_ information or _movement_ information. A proper and explicit explanation of this will be offered in section 3.
 
@@ -136,7 +136,7 @@ In the `:value:` form, `value` is a nonempty string of latin alphanumeric charac
 1. it is exported; or
 2. the expression of its defining statement is referenced, directly or transitively, from the expression of a label that is reachable from the exported scope.
 
-A label that is not reachable by this definition is unreachable, even if some other unreachable label's expression happens to reference it — a chain of labels that only reference each other, with no path back to anything exported, is unreachable in its entirety.
+A label that is not reachable by this definition is unreachable, even if some other unreachable label's expression happens to reference it -- a chain of labels that only reference each other, with no path back to anything exported, is unreachable in its entirety.
 
 ---
 
@@ -192,11 +192,13 @@ A label that is not reachable by this definition is unreachable, even if some ot
 
 2.4.19 - A `using` directive for a file which depends on the current file (because it directly uses it, or because it uses a file which uses it, etc.) will produce an error log with cause `using circular`.
 
-2.4.20 - A `using` directive for a filename that is already part of a `using` directive in the local scope will be ignored by `betzac`.
+2.4.20 - A `using` directive for a filename that is already part of a `using` directive in the local scope will be ignored by `betzac`. Where the directives differ in whether they are part of an `override` directive, the overriding one is kept and the others ignored, regardless of their order.
 
-2.4.20.1 - If the `-Wdirective` flag is set, `betzac` will produce a warning log with cause `duplicate directive`.
+2.4.20.1 - If the `-Wdirective` flag is set, `betzac` will produce a warning log with cause `duplicate directive` for each ignored `using` directive.
 
 2.4.21 - A `using` directive will make the exported scope of its `filename` source file available in the current file's imported scope.
+
+2.4.21.1 - If the `-Wunused` flag is set, `betzac` will produce a warning log with cause `unused using` for a `using` directive that carries nothing into the current file -- either because no label of its exported scope was selected (cf. 2.4.24), or because every label it did contribute is unreachable from the exported scope (cf. 2.3.9).
 
 ---
 
@@ -206,7 +208,7 @@ A label that is not reachable by this definition is unreachable, even if some ot
 
 2.4.22.1 - A syntactically invalid `override` directive will produce an error log with cause `ill-formed directive`.
 
-2.4.23 - If there is an `override using filename` directive, then every statement exported from the corresponding source file is considered part of an override directive, ranked as described in 2.4.24 — but distinctly from, and below, a local override directive.
+2.4.23 - If there is an `override using filename` directive, then every statement exported from the corresponding source file is considered part of an override directive, ranked as described in 2.4.24 -- but distinctly from, and below, a local override directive.
 
 ---
 
@@ -219,15 +221,15 @@ A label that is not reachable by this definition is unreachable, even if some ot
 3. A definition pulled in via a plain (non-overriding) `using` directive.
 4. A local definition that is not part of an override directive.
 
-Among definitions of equal precedence, the earliest one in lexical order is selected. For definitions pulled in via `using`, that means ordered by the position of the `using` directive that introduced them, then by their own position in the source file it targets — there being no single lexical order spanning multiple files.
+Among definitions of equal precedence, the earliest one in lexical order is selected. For definitions pulled in via `using`, that means ordered by the position of the `using` directive that introduced them, then by their own position in the source file it targets -- there being no single lexical order spanning multiple files.
 
 2.4.25 - All non-selected definitions for that label are ignored.
 
-2.4.26 - If the `-Wunused` flag is set, a warning with cause duplicate label will be produced for each ignored definition. For an ignored definition originating from the imported scope, this warning is attributed to the `using` directive that introduced it — in the file being compiled — rather than to the ignored definition's own location in its source file.
+2.4.26 - If the `-Wunused` flag is set, a warning with cause duplicate label will be produced for each ignored definition. For an ignored definition originating from the imported scope, this warning is attributed to the `using` directive that introduced it -- in the file being compiled -- rather than to the ignored definition's own location in its source file.
 
 2.4.26.1 - Warnings for ignored definitions originating from the imported scope will be suppressed when the selected definition is part of an override directive.
 
-2.4.26.2 - If the `-Wdirective` flag is set, `betzac` will produce a warning log with cause `unnecessary override` for a selected definition that is part of an `override` directive whose selected status (cf. 2.4.24) would be unaffected if it were treated as a plain (non-override) definition instead — i.e. no other candidate exists for the same label, or none that would otherwise have outranked it. Non-selected definitions are not reported, their being ignored already being covered by 2.4.26.
+2.4.26.2 - If the `-Wdirective` flag is set, `betzac` will produce a warning log with cause `unnecessary override` for a selected definition that is part of an `override` directive whose selected status (cf. 2.4.24) would be unaffected if it were treated as a plain (non-override) definition instead -- i.e. no other candidate exists for the same label, or none that would otherwise have outranked it. Non-selected definitions are not reported, their being ignored already being covered by 2.4.26.
 
 2.4.26.3 - An `override using` directive covers every label its source file exports, and will produce at most one such warning, attributed to the directive itself, and only when none of the labels it contributes needed the promotion.
 
@@ -331,9 +333,9 @@ The main function of `betzac` is to compile betza files into betza objects. This
 
 2.6.5 - The `-Wfatal-errors` flag may be passed to `betzac` to terminate compilation immediately when the first error log is produced.
 
-2.6.6 - A `-Wunused` flag may be passed to `betzac` to produce warning logs when a statement is ignored during compilation. This flag has specifier `unused`.
+2.6.6 - A `-Wunused` flag may be passed to `betzac` to produce warning logs when a statement or directive is ignored during compilation -- currently unused labels (cf. 2.3.7.1, 2.3.8), duplicate labels (cf. 2.4.26) and unused `using` directives (cf. 2.4.21.1). This flag has specifier `unused`.
 
-2.6.7 - A `-Wdirective` flag may be passed to `betzac` to produce warning logs related to directive usage during compilation — currently duplicate directives (cf. 2.4.8.1, 2.4.20.1) and unnecessary overrides (cf. 2.4.26.2). This flag has specifier `directive`.
+2.6.7 - A `-Wdirective` flag may be passed to `betzac` to produce warning logs related to directive usage during compilation -- currently duplicate directives (cf. 2.4.8.1, 2.4.20.1) and unnecessary overrides (cf. 2.4.26.2). This flag has specifier `directive`.
 
 2.6.8 - A `-Wlang` flag may be passed to `betzac` to produce warning logs when a non fatal betza language issue is detected (cf. [Section 3](#3-betza-expressions)). This flag has specifier `lang`.
 
@@ -454,7 +456,7 @@ We present the grammar of the betza language in Backus-Naur form.
 
 ## 3.3 Lexical Notes
 
-In expressions, `<whitespace>` is ignored wherever it occurs — that is, outside of labels where `" "` has a special role to play. We have omitted this in [Section 3.2](#32-grammar) for ease of reading. It should be implicitly understood that optional whitespace can occur between any non-label terminal character of an expression.
+In expressions, `<whitespace>` is ignored wherever it occurs -- that is, outside of labels where `" "` has a special role to play. We have omitted this in [Section 3.2](#32-grammar) for ease of reading. It should be implicitly understood that optional whitespace can occur between any non-label terminal character of an expression.
 
 ---
 

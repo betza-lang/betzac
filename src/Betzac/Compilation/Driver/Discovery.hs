@@ -2,6 +2,7 @@ module Betzac.Compilation.Driver.Discovery (SourceReader, discover) where
 
 import Control.Exception (IOException, try)
 import Control.Monad (foldM)
+import Data.List (partition)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
@@ -21,8 +22,8 @@ import Betzac.Compilation.Context (
 import Betzac.Compilation.Flag (CompilerOptions)
 import Betzac.Diagnostic (
     SemanticProblem,
-    SemanticProblemKind (SystemFailure, UsingCircular, UsingUnknown),
-    Severity (Error),
+    SemanticProblemKind (DuplicateDirective, SystemFailure, UsingCircular, UsingUnknown),
+    Severity (Error, Warning),
     mkProblem,
  )
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
@@ -71,13 +72,15 @@ visit readSource path ctx
                                 }
                         ctx0 = ctx{ccFiles = Map.insert path placeholder $ ccFiles ctx}
                     (ctx1, deps) <- foldM (processTarget readSource path) (ctx0, []) $ rawUsingTargets pr
-                    let finalEntry =
+                    let (kept, dupes) = dedupeTargets deps
+                        ctx2 = foldl' (flip $ addDiagnostic path) ctx1 dupes
+                        finalEntry =
                             placeholder
-                                { feUsingTargets = deps
-                                , feDiagnostics = feDiagnostics $ ccFiles ctx1 Map.! path
+                                { feUsingTargets = kept
+                                , feDiagnostics = feDiagnostics $ ccFiles ctx2 Map.! path
                                 , feStatus = Parsed
                                 }
-                    return $ Right ctx1{ccFiles = Map.insert path finalEntry $ ccFiles ctx1}
+                    return $ Right ctx2{ccFiles = Map.insert path finalEntry $ ccFiles ctx2}
 
 {- | Resolve one @using@ target and recurse into it. An unresolvable, circular, or
 unreadable target is reported on 'referrer' and skipped, leaving the rest of its
@@ -102,6 +105,17 @@ processTarget readSource referrer (ctx, deps) t = do
                 case visited of
                     Left problem -> return (addDiagnostic referrer problem ctx, deps)
                     Right ctx' -> return (ctx', deps ++ [t{usingPath = path}])
+
+{- | One @using@ per target file, the strongest kept so an @override using@ is never
+weakened by a plain one naming the same file, plus a diagnostic for each that drops.
+-}
+dedupeTargets :: [UsingTarget] -> ([UsingTarget], [SemanticProblem])
+dedupeTargets targets = (kept, map duplicate dropped)
+  where
+    (kept, dropped) = partition (\t -> Map.lookup (usingPath t) strongest == Just t) targets
+    strongest = Map.fromListWith stronger [(usingPath t, t) | t <- targets]
+    stronger new old = if usingIsOverride new && not (usingIsOverride old) then new else old
+    duplicate t = mkProblem Warning DuplicateDirective (usingSpan t)
 
 -- | Valid betza source extensions, tried in order when resolving a `using` module path.
 sourceExtensions :: [String]

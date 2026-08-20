@@ -8,7 +8,7 @@ import Betzac.Compilation.Flag (
  )
 import Betzac.Diagnostic (
     SemanticProblem (..),
-    SemanticProblemKind (AllInFirstLeg, DuplicateDirective, DuplicateLabel, UnnecessaryOverride, UnresolvedLabel),
+    SemanticProblemKind (AllInFirstLeg, DuplicateDirective, DuplicateLabel, UnnecessaryOverride, UnresolvedLabel, UnusedUsing),
     Severity (Error, Warning),
     mkProblem,
  )
@@ -59,6 +59,12 @@ spec = describe "Compilation.Flag" $ do
         it "does not reveal an unnecessary override under -Wunused, since it is not unused-governed" $ do
             let opts = optionsFromFlags [GenerateWarnings Wunused]
             length (applyOptions opts [problem UnnecessaryOverride]) `shouldBe` 0
+
+        it "governs an unused using by -Wunused, not -Wdirective" $ do
+            length (applyOptions (optionsFromFlags [GenerateWarnings Wdirective]) [problem UnusedUsing])
+                `shouldBe` 0
+            map semSev (applyOptions (optionsFromFlags [GenerateWarnings Wunused]) [problem UnusedUsing])
+                `shouldBe` [Warning]
 
         it "leaves an unconditional error untouched regardless of flags" $ do
             let opts = optionsFromFlags [SuppressWarnings]

@@ -31,8 +31,6 @@ import Betzac.Diagnostic (
  )
 import Betzac.Span (HasSpan (..), Span)
 
--- TODO: flag `using` directives whose imports are never referenced
-
 type LabelTable a = Map.Map Labelling a
 
 -- | Normalized text of a label, used as the key into scope maps.

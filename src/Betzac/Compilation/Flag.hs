@@ -61,6 +61,7 @@ levelFor opts Wlang = langLevel opts
 -- | The warning flag governing a problem kind. Kinds with none are always reported.
 specifierOf :: Sem.SemanticProblemKind -> Maybe Wspecifier
 specifierOf (Sem.UnusedLabel _) = Just Wunused
+specifierOf Sem.UnusedUsing = Just Wunused
 specifierOf Sem.DuplicateLabel = Just Wunused
 specifierOf Sem.DuplicateDirective = Just Wdirective
 specifierOf Sem.UnnecessaryOverride = Just Wdirective
