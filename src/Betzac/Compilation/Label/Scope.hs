@@ -1,6 +1,7 @@
 module Betzac.Compilation.Label.Scope (
     LabelTable,
     ImportedScope (..),
+    PreludeScope (..),
     labelText,
     exportedScope,
     localDefs,
@@ -104,9 +105,10 @@ unexportedLabelRefs prog =
 {- | Resolution priority, strongest first: a local @override@ is the most deliberate
 act at the point of conflict; @override using@ exists to settle conflicts between
 imports; an import otherwise outranks a same-named local definition, which is more
-often an accidental collision than a deliberate shadow. Derived 'Ord' is that order.
+often an accidental collision than a deliberate shadow. The prelude comes last: nobody
+asked for it, so anything written down beats it. Derived 'Ord' is that order.
 -}
-data Precedence = LocalOverride | ImportedOverride | ImportedPlain | LocalPlain
+data Precedence = LocalOverride | ImportedOverride | ImportedPlain | LocalPlain | Prelude
     deriving (Eq, Ord)
 
 isOverriding :: Precedence -> Bool
@@ -196,19 +198,26 @@ data ImportedScope = ImportedScope
     , importedDefs :: LabelTable ExportedDef
     }
 
-{- | Resolve a file's effective scope: its own definitions plus everything its
-dependencies export, keeping one definition per label by 'Precedence', and the
-earliest among equals.
+-- | The standard prelude's exported scope, in scope everywhere with no directive.
+data PreludeScope = PreludeScope
+    { preludeFile :: FilePath
+    , preludeDefs :: LabelTable ExportedDef
+    }
+
+{- | Resolve a file's effective scope: its own definitions, everything its dependencies
+export, and the standard prelude, keeping one definition per label by 'Precedence', and
+the earliest among equals.
 -}
 effectiveScope ::
     FilePath ->
     [ExportedDef] ->
     [ImportedScope] ->
+    Maybe PreludeScope ->
     (LabelTable ResolvedDef, [SemanticProblem])
-effectiveScope self locals imports = (accepted, loserProbs ++ overrideProbs)
+effectiveScope self locals imports prelude = (accepted, loserProbs ++ overrideProbs)
   where
     contests = Map.map (winnerAndLosers candKey) grouped
-    grouped = groupOn (edLabel . candDef) (localCandidates ++ importedCandidates)
+    grouped = groupOn (edLabel . candDef) (localCandidates ++ importedCandidates ++ preludeCandidates)
 
     localPrec d = if edIsOverride d then LocalOverride else LocalPlain
     importedPrec via = if usingIsOverride via then ImportedOverride else ImportedPlain
@@ -221,12 +230,20 @@ effectiveScope self locals imports = (accepted, loserProbs ++ overrideProbs)
         , d <- Map.elems defs
         ]
 
+    preludeCandidates =
+        [ Candidate (preludeFile p) d Prelude (0, edOrder d) (getSpan d)
+        | Just p <- [prelude]
+        , d <- Map.elems (preludeDefs p)
+        ]
+
     accepted = Map.map (\(w, _) -> ResolvedDef (candFrom w) (candDef w)) contests
 
     loserProbs = concat [mapMaybe (loserWarning w) losers | (w, losers) <- Map.elems contests]
     overrideProbs = unnecessaryOverrides imports (Map.elems contests)
 
     -- Displacing an import is exactly what an override is for, so stay quiet about it.
+    -- Shadowing the prelude is ordinary, and its definitions are not in this file.
     loserWarning winner loser
+        | candPrecedence loser == Prelude = Nothing
         | isImported (candPrecedence loser) && isOverriding (candPrecedence winner) = Nothing
         | otherwise = Just $ mkProblem Warning DuplicateLabel (candDiagSpan loser)

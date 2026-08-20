@@ -3,7 +3,7 @@
 module LangServer.Handlers.Core (publishDiagnostics, makeDiagnostic) where
 
 import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
-import Betzac.Compilation.Driver (SourceReader, discover, resolveScopes)
+import Betzac.Compilation.Driver (SourceReader, discover, resolvePrelude, resolveScopes, sealPrelude)
 import Betzac.Compilation.Flag (CompilerFlag (..), CompilerOptions, Wspecifier (..), optionsFromFlags)
 import Betzac.Debug.PrettyPrint (prettyPrint)
 import Betzac.Diagnostic (SemanticProblem (..), Severity (..))
@@ -14,6 +14,7 @@ import Text.Megaparsec
 
 import Control.Lens ((^.))
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Except (ExceptT (..), runExceptT)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
@@ -65,13 +66,21 @@ publishDiagnostics fp _u src = do
     mRoot <- getRootPath
     let root = fromMaybe (takeDirectory fp) mRoot
     reader <- overlayReader fp src
-    result <- liftIO $ discover reader root fp blsOptions
+    result <- liftIO $ runExceptT $ do
+        prelude <- ExceptT $ resolvePrelude Nothing
+        ctx0 <- ExceptT $ discover reader root fp (Just prelude) blsOptions
+        ExceptT $ return $ sealPrelude $ resolveScopes ctx0
     case result of
         -- A system failure (missing workspace root/target) isn't attributable to any
         -- particular file's own text; best-effort attach it to the file being edited
         -- rather than silently show nothing.
         Left problem -> publishFor fp [semanticProblemToDiagnostic problem]
-        Right ctx0 -> mapM_ (uncurry publishFor . fmap fileDiagnostics) $ Map.toList $ ccFiles $ resolveScopes ctx0
+        -- The prelude is never published: it is not the user's source to fix.
+        Right ctx ->
+            mapM_ (uncurry publishFor . fmap fileDiagnostics) $
+                filter ((/= ccPrelude ctx) . Just . fst) $
+                    Map.toList $
+                        ccFiles ctx
   where
     -- 'notificationHandler's aren't guaranteed to complete in receipt order (the lsp
     -- library may run them concurrently) — without a version, a slower earlier compile

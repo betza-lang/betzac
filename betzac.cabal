@@ -18,6 +18,8 @@ build-type:     Simple
 extra-source-files:
     README.md
     CHANGELOG.md
+data-files:
+    prelude/std.betza
 
 source-repository head
   type: git
@@ -38,6 +40,7 @@ library
       Betzac.Compilation.Diagnostic
       Betzac.Compilation.Driver
       Betzac.Compilation.Driver.Discovery
+      Betzac.Compilation.Driver.Prelude
       Betzac.Compilation.Driver.Resolve
       Betzac.Compilation.Flag
       Betzac.Compilation.Label
@@ -133,6 +136,7 @@ test-suite betzac-test
       Arbitrary
       Compilation.DriverSpec
       Compilation.FlagSpec
+      Compilation.PreludeSpec
       Compilation.ScopeSpec
       Lexer.LexerQC
       Lexer.LexerSpec

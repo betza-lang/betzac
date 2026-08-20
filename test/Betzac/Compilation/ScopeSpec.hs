@@ -39,7 +39,7 @@ parseProgram src = case fromScratch "<test>" src of
 
 -- | The effective scope of a program that imports nothing.
 scopeOf :: FilePath -> BetzaProgram Ps -> LabelTable ResolvedDef
-scopeOf self prog = fst $ effectiveScope self (localDefs prog) []
+scopeOf self prog = fst $ effectiveScope self (localDefs prog) [] Nothing
 
 -- | A snippet's exported scope, as pulled in by a @using@ of it under the given name.
 usingDepAs :: FilePath -> Bool -> Text -> ImportedScope
@@ -74,7 +74,7 @@ spec = describe "Compilation.Scope" $ do
 
         it "resolves a bare label-resolving export against a label pulled in via using, not just local definitions" $ do
             let prog = parseProgram "using dep;\nexport N;\n"
-                eff = fst $ effectiveScope "main" (localDefs prog) [usingDep False "export N = :2,1:;\n"]
+                eff = fst $ effectiveScope "main" (localDefs prog) [usingDep False "export N = :2,1:;\n"] Nothing
                 (defs, probs) = exportedScope eff prog
             map edLabel defs `shouldBe` ["N"]
             length probs `shouldBe` 0
@@ -119,18 +119,18 @@ spec = describe "Compilation.Scope" $ do
     describe "effectiveScope" $ do
         it "prefers override over plain regardless of lexical order" $ do
             let prog = parseProgram "A = fW;\noverride A = fF;\n"
-                (resolved, probs) = effectiveScope "<test>" (localDefs prog) []
+                (resolved, probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
             fmap (edIsOverride . rdDef) (Map.lookup "A" resolved) `shouldBe` Just True
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateLabel]
 
         it "picks the earliest definition among equal precedence" $ do
             let prog = parseProgram "A = fW;\nA = fF;\n"
-                (resolved, _probs) = effectiveScope "<test>" (localDefs prog) []
+                (resolved, _probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
             fmap (edOrder . rdDef) (Map.lookup "A" resolved) `shouldBe` Just 0
 
         it "promotes every export from an overriding using to override-class" $ do
             let prog = parseProgram "N = fF;\n"
-                (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep True "export N = fW;\n"]
+                (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep True "export N = fW;\n"] Nothing
             fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "dep"
             -- A plain import would have outranked the local plain by itself, so the
             -- override on the using changes nothing.
@@ -138,19 +138,19 @@ spec = describe "Compilation.Scope" $ do
 
         it "suppresses the duplicate-label warning for an imported loser when the winner is override-class" $ do
             let prog = parseProgram "override N = fF;\n"
-                (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep False "export N = fW;\n"]
+                (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep False "export N = fW;\n"] Nothing
             fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "main"
             length probs `shouldBe` 0
 
         it "prefers a plain import over a plain local definition of the same label" $ do
             let prog = parseProgram "N = fF;\n"
-                (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep False "export N = fW;\n"]
+                (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep False "export N = fW;\n"] Nothing
             fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "dep"
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateLabel]
 
         it "prefers a local override over an import pulled in via override using" $ do
             let prog = parseProgram "override N = fF;\n"
-                (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep True "export N = fW;\n"]
+                (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep True "export N = fW;\n"] Nothing
             fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "main"
             -- The using won nothing, so its own override earned nothing either.
             causes probs `shouldBe` [causeOf UnnecessaryOverride]
@@ -158,47 +158,47 @@ spec = describe "Compilation.Scope" $ do
     describe "unnecessary override" $ do
         it "flags a local override with nothing to outrank" $ do
             let prog = parseProgram "override A = fW;\n"
-                (_, probs) = effectiveScope "<test>" (localDefs prog) []
+                (_, probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
             causes probs `shouldBe` [causeOf UnnecessaryOverride]
 
         it "flags a local override that already came first" $ do
             let prog = parseProgram "override A = fW;\nA = fF;\n"
-                (_, probs) = effectiveScope "<test>" (localDefs prog) []
+                (_, probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
             causes probs `shouldBe` [causeOf DuplicateLabel, causeOf UnnecessaryOverride]
 
         it "stays quiet when the override is what beats an earlier plain definition" $ do
             let prog = parseProgram "A = fW;\noverride A = fF;\n"
-                (_, probs) = effectiveScope "<test>" (localDefs prog) []
+                (_, probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
             causes probs `shouldBe` [causeOf DuplicateLabel]
 
         it "does not flag a losing override, only the selected one" $ do
             let prog = parseProgram "override A = fW;\noverride A = fF;\n"
-                (_, probs) = effectiveScope "<test>" (localDefs prog) []
+                (_, probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
             causes probs `shouldBe` [causeOf DuplicateLabel]
 
         it "stays quiet when demoting would lose to an import on class rather than position" $ do
             let prog = parseProgram "override N = fF;\n"
-                (_, probs) = effectiveScope "main" (localDefs prog) [usingDep False "export N = fW;\n"]
+                (_, probs) = effectiveScope "main" (localDefs prog) [usingDep False "export N = fW;\n"] Nothing
             length probs `shouldBe` 0
 
         it "flags an override using once, not once per label it provides" $ do
             let prog = parseProgram "export A;\n"
                 dep = usingDep True "export A = fW;\nexport B = fF;\nexport C = fA;\n"
-                (_, probs) = effectiveScope "main" (localDefs prog) [dep]
+                (_, probs) = effectiveScope "main" (localDefs prog) [dep] Nothing
             causes probs `shouldBe` [causeOf UnnecessaryOverride]
 
         it "spares an override using when even one of its labels needed the promotion" $ do
             let prog = parseProgram "export N;\n"
                 plain = usingDepAs "first" False "export N = fW;\n"
                 overriding = usingDepAs "second" True "export N = fF;\nexport M = fA;\n"
-                (_, probs) = effectiveScope "main" (localDefs prog) [plain, overriding]
+                (_, probs) = effectiveScope "main" (localDefs prog) [plain, overriding] Nothing
             length probs `shouldBe` 0
 
         it "flags an override using that only wins what its position alone would have" $ do
             let prog = parseProgram "export N;\n"
                 overriding = usingDepAs "first" True "export N = fW;\n"
                 plain = usingDepAs "second" False "export N = fF;\n"
-                (_, probs) = effectiveScope "main" (localDefs prog) [overriding, plain]
+                (_, probs) = effectiveScope "main" (localDefs prog) [overriding, plain] Nothing
             causes probs `shouldBe` [causeOf UnnecessaryOverride]
 
     describe "priority resolution property" $
@@ -207,7 +207,7 @@ spec = describe "Compilation.Scope" $ do
                 flags <- forAll $ Gen.list (Range.linear 1 6) Gen.bool
                 let src = T.concat [(if ov then "override " else "") <> "A = fW;\n" | ov <- flags]
                     prog = parseProgram src
-                    (resolved, probs) = effectiveScope "<test>" (localDefs prog) []
+                    (resolved, probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
                     expectedWinnerIx = case [i | (i, True) <- zip [0 :: Int ..] flags] of
                         (i : _) -> i
                         [] -> 0

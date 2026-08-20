@@ -4,6 +4,7 @@ module Options (
     inputFile,
     emitDot,
     workspace,
+    preludePath,
     verbosity,
     compilerFlags,
     getOptions,
@@ -21,6 +22,7 @@ data Options = Options
     { inputFile :: FilePath
     , emitDot :: Maybe FilePath
     , workspace :: Maybe FilePath
+    , preludePath :: Maybe FilePath
     , verbosity :: Verbosity
     , compilerFlags :: [CompilerFlag]
     }
@@ -52,6 +54,12 @@ optionsParser =
                 long "workspace"
                     <> metavar "DIR"
                     <> help "Workspace directory `using` directives resolve against (defaults to the input file's directory)"
+            )
+        <*> optional
+            ( strOption $
+                long "prelude"
+                    <> metavar "FILE"
+                    <> help "Standard prelude to compile against (defaults to $BETZAC_PRELUDE, else the installed one)"
             )
         <*> verbosityParser
         <*> compilerFlagsParser

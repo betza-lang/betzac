@@ -170,7 +170,7 @@ A label that is not reachable by this definition is unreachable, even if some ot
 
 2.4.10 - The exported scope of a source file will consist of all labels from statements that are part of an `export` directive.
 
-2.4.11 - The imported scope of a source file will consist be the union of the exported scopes of all source files that it references via `using` directives.
+2.4.11 - The imported scope of a source file will consist be the union of the exported scopes of all source files that it references via `using` directives, together with the exported scope of the standard prelude (cf. 5.2).
 
 2.4.12 - The effective scope of a source file will be the union of its local scope and imported scope.
 
@@ -220,6 +220,7 @@ A label that is not reachable by this definition is unreachable, even if some ot
 2. A definition pulled in via an `override using` directive (cf. 2.4.23).
 3. A definition pulled in via a plain (non-overriding) `using` directive.
 4. A local definition that is not part of an override directive.
+5. A definition provided by the standard prelude (cf. [Section 5](#5-standard-prelude)).
 
 Among definitions of equal precedence, the earliest one in lexical order is selected. For definitions pulled in via `using`, that means ordered by the position of the `using` directive that introduced them, then by their own position in the source file it targets -- there being no single lexical order spanning multiple files.
 
@@ -232,6 +233,8 @@ Among definitions of equal precedence, the earliest one in lexical order is sele
 2.4.26.2 - If the `-Wdirective` flag is set, `betzac` will produce a warning log with cause `unnecessary override` for a selected definition that is part of an `override` directive whose selected status (cf. 2.4.24) would be unaffected if it were treated as a plain (non-override) definition instead -- i.e. no other candidate exists for the same label, or none that would otherwise have outranked it. Non-selected definitions are not reported, their being ignored already being covered by 2.4.26.
 
 2.4.26.3 - An `override using` directive covers every label its source file exports, and will produce at most one such warning, attributed to the directive itself, and only when none of the labels it contributes needed the promotion.
+
+2.4.26.4 - No warning will be produced for an ignored definition provided by the standard prelude, whatever the selected definition is: the prelude is in scope in every file without having been asked for, and shadowing it is ordinary.
 
 ---
 
@@ -256,6 +259,16 @@ The main function of `betzac` is to compile betza files into betza objects. This
 2.5.5 - `betzac` will attempt to resolve `using` directives (cf. [Section 2.4](#24-directives)) relative to the workspace directory.
 
 2.5.6 - If the workspace directory cannot be resolved or does not exist, `betzac` will terminate compilation and produce an error log with cause `system`.
+
+---
+
+#### Prelude
+
+2.5.6.1 - `betzac` will resolve exactly one standard prelude source file (cf. [Section 5](#5-standard-prelude)) for every compilation, from the first of: a prelude path given on the command line, the `BETZAC_PRELUDE` environment variable, the prelude shipped with the `betzac` installation.
+
+2.5.6.2 - A prelude path named on the command line or in `BETZAC_PRELUDE` which does not resolve to a source file will terminate compilation and produce an error log with cause `system`, rather than falling through to the next candidate.
+
+2.5.6.3 - If no prelude can be resolved, `betzac` will terminate compilation and produce an error log with cause `system`.
 
 ---
 
@@ -491,6 +504,26 @@ TODO
 TODO
 
 # 5 Standard Prelude
+
+The standard prelude defines the primitive atoms of betza notation -- the leapers every reader of the notation already expects to mean something. It is a betza source file like any other, and is not part of the grammar.
+
+5.1 - `betzac` will resolve a standard prelude for every compilation, as described in 2.5.6.1.
+
+5.2 - The exported scope of the standard prelude will be part of the imported scope of every source file of a compilation, without any directive naming it.
+
+5.2.1 - The standard prelude is not part of its own imported scope.
+
+5.3 - A definition provided by the standard prelude ranks below every other candidate for its label, as described in 2.4.24, so any definition written down -- local or imported -- shadows it.
+
+5.3.1 - Shadowing a standard prelude definition produces no warning log (cf. 2.4.26.4).
+
+5.4 - The standard prelude will never produce a warning log: it is not source the invoking user is expected to act on.
+
+5.5 - If compiling the standard prelude would produce an error log, `betzac` will terminate compilation and produce a single error log with cause `system`, the installation rather than the compilation target being at fault.
+
+5.6 - The standard prelude will define, at minimum, the primitive leapers `W`, `F`, `D`, `N`, `A`, `H`, `C`, `Z`, and `G`.
+
+---
 
 # 6 Non Functional Requirements
 

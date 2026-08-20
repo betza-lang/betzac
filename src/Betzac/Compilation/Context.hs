@@ -81,15 +81,18 @@ data FileEntry = FileEntry
 data CompilationContext = CompilationContext
     { ccWorkspaceRoot :: FilePath
     , ccTarget :: FilePath
+    , ccPrelude :: Maybe FilePath
+    -- ^ In scope in every file but the prelude itself, without any directive.
     , ccFiles :: Map.Map FilePath FileEntry
     , ccOptions :: CompilerOptions
     }
 
-emptyContext :: FilePath -> FilePath -> CompilerOptions -> CompilationContext
-emptyContext root target opts =
+emptyContext :: FilePath -> FilePath -> Maybe FilePath -> CompilerOptions -> CompilationContext
+emptyContext root target prelude opts =
     CompilationContext
         { ccWorkspaceRoot = root
         , ccTarget = target
+        , ccPrelude = prelude
         , ccFiles = Map.empty
         , ccOptions = opts
         }

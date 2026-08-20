@@ -60,14 +60,14 @@ spec = describe "Compilation.Driver" $ do
         it "reports a system failure when the workspace root doesn't exist" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "f0.betza") "export X = fW;\n"
-                result <- Driver.discover TIO.readFile (dir </> "nope") (dir </> "f0.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile (dir </> "nope") (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left problem -> causeOf (semKind problem) `shouldBe` "system"
                     Right _ -> fail "expected a system failure for a missing workspace root"
 
         it "reports a system failure when the target file doesn't exist" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
-                result <- Driver.discover TIO.readFile dir (dir </> "nope.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "nope.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left problem -> causeOf (semKind problem) `shouldBe` "system"
                     Right _ -> fail "expected a system failure for a missing target file"
@@ -75,7 +75,7 @@ spec = describe "Compilation.Driver" $ do
         it "reports using unknown for an unresolvable using target, without aborting discovery" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "f0.betza") "using nope;\nexport X = fW;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> hasCause "using unknown" (allDiagnostics ctx) `shouldBe` True
@@ -86,7 +86,7 @@ spec = describe "Compilation.Driver" $ do
                 writeFile (dir </> "f1.betza") "using f3;\nexport B = fW;\n"
                 writeFile (dir </> "f2.betza") "using f3;\nexport C = fW;\n"
                 writeFile (dir </> "f3.betza") "export D = fW;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> Map.size (ccFiles ctx) `shouldBe` 4
@@ -98,7 +98,7 @@ spec = describe "Compilation.Driver" $ do
                     body dir
             resolve dir main = do
                 writeFile (dir </> "main.betza") main
-                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> pure (Driver.resolveScopes ctx)
@@ -138,7 +138,7 @@ spec = describe "Compilation.Driver" $ do
         it "spans a duplicate export's diagnostics across the whole statement, including the export keyword" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "f0.betza") "export X = fW;\nexport X = fB;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> do
@@ -156,7 +156,7 @@ spec = describe "Compilation.Driver" $ do
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 -- Q and Z are independent failures; neither may mask the other.
                 writeFile (dir </> "f0.betza") "export A = Q;\nZ;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> do
@@ -167,7 +167,7 @@ spec = describe "Compilation.Driver" $ do
         it "stays quiet about a dead bare reference while the file still has an unresolved one" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "f0.betza") "export A = Q;\nW = :1,1:;\nW;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> do
@@ -183,7 +183,7 @@ spec = describe "Compilation.Driver" $ do
                         ++ "export :l0: = B B;\n"
                         ++ "export :l1: = :l0: :l0:;\n"
                         ++ "export :l2: = :l1: :l1:;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> do
@@ -194,7 +194,7 @@ spec = describe "Compilation.Driver" $ do
         it "still reports each definition of a mutual cycle, since both are at fault" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "f0.betza") "export A = B;\nexport B = A;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> do
@@ -204,7 +204,7 @@ spec = describe "Compilation.Driver" $ do
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "dep.betza") "export X = :1,0:;\n"
                 writeFile (dir </> "main.betza") "override using dep;\nexport X;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx0 -> do
@@ -219,7 +219,7 @@ spec = describe "Compilation.Driver" $ do
                 writeFile (dir </> "dep.betza") "export X = :1,0:;\n"
                 writeFile (dir </> "other.betza") "export X = :1,1:;\n"
                 writeFile (dir </> "main.betza") "using other;\noverride using dep;\nexport X;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> do
@@ -230,7 +230,7 @@ spec = describe "Compilation.Driver" $ do
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "lib.betza") "export W = :1,1:;\n"
                 writeFile (dir </> "main.betza") "using lib;\nW = :2,2:;\nexport X = W;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx0 -> do
@@ -245,7 +245,7 @@ spec = describe "Compilation.Driver" $ do
                 writeFile (dir </> "libA.betza") "export W = :1,1:;\n"
                 writeFile (dir </> "libB.betza") "export W = :2,2:;\n"
                 writeFile (dir </> "main.betza") "using libA;\nusing libB;\nexport X = W;\n"
-                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left _ -> fail "did not expect a system failure"
                     Right ctx0 -> do
@@ -267,7 +267,7 @@ spec = describe "Compilation.Driver" $ do
                 n <- forAll $ Gen.int (Range.linear 2 6)
                 result <- liftIO $ withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                     writeChain dir n
-                    Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                    Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left problem -> annotate (causeOf (semKind problem)) >> failure
                     Right ctx -> do
@@ -281,7 +281,7 @@ spec = describe "Compilation.Driver" $ do
                     writeChain dir n
                     -- Close the chain into a cycle: the last file also uses the first.
                     appendFile (dir </> ("f" ++ show (n - 1) ++ ".betza")) "using f0;\n"
-                    Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                    Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])
                 case result of
                     Left problem -> annotate (causeOf (semKind problem)) >> failure
                     Right ctx -> do

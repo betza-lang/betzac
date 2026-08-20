@@ -1,5 +1,6 @@
 import qualified Compilation.DriverSpec as DriverSpec
 import qualified Compilation.FlagSpec as FlagSpec
+import qualified Compilation.PreludeSpec as PreludeSpec
 import qualified Compilation.ScopeSpec as ScopeSpec
 import qualified Lexer.LexerQC as LexerQC
 import qualified Lexer.LexerSpec as LexerSpec
@@ -13,6 +14,7 @@ main = do
     hspec FlagSpec.spec
     hspec ScopeSpec.spec
     hspec DriverSpec.spec
+    hspec PreludeSpec.spec
     hspec RecoverySpec.spec
     putStrLn "" >> putStrLn "========= Properties ========="
     hspec LexerQC.spec

@@ -32,19 +32,23 @@ import Betzac.Span (HasSpan (getSpan), Span (Generated))
 -- | Injected so bls can serve live editor buffers where the CLI just reads disk.
 type SourceReader = FilePath -> IO Text
 
-{- | Discover every file reachable from a target's @using@ directives. Each one is read
-and parsed once, so a diamond dependency is only compiled once; a cycle shows up as a
-target that is already 'Discovered' but not yet 'Parsed'.
+{- | Discover every file reachable from a target's @using@ directives, plus the standard
+prelude when one is given. Each one is read and parsed once, so a diamond dependency is
+only compiled once; a cycle shows up as a target that is already 'Discovered' but not
+yet 'Parsed'.
 -}
-discover :: SourceReader -> FilePath -> FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
-discover readSource workspaceRoot target opts = do
+discover :: SourceReader -> FilePath -> FilePath -> Maybe FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
+discover readSource workspaceRoot target preludePath opts = do
     rootExists <- doesDirectoryExist workspaceRoot
     if not rootExists
         then return $ Left $ systemError $ "workspace directory not found: " ++ workspaceRoot
         else do
             absRoot <- canonicalizePath workspaceRoot
             absTarget <- canonicalizePath target
-            visit readSource absTarget $ emptyContext absRoot absTarget opts
+            absPrelude <- traverse canonicalizePath preludePath
+            let ctx0 = emptyContext absRoot absTarget absPrelude opts
+            seeded <- maybe (return $ Right ctx0) (\p -> visit readSource p ctx0) absPrelude
+            either (return . Left) (visit readSource absTarget) seeded
   where
     systemError msg = mkProblem Error (SystemFailure msg) Generated
 

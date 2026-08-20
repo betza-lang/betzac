@@ -1,5 +1,6 @@
 module Betzac.Compilation.Driver.Resolve (resolveScopes) where
 
+import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 
@@ -12,7 +13,7 @@ import Betzac.Compilation.Context (
     UsingTarget (usingPath),
  )
 import Betzac.Compilation.Label (checkLabels)
-import Betzac.Compilation.Label.Scope (ImportedScope (..), effectiveScope, exportedScope, localDefs)
+import Betzac.Compilation.Label.Scope (ImportedScope (..), PreludeScope (..), effectiveScope, exportedScope, localDefs)
 import Betzac.Diagnostic (Stage, logProblems, runStage)
 import Betzac.Pipeline (PipelineResult (..))
 
@@ -30,7 +31,8 @@ resolveFile path ctx = case Map.lookup path $ ccFiles ctx of
     Just entry -> case feEffective entry of
         Just _ -> ctx
         Nothing ->
-            let ctx1 = foldl' (flip resolveFile) ctx $ map usingPath $ feUsingTargets entry
+            let deps = map usingPath (feUsingTargets entry) ++ filter (/= path) (toList $ ccPrelude ctx)
+                ctx1 = foldl' (flip resolveFile) ctx deps
                 entry1 = ccFiles ctx1 Map.! path
                 (result, probs) = runStage $ resolveFileStage path ctx1
                 (exportedMap, effective) = fromMaybe (Map.empty, Map.empty) result
@@ -58,7 +60,12 @@ resolveFileStage path ctx1 = do
         imports = [ImportedScope t (exportsOf $ usingPath t) | t <- feUsingTargets entry1]
         exportsOf dp = fromMaybe Map.empty $ feExported =<< Map.lookup dp (ccFiles ctx1)
 
-        (effective, effectiveProbs) = effectiveScope path localCands imports
+        -- The prelude is not in scope in itself.
+        prelude = do
+            p <- ccPrelude ctx1
+            if p == path then Nothing else Just (PreludeScope p (exportsOf p))
+
+        (effective, effectiveProbs) = effectiveScope path localCands imports prelude
 
         (exported, exportProbs) = exportedScope effective prog
         exportedMap = Map.fromList [(edLabel d, d) | d <- exported]

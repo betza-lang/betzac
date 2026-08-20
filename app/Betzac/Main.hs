@@ -9,13 +9,14 @@ import Betzac.Debug.Dot.Visitor (toDot)
 import qualified Betzac.Pipeline as B (PipelineResult (..))
 
 import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
-import Betzac.Compilation.Driver (discover, resolveScopes)
+import Betzac.Compilation.Driver (discover, resolvePrelude, resolveScopes, sealPrelude)
 import Betzac.Compilation.Flag (CompilerOptions (terminateOnFirstError), applyOptions, optionsFromFlags)
 import Betzac.Debug.PrettyPrint (PrettyPrint (..))
-import Betzac.Located (Located (tokenVal))
 import Betzac.Diagnostic (SemanticProblem (..), SemanticProblemKind (CompilationSucceeded), Severity (Error), causeOf)
+import Betzac.Located (Located (tokenVal))
 
 import Control.Monad (when)
+import Control.Monad.Trans.Except (ExceptT (..), runExceptT)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Text as T
@@ -72,10 +73,11 @@ showAnalysis _ p = case B.semanticResult p of
     renderProblem sp =
         "[" ++ show (semSev sp) ++ "] " ++ prettyPrint (semKind sp) ++ " at " ++ show (semSpan sp)
 
--- | Summarize the whole discovered dependency tree: every file's own lex/parse/
--- analysis outcome (each file in the tree had to be lexed and parsed to discover it
--- in the first place, not just the target) plus its directive-level diagnostics, and
--- the target's resolved effective scope.
+{- | Summarize the whole discovered dependency tree: every file's own lex/parse/
+analysis outcome (each file in the tree had to be lexed and parsed to discover it
+in the first place, not just the target) plus its directive-level diagnostics, and
+the target's resolved effective scope.
+-}
 showDependencies :: CompilationContext -> IO StageResult
 showDependencies ctx = do
     let entries = Map.toList (ccFiles ctx)
@@ -132,10 +134,11 @@ success = "Ok"
 failure = "Fail"
 passed = "(not run)"
 
--- | Run one stage, print its status/detail per verbosity, and report whether it
--- failed. Unlike the old behaviour, this no longer exits the process itself — only a
--- @system@-cause failure or, with @-Wfatal-errors@, the first failing stage does that
--- (cf. 'runStages').
+{- | Run one stage, print its status/detail per verbosity, and report whether it
+failed. Unlike the old behaviour, this no longer exits the process itself — only a
+@system@-cause failure or, with @-Wfatal-errors@, the first failing stage does that
+(cf. 'runStages').
+-}
 hPutStage :: Options -> String -> IO StageResult -> IO Bool
 hPutStage o lbl action = do
     StageResult status detail failed <- action
@@ -160,9 +163,10 @@ runStages opts copts = go False
             then pure anyFailed'
             else go anyFailed' rest
 
--- | Apply the compiler's warning-flag configuration to every discovered file's
--- diagnostics, both the directive-level ones and each file's own semantic-pass
--- results, before anything gets displayed.
+{- | Apply the compiler's warning-flag configuration to every discovered file's
+diagnostics, both the directive-level ones and each file's own semantic-pass
+results, before anything gets displayed.
+-}
 applyOptionsToContext :: CompilerOptions -> CompilationContext -> CompilationContext
 applyOptionsToContext copts ctx = ctx{ccFiles = Map.map adjustEntry (ccFiles ctx)}
   where
@@ -192,14 +196,17 @@ main = do
     -- Discovery lexes and parses the whole `using` dependency tree (not just the
     -- target) to even find out what that tree is, so it runs before, and subsumes,
     -- the target's own single-file LEXER/PARSER/ANALYSIS stages below.
-    result <- discover T.readFile root fp copts
+    result <- runExceptT $ do
+        prelude <- ExceptT $ resolvePrelude (preludePath opts)
+        ctx0 <- ExceptT $ discover T.readFile root fp (Just prelude) copts
+        ExceptT $ return $ sealPrelude $ resolveScopes ctx0
     case result of
         -- A `system`-cause failure always terminates immediately, regardless of flags.
         Left problem -> do
             S.hPutStrLn S.stderr $ "Fatal: " ++ causeOf (semKind problem)
             S.exitFailure
-        Right ctx0 -> do
-            let ctx = applyOptionsToContext copts (resolveScopes ctx0)
+        Right ctx1 -> do
+            let ctx = applyOptionsToContext copts ctx1
             case Map.lookup (ccTarget ctx) (ccFiles ctx) of
                 Nothing -> do
                     S.hPutStrLn S.stderr "Fatal: target file missing from discovered context"
