@@ -7,6 +7,7 @@ module LangServer.Server (
 import Control.Monad.IO.Class (liftIO)
 import LangServer.Config (ConfigBLS, defaultConfigBLS, optionsBLS)
 import LangServer.Handlers.OnChange
+import LangServer.Handlers.OnDefinition (onDefinition)
 import LangServer.Handlers.OnOpen
 import LangServer.Handlers.OnSemanticTokens (onSemanticTokens)
 import Language.LSP.Protocol.Message
@@ -23,6 +24,7 @@ handlers =
             , notificationHandler SMethod_WorkspaceDidChangeConfiguration $ const mempty
             , notificationHandler SMethod_Initialized $ const mempty
             , requestHandler SMethod_TextDocumentSemanticTokensFull onSemanticTokens
+            , requestHandler SMethod_TextDocumentDefinition onDefinition
             ]
 
 serverBLS :: ServerDefinition ConfigBLS

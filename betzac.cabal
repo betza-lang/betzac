@@ -67,6 +67,7 @@ library
       LangServer.Config
       LangServer.Handlers.Core
       LangServer.Handlers.OnChange
+      LangServer.Handlers.OnDefinition
       LangServer.Handlers.OnOpen
       LangServer.Handlers.OnSemanticTokens
       LangServer.Server

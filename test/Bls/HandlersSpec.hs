@@ -1,12 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators #-}
 
 module HandlersSpec (spec) where
 
+import Control.Exception (bracket_)
 import Control.Lens
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, (<=<))
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (pack)
 import System.Directory (canonicalizePath)
+import System.Environment (setEnv, unsetEnv)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -31,6 +34,30 @@ show up.
 -}
 preamble :: String
 preamble = "export W = :1,1:;\nexport B = :1,2:;\nexport F = :2,1:;\n"
+
+-- | A workspace directory bls can resolve against, with a canonical path.
+inWorkspace :: (FilePath -> IO a) -> IO a
+inWorkspace act = withSystemTempDirectory "bls-handlers-spec" $ act <=< canonicalizePath
+
+-- | Run an action with the standard prelude pointed at a fixture.
+withPrelude :: FilePath -> IO a -> IO a
+withPrelude path = bracket_ (setEnv "BETZAC_PRELUDE" path) (unsetEnv "BETZAC_PRELUDE")
+
+-- | Where bls says the thing at 'pos' in 'name' is defined.
+definitionsAt :: FilePath -> FilePath -> Position -> IO [Location]
+definitionsAt dir name pos =
+    runSession "bls" fullLatestClientCaps dir $ do
+        doc <- openDoc name betzaKind
+        locationsOf <$> getDefinitions doc pos
+
+locationsOf :: Definition |? ([DefinitionLink] |? Null) -> [Location]
+locationsOf (InL (Definition (InL loc))) = [loc]
+locationsOf (InL (Definition (InR locs))) = locs
+locationsOf (InR (InL links)) = [Location u r | DefinitionLink (LocationLink _ u r _) <- links]
+locationsOf (InR (InR Null)) = []
+
+lineRange :: UInt -> UInt -> UInt -> UInt -> Range
+lineRange sl sc el ec = Range (Position sl sc) (Position el ec)
 
 spec :: Spec
 spec = describe "bls handlers" $ do
@@ -174,3 +201,45 @@ spec = describe "bls handlers" $ do
                     let diagsFor u = concat [n ^. params . diagnostics | n <- notes, n ^. params . uri == u]
                     liftIO $ length (diagsFor depUri) `shouldBe` 1
                     liftIO $ diagsFor mainUri `shouldBe` []
+
+    describe "go to definition" $ do
+        it "jumps to a definition in the same file" $
+            inWorkspace $ \dir -> do
+                writeFile (dir </> "main.betza") "export W = :1,0:;\nexport K = W;\n"
+                locs <- definitionsAt dir "main.betza" (Position 1 11)
+                locs `shouldBe` [Location (filePathToUri (dir </> "main.betza")) (lineRange 0 0 0 17)]
+
+        it "jumps into the file a using directive pulled the definition in from" $
+            inWorkspace $ \dir -> do
+                writeFile (dir </> "dep.betza") "export X = :1,0:;\n"
+                writeFile (dir </> "main.betza") "using dep;\nexport Y = X;\n"
+                locs <- definitionsAt dir "main.betza" (Position 1 11)
+                map (view uri) locs `shouldBe` [filePathToUri (dir </> "dep.betza")]
+
+        it "jumps to the file a using directive names, from the path itself" $
+            inWorkspace $ \dir -> do
+                writeFile (dir </> "dep.betza") "export X = :1,0:;\n"
+                writeFile (dir </> "main.betza") "using dep;\nexport Y = X;\n"
+                locs <- definitionsAt dir "main.betza" (Position 0 6)
+                locs `shouldBe` [Location (filePathToUri (dir </> "dep.betza")) (lineRange 0 0 0 0)]
+
+        it "jumps into the standard prelude for a label nothing local defines" $
+            inWorkspace $ \dir -> do
+                let prelude = dir </> "std.betza"
+                writeFile prelude "export N = :2,1:;\n"
+                writeFile (dir </> "main.betza") "export K = N;\n"
+                locs <- withPrelude prelude $ definitionsAt dir "main.betza" (Position 0 11)
+                map (view uri) locs `shouldBe` [filePathToUri prelude]
+
+        it "jumps from a definition being outranked to the import that displaces it" $
+            inWorkspace $ \dir -> do
+                writeFile (dir </> "dep.betza") "export N = :3,1:;\n"
+                writeFile (dir </> "main.betza") "using dep;\nN = :2,1:;\nexport K = N;\n"
+                locs <- definitionsAt dir "main.betza" (Position 1 0)
+                map (view uri) locs `shouldBe` [filePathToUri (dir </> "dep.betza")]
+
+        it "answers with nothing for a position on no label at all" $
+            inWorkspace $ \dir -> do
+                writeFile (dir </> "main.betza") "export W = :1,0:;\nexport K = W;\n"
+                locs <- definitionsAt dir "main.betza" (Position 1 6)
+                locs `shouldBe` []

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module LangServer.Handlers.Core (publishDiagnostics, makeDiagnostic) where
+module LangServer.Handlers.Core (contextFor, publishDiagnostics, makeDiagnostic) where
 
 import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
 import Betzac.Compilation.Driver (SourceReader, discover, resolvePrelude, resolveScopes, sealPrelude)
@@ -42,6 +42,20 @@ blsOptions = optionsFromFlags [GenerateWarnings Wunused, GenerateWarnings Wdirec
 maxDiagnostics :: Int
 maxDiagnostics = 100
 
+{- | Everything known about 'fp' and the files it reaches: its @using@ dependency graph
+discovered against the workspace root, every scope resolved, and the prelude settled.
+'src' is the file's live buffer, which the reader serves in place of what is on disk.
+-}
+contextFor :: FilePath -> Text -> LspM ConfigBLS (Either SemanticProblem CompilationContext)
+contextFor fp src = do
+    mRoot <- getRootPath
+    let root = fromMaybe (takeDirectory fp) mRoot
+    reader <- overlayReader fp src
+    liftIO $ runExceptT $ do
+        prelude <- ExceptT $ resolvePrelude Nothing
+        ctx0 <- ExceptT $ discover reader root fp (Just prelude) blsOptions
+        ExceptT $ return $ sealPrelude $ resolveScopes ctx0
+
 {- | Compile 'fp' (and everything it @using@s, transitively) and publish diagnostics
 for every file reached, each against its own URI — matching how established
 compiler-backed language servers (clangd, gopls, ...) behave: a problem is published
@@ -63,13 +77,7 @@ as a known limitation rather than solved here.
 -}
 publishDiagnostics :: FilePath -> Uri -> Text -> LspM ConfigBLS ()
 publishDiagnostics fp _u src = do
-    mRoot <- getRootPath
-    let root = fromMaybe (takeDirectory fp) mRoot
-    reader <- overlayReader fp src
-    result <- liftIO $ runExceptT $ do
-        prelude <- ExceptT $ resolvePrelude Nothing
-        ctx0 <- ExceptT $ discover reader root fp (Just prelude) blsOptions
-        ExceptT $ return $ sealPrelude $ resolveScopes ctx0
+    result <- contextFor fp src
     case result of
         -- A system failure (missing workspace root/target) isn't attributable to any
         -- particular file's own text; best-effort attach it to the file being edited
