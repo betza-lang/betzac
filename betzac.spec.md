@@ -227,7 +227,9 @@ Among definitions of equal precedence, the earliest one in lexical order is sele
 
 2.4.26.1 - Warnings for ignored definitions originating from the imported scope will be suppressed when the selected definition is part of an override directive.
 
-2.4.26.2 - If the `-Wdirective` flag is set, `betzac` will produce a warning log with cause `unnecessary override` for a definition that is part of an `override` directive whose selected status (cf. 2.4.24) would be unaffected if it were treated as a plain (non-override) definition instead — i.e. no other candidate exists for the same label, or none that would otherwise have outranked it on position alone.
+2.4.26.2 - If the `-Wdirective` flag is set, `betzac` will produce a warning log with cause `unnecessary override` for a selected definition that is part of an `override` directive whose selected status (cf. 2.4.24) would be unaffected if it were treated as a plain (non-override) definition instead — i.e. no other candidate exists for the same label, or none that would otherwise have outranked it. Non-selected definitions are not reported, their being ignored already being covered by 2.4.26.
+
+2.4.26.3 - An `override using` directive covers every label its source file exports, and will produce at most one such warning, attributed to the directive itself, and only when none of the labels it contributes needed the promotion.
 
 ---
 

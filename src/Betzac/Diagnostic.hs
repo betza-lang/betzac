@@ -51,6 +51,7 @@ data SemanticProblemKind
     | CircularLabel [String]
     | DuplicateDirective
     | DuplicateLabel
+    | UnnecessaryOverride
     | CompilationSucceeded
     | SystemFailure String
     | Unknown
@@ -70,6 +71,7 @@ causeOf (UsingCircular _) = "using circular"
 causeOf (CircularLabel _) = "circular label"
 causeOf DuplicateDirective = "duplicate directive"
 causeOf DuplicateLabel = "duplicate label"
+causeOf UnnecessaryOverride = "unnecessary override"
 causeOf CompilationSucceeded = "success"
 causeOf (SystemFailure _) = "system"
 causeOf Unknown = "unknown"

@@ -25,7 +25,7 @@ import Betzac.Compilation.Context (
  )
 import Betzac.Diagnostic (
     SemanticProblem,
-    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel),
+    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnnecessaryOverride, UnresolvedLabel),
     Severity (Error, Warning),
     mkProblem,
  )
@@ -45,7 +45,7 @@ labelText (Leaper m n _) = show m ++ "," ++ show n
 groupOn :: (Ord k) => (a -> k) -> [a] -> Map.Map k (NonEmpty a)
 groupOn key xs = Map.fromListWith (<>) [(key x, pure x) | x <- xs]
 
--- | The strongest element by 'key', and the ones it displaces.
+-- | The strongest element by 'key', and the ones it displaces, themselves in key order.
 winnerAndLosers :: (Ord k) => (a -> k) -> NonEmpty a -> (a, [a])
 winnerAndLosers key xs = let w :| ls = NE.sortWith key xs in (w, ls)
 
@@ -130,6 +130,68 @@ data Candidate = Candidate
 candKey :: Candidate -> (Precedence, (Int, Int))
 candKey c = (candPrecedence c, candOrder c)
 
+{- | The @using@ a candidate came through, by its position among the file's imports.
+'Nothing' for a local definition.
+-}
+candUsingIndex :: Candidate -> Maybe Int
+candUsingIndex c
+    | isImported (candPrecedence c) = Just $ fst (candOrder c)
+    | otherwise = Nothing
+
+-- | The precedence a candidate would have had without its override directive.
+demote :: Precedence -> Precedence
+demote LocalOverride = LocalPlain
+demote ImportedOverride = ImportedPlain
+demote p = p
+
+{- | Whether being an override is what put a candidate in place. Demoting it lowers it
+and leaves every other candidate alone, so only the runner-up can overtake it.
+-}
+overrideWasNeeded :: Candidate -> [Candidate] -> Bool
+overrideWasNeeded w losers = case losers of
+    [] -> False
+    (r : _) -> (demote (candPrecedence w), candOrder w) > candKey r
+
+-- | Whether an @override using@ put anything in place that would not have landed there anyway.
+data OverrideUse = Redundant | Promoted
+    deriving (Eq, Ord)
+
+-- | Each @override using@ by its position among the file's imports.
+type OverrideUses = Map.Map Int OverrideUse
+
+{- | An @override@ that selected nothing it would not have selected as a plain
+definition. A local override is its own directive and is reported on its own statement;
+an @override using@ covers everything the file it names exports, so it is reported once,
+on the directive, and only when none of what it contributed needed the promotion.
+-}
+unnecessaryOverrides :: [ImportedScope] -> [(Candidate, [Candidate])] -> [SemanticProblem]
+unnecessaryOverrides imports contests = localProbs ++ usingProbs
+  where
+    verdicts = [(w, overrideWasNeeded w losers) | (w, losers) <- contests]
+
+    localProbs =
+        [ mkProblem Warning UnnecessaryOverride (candDiagSpan w)
+        | (w, needed) <- verdicts
+        , candPrecedence w == LocalOverride
+        , not needed
+        ]
+
+    uses :: OverrideUses
+    uses =
+        Map.fromListWith
+            max
+            [ (i, if needed then Promoted else Redundant)
+            | (w, needed) <- verdicts
+            , Just i <- [candUsingIndex w]
+            ]
+
+    usingProbs =
+        [ mkProblem Warning UnnecessaryOverride (usingSpan via)
+        | (i, ImportedScope via _) <- zip [0 ..] imports
+        , usingIsOverride via
+        , Map.findWithDefault Redundant i uses == Redundant
+        ]
+
 -- | A dependency's exported scope, and the @using@ directive that pulled it in.
 data ImportedScope = ImportedScope
     { importedVia :: UsingTarget
@@ -145,8 +207,9 @@ effectiveScope ::
     [ExportedDef] ->
     [ImportedScope] ->
     (LabelTable ResolvedDef, [SemanticProblem])
-effectiveScope self locals imports = Map.foldrWithKey resolve (Map.empty, []) grouped
+effectiveScope self locals imports = (accepted, loserProbs ++ overrideProbs)
   where
+    contests = Map.map (winnerAndLosers candKey) grouped
     grouped = groupOn (edLabel . candDef) (localCandidates ++ importedCandidates)
 
     localPrec d = if edIsOverride d then LocalOverride else LocalPlain
@@ -160,11 +223,10 @@ effectiveScope self locals imports = Map.foldrWithKey resolve (Map.empty, []) gr
         , d <- Map.elems defs
         ]
 
-    resolve lbl cands (accepted, warnings) =
-        let (winner, losers) = winnerAndLosers candKey cands
-         in ( Map.insert lbl (ResolvedDef (candFrom winner) (candDef winner)) accepted
-            , warnings ++ mapMaybe (loserWarning winner) losers
-            )
+    accepted = Map.map (\(w, _) -> ResolvedDef (candFrom w) (candDef w)) contests
+
+    loserProbs = concat [mapMaybe (loserWarning w) losers | (w, losers) <- Map.elems contests]
+    overrideProbs = unnecessaryOverrides imports (Map.elems contests)
 
     -- Displacing an import is exactly what an override is for, so stay quiet about it.
     loserWarning winner loser

@@ -8,7 +8,7 @@ import Betzac.Compilation.Flag (
  )
 import Betzac.Diagnostic (
     SemanticProblem (..),
-    SemanticProblemKind (AllInFirstLeg, DuplicateDirective, DuplicateLabel, UnresolvedLabel),
+    SemanticProblemKind (AllInFirstLeg, DuplicateDirective, DuplicateLabel, UnnecessaryOverride, UnresolvedLabel),
     Severity (Error, Warning),
     mkProblem,
  )
@@ -46,6 +46,19 @@ spec = describe "Compilation.Flag" $ do
             let opts = optionsFromFlags [GenerateWarnings Wdirective]
             map semSev (applyOptions opts [problem DuplicateDirective]) `shouldBe` [Warning]
             length (applyOptions opts [problem DuplicateLabel]) `shouldBe` 0
+
+        it "silences an unnecessary override by default, and reveals it under -Wdirective" $ do
+            length (applyOptions (optionsFromFlags []) [problem UnnecessaryOverride]) `shouldBe` 0
+            map semSev (applyOptions (optionsFromFlags [GenerateWarnings Wdirective]) [problem UnnecessaryOverride])
+                `shouldBe` [Warning]
+
+        it "promotes an unnecessary override under -Werror=directive" $ do
+            let opts = optionsFromFlags [PromoteWarningsToError Wdirective]
+            map semSev (applyOptions opts [problem UnnecessaryOverride]) `shouldBe` [Error]
+
+        it "does not reveal an unnecessary override under -Wunused, since it is not unused-governed" $ do
+            let opts = optionsFromFlags [GenerateWarnings Wunused]
+            length (applyOptions opts [problem UnnecessaryOverride]) `shouldBe` 0
 
         it "leaves an unconditional error untouched regardless of flags" $ do
             let opts = optionsFromFlags [SuppressWarnings]

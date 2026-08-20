@@ -63,6 +63,7 @@ specifierOf :: Sem.SemanticProblemKind -> Maybe Wspecifier
 specifierOf (Sem.UnusedLabel _) = Just Wunused
 specifierOf Sem.DuplicateLabel = Just Wunused
 specifierOf Sem.DuplicateDirective = Just Wdirective
+specifierOf Sem.UnnecessaryOverride = Just Wdirective
 specifierOf _ = Nothing
 
 {- | Drop the diagnostics whose specifier is silenced, force the rest to their

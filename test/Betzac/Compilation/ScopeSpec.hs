@@ -10,7 +10,12 @@ import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaProgram)
 import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..), UsingTarget (..), edIsOverride)
 import Betzac.Compilation.Label.Scope (ImportedScope (..), LabelTable, effectiveScope, exportedScope, localDefs, unexportedLabelRefs)
-import Betzac.Diagnostic (SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel), causeOf, semKind)
+import Betzac.Diagnostic (
+    SemanticProblem,
+    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnnecessaryOverride, UnresolvedLabel),
+    causeOf,
+    semKind,
+ )
 import Betzac.Pipeline (PipelineResult (parseResult), fromScratch)
 import Betzac.Span (Span (Generated))
 
@@ -36,13 +41,20 @@ parseProgram src = case fromScratch "<test>" src of
 scopeOf :: FilePath -> BetzaProgram Ps -> LabelTable ResolvedDef
 scopeOf self prog = fst $ effectiveScope self (localDefs prog) []
 
--- | A snippet's exported scope, as pulled in by a @using@ of it named @dep@.
-usingDep :: Bool -> Text -> ImportedScope
-usingDep overriding src =
-    ImportedScope (UsingTarget "dep" overriding Generated) $
-        Map.fromList [(edLabel d, d) | d <- fst (exportedScope (scopeOf "dep" prog) prog)]
+-- | A snippet's exported scope, as pulled in by a @using@ of it under the given name.
+usingDepAs :: FilePath -> Bool -> Text -> ImportedScope
+usingDepAs path overriding src =
+    ImportedScope (UsingTarget path overriding Generated) $
+        Map.fromList [(edLabel d, d) | d <- fst (exportedScope (scopeOf path prog) prog)]
   where
     prog = parseProgram src
+
+-- | A snippet's exported scope, as pulled in by a @using@ of it named @dep@.
+usingDep :: Bool -> Text -> ImportedScope
+usingDep = usingDepAs "dep"
+
+causes :: [SemanticProblem] -> [String]
+causes = map (causeOf . semKind)
 
 spec :: Spec
 spec = describe "Compilation.Scope" $ do
@@ -120,7 +132,9 @@ spec = describe "Compilation.Scope" $ do
             let prog = parseProgram "N = fF;\n"
                 (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep True "export N = fW;\n"]
             fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "dep"
-            map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateLabel]
+            -- A plain import would have outranked the local plain by itself, so the
+            -- override on the using changes nothing.
+            causes probs `shouldBe` [causeOf DuplicateLabel, causeOf UnnecessaryOverride]
 
         it "suppresses the duplicate-label warning for an imported loser when the winner is override-class" $ do
             let prog = parseProgram "override N = fF;\n"
@@ -138,7 +152,54 @@ spec = describe "Compilation.Scope" $ do
             let prog = parseProgram "override N = fF;\n"
                 (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep True "export N = fW;\n"]
             fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "main"
+            -- The using won nothing, so its own override earned nothing either.
+            causes probs `shouldBe` [causeOf UnnecessaryOverride]
+
+    describe "unnecessary override" $ do
+        it "flags a local override with nothing to outrank" $ do
+            let prog = parseProgram "override A = fW;\n"
+                (_, probs) = effectiveScope "<test>" (localDefs prog) []
+            causes probs `shouldBe` [causeOf UnnecessaryOverride]
+
+        it "flags a local override that already came first" $ do
+            let prog = parseProgram "override A = fW;\nA = fF;\n"
+                (_, probs) = effectiveScope "<test>" (localDefs prog) []
+            causes probs `shouldBe` [causeOf DuplicateLabel, causeOf UnnecessaryOverride]
+
+        it "stays quiet when the override is what beats an earlier plain definition" $ do
+            let prog = parseProgram "A = fW;\noverride A = fF;\n"
+                (_, probs) = effectiveScope "<test>" (localDefs prog) []
+            causes probs `shouldBe` [causeOf DuplicateLabel]
+
+        it "does not flag a losing override, only the selected one" $ do
+            let prog = parseProgram "override A = fW;\noverride A = fF;\n"
+                (_, probs) = effectiveScope "<test>" (localDefs prog) []
+            causes probs `shouldBe` [causeOf DuplicateLabel]
+
+        it "stays quiet when demoting would lose to an import on class rather than position" $ do
+            let prog = parseProgram "override N = fF;\n"
+                (_, probs) = effectiveScope "main" (localDefs prog) [usingDep False "export N = fW;\n"]
             length probs `shouldBe` 0
+
+        it "flags an override using once, not once per label it provides" $ do
+            let prog = parseProgram "export A;\n"
+                dep = usingDep True "export A = fW;\nexport B = fF;\nexport C = fA;\n"
+                (_, probs) = effectiveScope "main" (localDefs prog) [dep]
+            causes probs `shouldBe` [causeOf UnnecessaryOverride]
+
+        it "spares an override using when even one of its labels needed the promotion" $ do
+            let prog = parseProgram "export N;\n"
+                plain = usingDepAs "first" False "export N = fW;\n"
+                overriding = usingDepAs "second" True "export N = fF;\nexport M = fA;\n"
+                (_, probs) = effectiveScope "main" (localDefs prog) [plain, overriding]
+            length probs `shouldBe` 0
+
+        it "flags an override using that only wins what its position alone would have" $ do
+            let prog = parseProgram "export N;\n"
+                overriding = usingDepAs "first" True "export N = fW;\n"
+                plain = usingDepAs "second" False "export N = fF;\n"
+                (_, probs) = effectiveScope "main" (localDefs prog) [overriding, plain]
+            causes probs `shouldBe` [causeOf UnnecessaryOverride]
 
     describe "priority resolution property" $
         it "always selects an override-class candidate over any plain candidate, and the earliest among ties" $
@@ -150,7 +211,13 @@ spec = describe "Compilation.Scope" $ do
                     expectedWinnerIx = case [i | (i, True) <- zip [0 :: Int ..] flags] of
                         (i : _) -> i
                         [] -> 0
+                    -- The sole override, placed first, would have won on position alone.
+                    onlyLeadingOverride = case flags of
+                        (True : rest) -> not (or rest)
+                        _ -> False
+                    countOf c = length $ filter (== causeOf c) (causes probs)
                 annotate (show flags)
-                length probs === length flags - 1
+                countOf DuplicateLabel === length flags - 1
+                countOf UnnecessaryOverride === (if onlyLeadingOverride then 1 else 0)
                 fmap (edOrder . rdDef) (Map.lookup "A" resolved) === Just expectedWinnerIx
                 fmap (edIsOverride . rdDef) (Map.lookup "A" resolved) === Just (or flags)

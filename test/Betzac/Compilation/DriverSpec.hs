@@ -153,6 +153,32 @@ spec = describe "Compilation.Driver" $ do
                     Right ctx -> do
                         let probs = allDiagnostics (Driver.resolveScopes ctx)
                         map (causeOf . semKind) probs `shouldBe` ["circular label", "circular label"]
+        it "warns an override using that promoted nothing, on the directive in the importing file" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                writeFile (dir </> "dep.betza") "export X = :1,0:;\n"
+                writeFile (dir </> "main.betza") "override using dep;\nexport X;\n"
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx0 -> do
+                        let ctx = Driver.resolveScopes ctx0
+                            mainDiags = diagnosticsOn "main.betza" ctx
+                        length (diagnosticsOn "dep.betza" ctx) `shouldBe` 0
+                        map (causeOf . semKind) mainDiags `shouldBe` ["unnecessary override"]
+                        all (onLine 1) mainDiags `shouldBe` True
+
+        it "stays quiet about an override using that outranks an earlier plain import" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                writeFile (dir </> "dep.betza") "export X = :1,0:;\n"
+                writeFile (dir </> "other.betza") "export X = :1,1:;\n"
+                writeFile (dir </> "main.betza") "using other;\noverride using dep;\nexport X;\n"
+                result <- Driver.discover TIO.readFile dir (dir </> "main.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx -> do
+                        let probs = allDiagnostics (Driver.resolveScopes ctx)
+                        hasCause "unnecessary override" probs `shouldBe` False
+
         it "warns a local plain definition shadowed by an import on its own statement, not on the import" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "lib.betza") "export W = :1,1:;\n"
