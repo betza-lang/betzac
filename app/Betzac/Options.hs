@@ -16,6 +16,7 @@ import Betzac.Version (versionString)
 import Data.List (stripPrefix)
 import Options.Applicative hiding (Parser)
 import qualified Options.Applicative as O (Parser)
+import System.Exit (exitSuccess)
 
 data Verbosity = Silent | Verbose | VeryVerbose deriving (Eq, Ord)
 
@@ -28,22 +29,37 @@ data Options = Options
     , compilerFlags :: [CompilerFlag]
     }
 
-getOptions :: IO Options
-getOptions =
-    execParser $
-        info
-            (optionsParser <**> versionOption <**> helper)
-            ( fullDesc
-                <> progDesc "Compile a betza file"
-                <> header "betzac - the betza compiler"
-            )
+{- | What the command line asked for. Reporting the version is its own mode rather
+than a flag on a compilation, so it is accepted alone and nowhere else.
+-}
+data Invocation = ReportVersion | Compile Options
 
-versionOption :: O.Parser (a -> a)
-versionOption =
-    infoOption (versionString "betzac") $
-        long "version"
-            <> short 'V'
-            <> help "Show the version and exit"
+getOptions :: IO Options
+getOptions = do
+    invocation <-
+        execParser $
+            info
+                (invocationParser <**> helper)
+                ( fullDesc
+                    <> progDesc "Compile a betza file"
+                    <> header "betzac - the betza compiler"
+                )
+    case invocation of
+        ReportVersion -> putStrLn (versionString "betzac") >> exitSuccess
+        Compile opts -> return opts
+
+invocationParser :: O.Parser Invocation
+invocationParser = versionParser <|> (Compile <$> optionsParser)
+
+versionParser :: O.Parser Invocation
+versionParser =
+    ReportVersion
+        <$ flag'
+            ()
+            ( long "version"
+                <> short 'V'
+                <> help "Show the version and exit (accepted on its own)"
+            )
 
 optionsParser :: O.Parser Options
 optionsParser =

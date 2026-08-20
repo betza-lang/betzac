@@ -9,9 +9,10 @@ import Language.LSP.Server (runServer)
 main :: IO Int
 main = do
     args <- getArgs
-    if any isVersionFlag args
+    if isVersionRequest args
         then 0 <$ putStrLn (versionString "bls")
         else runServer serverBLS
 
-isVersionFlag :: String -> Bool
-isVersionFlag arg = arg `elem` ["--version", "-V"]
+-- | Reporting the version is its own mode: accepted alone, and nowhere else.
+isVersionRequest :: [String] -> Bool
+isVersionRequest args = args `elem` [["--version"], ["-V"]]
