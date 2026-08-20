@@ -13,7 +13,7 @@ import System.Environment (setEnv, unsetEnv)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
-import Language.LSP.Protocol.Lens hiding (context, length)
+import Language.LSP.Protocol.Lens hiding (context, length, name)
 import Language.LSP.Protocol.Types
 import Language.LSP.Test
 import Test.Hspec

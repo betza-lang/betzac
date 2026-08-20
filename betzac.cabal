@@ -61,6 +61,7 @@ library
       Betzac.Pipeline
       Betzac.Semantic.Direction.All
       Betzac.Semantic.Direction.AmalgamatedDirection
+      Betzac.Semantic.Label.LiteralAssignment
       Betzac.Semantic.Passes
       Betzac.Span
       Betzac.Token
@@ -143,6 +144,7 @@ test-suite betzac-test
       Lexer.LexerSpec
       Parser.ParserHedgehog
       Pipeline.RecoverySpec
+      Semantic.LiteralAssignmentSpec
       Paths_betzac
   hs-source-dirs:
       test/Betzac

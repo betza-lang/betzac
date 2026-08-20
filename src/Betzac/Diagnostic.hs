@@ -40,6 +40,7 @@ data Severity = Info | Warning | Error
 
 data SemanticProblemKind
     = InvalidValue String
+    | InvalidStatement String
     | AllInFirstLeg
     | IllFormedStatement
     | IllFormedLabel
@@ -61,6 +62,7 @@ data SemanticProblemKind
 -- | The literal `cause` string for a given problem kind, as it should be rendered in a log.
 causeOf :: SemanticProblemKind -> String
 causeOf (InvalidValue _) = "invalid value"
+causeOf (InvalidStatement _) = "invalid statement"
 causeOf AllInFirstLeg = "invalid value"
 causeOf IllFormedStatement = "ill-formed statement"
 causeOf IllFormedLabel = "ill-formed label"
@@ -128,5 +130,6 @@ runStage_ = snd . runStage
 
 instance PrettyPrint SemanticProblemKind where
     prettyPrint (InvalidValue s) = "Invalid Value: " <> s
+    prettyPrint (InvalidStatement s) = "Invalid Statement: " <> s
     prettyPrint AllInFirstLeg = "`a` present in first leg of a chain"
     prettyPrint x = show x

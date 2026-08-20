@@ -6,6 +6,7 @@ import qualified Lexer.LexerQC as LexerQC
 import qualified Lexer.LexerSpec as LexerSpec
 import qualified Parser.ParserHedgehog as ParserHedgehog
 import qualified Pipeline.RecoverySpec as RecoverySpec
+import qualified Semantic.LiteralAssignmentSpec as LiteralAssignmentSpec
 import Test.Hspec
 
 main :: IO ()
@@ -16,6 +17,7 @@ main = do
     hspec DriverSpec.spec
     hspec PreludeSpec.spec
     hspec RecoverySpec.spec
+    hspec LiteralAssignmentSpec.spec
     putStrLn "" >> putStrLn "========= Properties ========="
     hspec LexerQC.spec
     hspec ParserHedgehog.spec
