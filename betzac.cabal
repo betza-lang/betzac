@@ -6,7 +6,9 @@ cabal-version: 1.12
 
 name:           betzac
 version:        0.1.0.0
+synopsis:       Betzac is a compiler of betza notation, a description language for esoteric chess variants.
 description:    Please see the README on GitHub at <https://github.com/betza-lang/betzac#readme>
+category:       Compiler, Game
 homepage:       https://github.com/betza-lang/betzac#readme
 bug-reports:    https://github.com/betza-lang/betzac/issues
 author:         Thierry Poulin
@@ -65,6 +67,7 @@ library
       Betzac.Semantic.Passes
       Betzac.Span
       Betzac.Token
+      Betzac.Version
       LangServer.Config
       LangServer.Handlers.Core
       LangServer.Handlers.OnChange
