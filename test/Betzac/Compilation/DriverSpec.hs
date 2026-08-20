@@ -127,10 +127,10 @@ spec = describe "Compilation.Driver" $ do
                         let probs = allDiagnostics (Driver.resolveScopes ctx)
                         map (causeOf . semKind) probs `shouldBe` ["unresolved label"]
 
-        it "reports a shared circular label once per definition reaching it, not once per path" $
+        it "reports a circular label once, on itself, however many definitions reference it" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
-                -- Every :l: doubles the number of paths down to B, so reporting per
-                -- path rather than per definition costs 2^n diagnostics.
+                -- Only B is circular. Every :l: doubles the paths down to it, so
+                -- reporting per path costs 2^n, and per consumer still costs n.
                 writeFile (dir </> "f0.betza") $
                     "B = :1,0:;\noverride export B = B;\n"
                         ++ "export :l0: = B B;\n"
@@ -142,7 +142,17 @@ spec = describe "Compilation.Driver" $ do
                     Right ctx -> do
                         let probs = allDiagnostics (Driver.resolveScopes ctx)
                             circular = filter ((== "circular label") . causeOf . semKind) probs
-                        length circular `shouldBe` 4 -- B, :l0:, :l1:, :l2:
+                        length circular `shouldBe` 1
+
+        it "still reports each definition of a mutual cycle, since both are at fault" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                writeFile (dir </> "f0.betza") "export A = B;\nexport B = A;\n"
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx -> do
+                        let probs = allDiagnostics (Driver.resolveScopes ctx)
+                        map (causeOf . semKind) probs `shouldBe` ["circular label", "circular label"]
         it "warns a local plain definition shadowed by an import on its own statement, not on the import" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "lib.betza") "export W = :1,1:;\n"
