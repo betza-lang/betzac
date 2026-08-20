@@ -11,6 +11,7 @@ module Options (
 ) where
 
 import Betzac.Compilation.Flag (CompilerFlag (..), Wspecifier (..))
+import Betzac.Version (versionString)
 
 import Data.List (stripPrefix)
 import Options.Applicative hiding (Parser)
@@ -31,11 +32,18 @@ getOptions :: IO Options
 getOptions =
     execParser $
         info
-            (optionsParser <**> helper)
+            (optionsParser <**> versionOption <**> helper)
             ( fullDesc
                 <> progDesc "Compile a betza file"
                 <> header "betzac - the betza compiler"
             )
+
+versionOption :: O.Parser (a -> a)
+versionOption =
+    infoOption (versionString "betzac") $
+        long "version"
+            <> short 'V'
+            <> help "Show the version and exit"
 
 optionsParser :: O.Parser Options
 optionsParser =
