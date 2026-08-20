@@ -9,3 +9,5 @@ TODO
 *.btz
 *.b
 *.dot
+
+!prelude/*

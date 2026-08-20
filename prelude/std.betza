@@ -1,0 +1,26 @@
+# Wazir
+export W = :1,0:;
+
+# Ferz
+export F = :1,1:;
+
+# Dabbaba
+export D = :2,0:;
+
+# Knight
+export N = :2,1:;
+
+# Alfil
+export A = :2,2:;
+
+# Threeleaper
+export H = :3,0:;
+
+# Camel
+export C = :3,1:;
+
+# Zebra
+export Z = :3,2:;
+
+# Tripper
+export G = :3,3:;
