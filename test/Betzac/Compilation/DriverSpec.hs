@@ -127,6 +127,22 @@ spec = describe "Compilation.Driver" $ do
                         let probs = allDiagnostics (Driver.resolveScopes ctx)
                         map (causeOf . semKind) probs `shouldBe` ["unresolved label"]
 
+        it "reports a shared circular label once per definition reaching it, not once per path" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                -- Every :l: doubles the number of paths down to B, so reporting per
+                -- path rather than per definition costs 2^n diagnostics.
+                writeFile (dir </> "f0.betza") $
+                    "B = :1,0:;\noverride export B = B;\n"
+                        ++ "export :l0: = B B;\n"
+                        ++ "export :l1: = :l0: :l0:;\n"
+                        ++ "export :l2: = :l1: :l1:;\n"
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx -> do
+                        let probs = allDiagnostics (Driver.resolveScopes ctx)
+                            circular = filter ((== "circular label") . causeOf . semKind) probs
+                        length circular `shouldBe` 4 -- B, :l0:, :l1:, :l2:
         it "warns a local plain definition shadowed by an import on its own statement, not on the import" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "lib.betza") "export W = :1,1:;\n"
