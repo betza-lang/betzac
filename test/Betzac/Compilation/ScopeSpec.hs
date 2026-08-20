@@ -9,8 +9,8 @@ import qualified Data.Text as T
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaProgram)
 import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..), UsingTarget (..), edIsOverride)
-import Betzac.Compilation.Label.Scope (ImportedScope (..), LabelTable, checkLabelRefs, effectiveScope, exportedScope, localDefs)
-import Betzac.Diagnostic (SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel, UnusedLabel), causeOf, semKind)
+import Betzac.Compilation.Label.Scope (ImportedScope (..), LabelTable, effectiveScope, exportedScope, localDefs, unexportedLabelRefs)
+import Betzac.Diagnostic (SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel), causeOf, semKind)
 import Betzac.Pipeline (PipelineResult (parseResult), fromScratch)
 import Betzac.Span (Span (Generated))
 
@@ -95,20 +95,14 @@ spec = describe "Compilation.Scope" $ do
             map edIsOverride sugarDefs `shouldBe` map edIsOverride desugarDefs
             length sugarProbs `shouldBe` length desugarProbs
 
-    describe "checkLabelRefs" $ do
-        it "flags an unresolved label for an unexported bare reference to an undefined label" $ do
-            let prog = parseProgram "Q;\n"
-            map (causeOf . semKind) (checkLabelRefs (scopeOf "<test>" prog) prog)
-                `shouldBe` [causeOf UnresolvedLabel]
-
-        it "flags an unexported bare reference to a label that does resolve as unused" $ do
+    describe "unexportedLabelRefs" $ do
+        it "lists a bare label reference made outside an export" $ do
             let prog = parseProgram "W = :1,1:;\nW;\n"
-            map (causeOf . semKind) (checkLabelRefs (scopeOf "<test>" prog) prog)
-                `shouldBe` [causeOf (UnusedLabel "W")]
+            map snd (unexportedLabelRefs prog) `shouldBe` ["W"]
 
-        it "does not flag an exported bare reference, since exportedScope handles those instead" $ do
+        it "skips an exported bare reference, which exportedScope republishes instead" $ do
             let prog = parseProgram "W = :1,1:;\nexport W;\n"
-            length (checkLabelRefs (scopeOf "<test>" prog) prog) `shouldBe` 0
+            length (unexportedLabelRefs prog) `shouldBe` 0
 
     describe "effectiveScope" $ do
         it "prefers override over plain regardless of lexical order" $ do

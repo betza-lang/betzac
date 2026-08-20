@@ -5,7 +5,7 @@ module Betzac.Compilation.Label.Scope (
     exportedScope,
     localDefs,
     effectiveScope,
-    checkLabelRefs,
+    unexportedLabelRefs,
 ) where
 
 import Data.Either (partitionEithers)
@@ -15,7 +15,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 
 import Betzac.AST.Phases (Ps)
-import Betzac.AST.Types (BetzaProgram, Label (..), Labelling, QualifiedStmt)
+import Betzac.AST.Types (BetzaProgram, BetzaStmt, Label (..), Labelling, QualifiedStmt)
 import Betzac.AST.Utils (definedLabel, isExported, referencedLabel, stmtLabel, stmtOf)
 import Betzac.Compilation.Context (
     ExportedDef (..),
@@ -25,7 +25,7 @@ import Betzac.Compilation.Context (
  )
 import Betzac.Diagnostic (
     SemanticProblem,
-    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel, UnusedLabel),
+    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnresolvedLabel),
     Severity (Error, Warning),
     mkProblem,
  )
@@ -91,20 +91,16 @@ exportedScope eff prog = (winners, dupProbs ++ unresolved)
 
     dupWarning = mkProblem Warning DuplicateDirective . getSpan . occStmt
 
-{- | Diagnostics for the unexported bare label references (@label;@) in a file. One
-that resolves nowhere is unresolved; one that resolves is dead code, since referencing
-a label without exporting or binding it achieves nothing.
+{- | The bare label references (@label;@) a file makes outside an @export@, each with
+the label it names. An exported one is absent: 'exportedScope' republishes it instead.
 -}
-checkLabelRefs :: LabelTable ResolvedDef -> BetzaProgram Ps -> [SemanticProblem]
-checkLabelRefs eff prog =
-    [ if Map.member name eff
-        then mkProblem Warning (UnusedLabel name) (getSpan stmt)
-        else mkProblem Error UnresolvedLabel (getSpan stmt)
+unexportedLabelRefs :: BetzaProgram Ps -> [(BetzaStmt Ps, Labelling)]
+unexportedLabelRefs prog =
+    [ (stmt, labelText lbl)
     | qs <- prog
     , not (isExported qs)
     , Just stmt <- [stmtOf qs]
     , Just lbl <- [referencedLabel stmt]
-    , let name = labelText lbl
     ]
 
 {- | Resolution priority, strongest first: a local @override@ is the most deliberate

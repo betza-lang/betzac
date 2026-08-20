@@ -1,16 +1,24 @@
-module Betzac.Compilation.Label.Resolution (resolveLabelBody) where
+module Betzac.Compilation.Label.Resolution (resolveLabelBody, checkUnresolvedRefs) where
 
 import Betzac.AST.Phases (Ps)
-import Betzac.AST.Types (BetzaExpr, Label (Leaper))
+import Betzac.AST.Types (BetzaExpr, BetzaProgram, Label (Leaper))
 import Betzac.AST.Utils (exprLabels)
 import Betzac.Compilation.Context (ResolvedDef (..), edExpr)
-import Betzac.Compilation.Label.Scope (LabelTable, labelText)
+import Betzac.Compilation.Label.Scope (LabelTable, labelText, unexportedLabelRefs)
 import Betzac.Diagnostic
 import Betzac.Span (HasSpan (getSpan))
 
 import qualified Data.Map as Map
 
 type Trail = [String] -- labels currently being expanded on a path
+
+-- | A bare label reference naming something that is nowhere in scope.
+checkUnresolvedRefs :: LabelTable ResolvedDef -> BetzaProgram Ps -> [SemanticProblem]
+checkUnresolvedRefs eff prog =
+    [ mkProblem Error UnresolvedLabel $ getSpan stmt
+    | (stmt, name) <- unexportedLabelRefs prog
+    , not $ Map.member name eff
+    ]
 
 resolveLabelBody :: LabelTable ResolvedDef -> FilePath -> String -> BetzaExpr Ps -> [SemanticProblem]
 resolveLabelBody eff file lbl = walk [lbl]

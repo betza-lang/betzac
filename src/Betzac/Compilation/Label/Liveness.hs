@@ -1,6 +1,7 @@
-module Betzac.Compilation.Label.Liveness (checkDeadLabels) where
+module Betzac.Compilation.Label.Liveness (checkDeadLabels, checkDeadRefs) where
 
-import Betzac.AST.Types (Labelling)
+import Betzac.AST.Phases (Ps)
+import Betzac.AST.Types (BetzaProgram, Labelling)
 import Betzac.AST.Utils (exprLabels)
 import Betzac.Compilation.Context
 import Betzac.Compilation.Label.Scope
@@ -29,3 +30,13 @@ checkDeadLabels eff exported file =
             _ -> seen -- undefined, or imported and so never dead here
     refsOf :: ExportedDef -> [Labelling]
     refsOf = foldMap (map labelText . exprLabels) . edExpr
+
+{- | A bare label reference that resolves, but is neither exported nor bound to
+anything: naming a label on its own achieves nothing.
+-}
+checkDeadRefs :: LabelTable ResolvedDef -> BetzaProgram Ps -> [SemanticProblem]
+checkDeadRefs eff prog =
+    [ mkProblem Warning (UnusedLabel name) (getSpan stmt)
+    | (stmt, name) <- unexportedLabelRefs prog
+    , Map.member name eff
+    ]

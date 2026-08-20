@@ -28,8 +28,9 @@ allDiagnostics ctx = concatMap feDiagnostics (Map.elems (ccFiles ctx))
 hasCause :: String -> [SemanticProblem] -> Bool
 hasCause c = any ((== c) . causeOf . semKind)
 
--- | Diagnostics recorded specifically on the discovered file whose path ends with
--- 'suffix' (a plain filename, e.g. "main.betza").
+{- | Diagnostics recorded specifically on the discovered file whose path ends with
+'suffix' (a plain filename, e.g. "main.betza").
+-}
 diagnosticsOn :: String -> CompilationContext -> [SemanticProblem]
 diagnosticsOn suffix ctx =
     concat [feDiagnostics e | (p, e) <- Map.toList (ccFiles ctx), suffix `isSuffixOf` p]
@@ -39,9 +40,10 @@ onLine n p = case semSpan p of
     RealSpan s _ -> sourceLine s == mkPos n
     Generated -> False
 
--- | Write a chain @f0 -> f1 -> ... -> f(n-1)@, each file @using@-ing the next, with
--- its own unique export (a single uppercase letter, per the label grammar). Every
--- file is reachable from @f0@.
+{- | Write a chain @f0 -> f1 -> ... -> f(n-1)@, each file @using@-ing the next, with
+its own unique export (a single uppercase letter, per the label grammar). Every
+file is reachable from @f0@.
+-}
 writeChain :: FilePath -> Int -> IO ()
 writeChain dir n = forM_ [0 .. n - 1] $ \i -> do
     let usingLine = if i < n - 1 then "using f" ++ show (i + 1) ++ ";\n" else ""
@@ -103,6 +105,28 @@ spec = describe "Compilation.Driver" $ do
                         length onSecondLine `shouldBe` 2
                         all startsAtColumn1 onSecondLine `shouldBe` True
 
+        it "reports an unresolved bare reference even when a statement body is also unresolved" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                -- Q and Z are independent failures; neither may mask the other.
+                writeFile (dir </> "f0.betza") "export A = Q;\nZ;\n"
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx -> do
+                        let probs = allDiagnostics (Driver.resolveScopes ctx)
+                        map (causeOf . semKind) probs
+                            `shouldBe` ["unresolved label", "unresolved label"]
+
+        it "stays quiet about a dead bare reference while the file still has an unresolved one" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                writeFile (dir </> "f0.betza") "export A = Q;\nW = :1,1:;\nW;\n"
+                result <- Driver.discover TIO.readFile dir (dir </> "f0.betza") (optionsFromFlags [])
+                case result of
+                    Left _ -> fail "did not expect a system failure"
+                    Right ctx -> do
+                        let probs = allDiagnostics (Driver.resolveScopes ctx)
+                        map (causeOf . semKind) probs `shouldBe` ["unresolved label"]
+
         it "warns a local plain definition shadowed by an import on its own statement, not on the import" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "lib.betza") "export W = :1,1:;\n"
@@ -117,7 +141,6 @@ spec = describe "Compilation.Driver" $ do
                         length libDiags `shouldBe` 0
                         map (causeOf . semKind) mainDiags `shouldBe` [causeOf DuplicateLabel]
                         all (onLine 2) mainDiags `shouldBe` True -- "W = :2,2:;" is main.betza's own line 2
-
         it "warns the losing `using` directive, in the importing file, when two plain imports conflict" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
                 writeFile (dir </> "libA.betza") "export W = :1,1:;\n"
