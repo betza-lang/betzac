@@ -57,7 +57,6 @@ versionParser =
         <$ flag'
             ()
             ( long "version"
-                <> short 'V'
                 <> help "Show the version and exit (accepted on its own)"
             )
 

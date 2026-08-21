@@ -15,4 +15,4 @@ main = do
 
 -- | Reporting the version is its own mode: accepted alone, and nowhere else.
 isVersionRequest :: [String] -> Bool
-isVersionRequest args = args `elem` [["--version"], ["-V"]]
+isVersionRequest args = args == ["--version"]
