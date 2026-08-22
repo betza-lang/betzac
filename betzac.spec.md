@@ -483,19 +483,308 @@ has the right order only **for a greedy parser**.
 
 ## 3.4 Semantic Rules
 
-**Modifier inheritance and chaining**
+This subsection gives the meaning of each construct of [Section 3.2](#32-grammar). Constructs whose meaning is not yet settled are listed in [Section 3.7](#37-undecided-semantics) instead of being given a provisional meaning here.
 
+---
+
+#### Semantic Domain
+
+3.4.1 - A betza expression will denote a **moveset**: a set of moves.
+
+3.4.2 - A move will consist of one or more **legs**. A leg will consist of a displacement together with the conditions under which that displacement may be taken.
+
+3.4.3 - A displacement will be an ordered pair of integers `(x, y)`, interpreted relative to the origin square of its leg, where a positive `x` is a displacement to the right and a positive `y` a displacement forward, both in the frame of the side owning the piece (3.4.12.3). A betza expression will never denote an absolute board coordinate.
+
+3.4.4 - A moveset will be interpreted relative to a **frame**: an origin square and an orientation. The orientation determines which displacements the direction modifiers of [Section 3.4.11](#directions) select.
+
+3.4.5 - The interpretation of a betza expression will not depend on board dimensions, occupancy, or game rules. Whether a move denoted by an expression is *legal* in a concrete position is outside the scope of this specification.
+
+3.4.5.1 - A piece will be transparent to itself. No square it occupies at any point while its own move is being taken will block, obstruct, or be capturable by a later leg of that same move, and the square it started from remains available to it as a destination. A move is explored with the piece already in motion, so it is never its own hurdle.
+
+---
+
+#### Leapers
+
+3.4.6 - A leaper literal `:m,n:` will denote the set of displacements obtained by applying every symmetry of the square lattice to `(m, n)` -- that is, the set `{(±m,±n), (±n,±m)}`, with duplicates removed.
+
+3.4.6.1 - Consequently a leaper literal denotes 8 displacements when `m ≠ n` and both are nonzero; 4 displacements when `m = n ≠ 0`, or when exactly one of `m` and `n` is zero; and 1 displacement (the null displacement) when `m = n = 0`.
+
+3.4.6.2 - The null leaper will be unaffected by any direction modifier: `x:0,0:` denotes `:0,0:` for every direction modifier `x`, there being no component whose magnitude could decide the comparison of 3.4.12.
+
+3.4.7 - A leaper literal will denote a single leg. Whether the squares between the origin and the destination are relevant will be determined by the behaviour modifiers applied to it (cf. 3.4.16), not by the leaper itself.
+
+---
+
+#### Labels
+
+3.4.8 - A label reference will denote the moveset of the definition selected for that label in the effective scope of the file being compiled (cf. 2.4.24).
+
+3.4.9 - A label reference will be equivalent to the expression it resolves to. Labels introduce no semantics of their own beyond naming.
+
+---
+
+#### Union
+
+3.4.10 - The juxtaposition of two expressions `E1 E2` will denote the union of the moveset of `E1` and the moveset of `E2`.
+
+3.4.10.1 - Union will be commutative, associative, and idempotent. Consequently `F W`, `W F`, and `W F W` denote the same moveset.
+
+---
+
+#### Directions
+
+3.4.11 - A direction modifier will **restrict** the displacements of the expression it modifies: the modified expression denotes those of its displacements that the modifier selects, and no others.
+
+3.4.12 - A single direction modifier will select every displacement having a component in the direction it names, whatever the magnitude of that component relative to the other.
+
+| Modifier | Selects a displacement `(x, y)` when |
+| --- | --- |
+| `f` | `y > 0` |
+| `b` | `y < 0` |
+| `l` | `x < 0` |
+| `r` | `x > 0` |
+| `s` | `x != 0` |
+| `v` | `y != 0` |
+| `a` | always |
+
+3.4.12.1 - Consequently `fN` denotes four displacements -- `(1,2)`, `(-1,2)`, `(2,1)` and `(-2,1)` -- every knight displacement that goes forward at all, and not only the two that go forward furthest. Narrowing to the forward-most is the work of the doubled amalgamated form (3.4.13.3), which is what distinguishes `<ff>` from `f`. `fF` denotes both forward diagonals, and `fW` denotes `(0,1)` alone.
+
+3.4.12.2 - `a` will be the identity restriction: `aE` and `E` denote the same moveset.
+
+3.4.12.3 - Every direction will be relative to the side owning the piece: `f` is toward the opponent, and `l` is to that side's own left. The two sides therefore read a definition in frames related by a half-turn rotation, so that `l` and `r` exchange in absolute terms exactly as `f` and `b` do. A definition behaves identically from the point of view of whichever side owns it.
+
+3.4.12.4 - Consequently a piece defined as `<fl>F`, standing on e4 and owned by the side playing up the board, moves to d5; the same definition owned by the other side, standing on e5, moves to f4.
+
+3.4.13 - Several direction modifiers applied to the same expression will select the union of what each selects. Consequently `fbW` and `vW` denote the same moveset, and `frN` denotes six of the eight knight displacements -- every one that goes forward or rightward or both.
+
+3.4.13.1 - An amalgamated direction `<d1 d2>` will name the two components of a single displacement: `d1` the direction of the component of greater magnitude, and `d2` the direction of the lesser.
+
+3.4.13.2 - The order of the two modifiers will therefore matter. For a leaper whose two numbers differ and are both nonzero, an amalgamated direction of two distinct modifiers selects exactly one of the eight displacements: `<fr>N` denotes `(1,2)` -- two forward and one to the right, the forward component being the greater and so named first -- while `<rf>N` denotes `(2,1)`, two to the right and one forward.
+
+3.4.13.3 - Where the two modifiers are equal, only the component of greater magnitude will be constrained, the lesser being left free. `<ff>N` therefore denotes `(1,2)` and `(-1,2)`, and `<rr>N` denotes `(2,1)` and `(2,-1)`.
+
+3.4.13.4 - Where a displacement's two components are equal in magnitude, neither is the greater, and an amalgamated direction of two distinct modifiers naming them will select it in either order: `<fr>F` and `<rf>F` both denote `(1,1)`. An amalgamated direction of two equal modifiers selects no such displacement.
+
+3.4.13.5 - Where a displacement has a zero component, it has no second direction to be named, and no amalgamated direction will select it. `<fr>D` accordingly denotes the empty moveset (cf. 3.5.4).
+
+3.4.13.6 - Direction modifiers being a restriction, an expression whose modifiers select none of its displacements will denote the empty moveset (cf. 3.5.4).
+
+---
+
+#### Captures
+
+3.4.14 - A move will capture on at most one of its legs by default, that leg being the **final** leg of the move.
+
+3.4.14.1 - The final leg of a move will behave as though qualified `cm`, whether or not it is written.
+
+3.4.14.2 - Every leg of a move other than its final leg will be quiet by default: it may pass over or land on a square only without capturing what stands there.
+
+3.4.14.3 - Writing `cm` on an earlier leg will lift that restriction for that leg. A move each of whose legs is so qualified may capture once per leg.
+
+3.4.15 - Which leg is final will be determined by the branch taken, not by the written form of the expression. Where a chain permits its continuation to be declined (3.4.29), the leg at which the move ends is the final leg of that branch, and is the leg that may capture.
+
+3.4.15.1 - Consequently, in `(D A H G f:4,4: - [Q])` the leap may capture on its landing square when the continuation is declined, and is quiet when the continuation is taken -- the capture then falling at the end of the slide. A leap onto an occupied square followed by a continuation is thereby excluded without needing to be forbidden.
+
+---
+
+#### Behaviours
+
+3.4.16 - A behaviour modifier will **qualify** the conditions of the leg it modifies, without changing which displacements that leg denotes.
+
+3.4.17 - The behaviour modifiers whose meaning is settled will be:
+
+| Modifier | Meaning |
+| --- | --- |
+| `m` | the leg may only be taken to an empty square |
+| `c` | the leg may only be taken as a capture |
+| `i` | the leg may only be taken from the piece's initial square |
+| `j` | the leg moves to an occupied square without capturing what stands there (a **visit**) |
+| `p` | the leg must hop over a hurdle of either allegiance, which may stand anywhere along its path |
+| `g` | the leg moves as the slider it names, but leaping rather than sliding |
+| `n` | the leg moves as the leaper it names, but sliding rather than leaping |
+
+3.4.17.1 - `m` and `c` applied together will permit both, and so restore the behaviour of a final leg (3.4.14.1) to a leg which would otherwise be quiet.
+
+3.4.17.2 - A visit will not supply a destination, an occupied square not being a square the piece may rest on. A leg qualified `j` will therefore require either a succeeding chain leg to supply the destination, or a setup operator (3.4.30) naming one.
+
+3.4.17.3 - A leg qualified `n` will follow a path its destination could have been reached by in single steps, and will be available where any one such path is unobstructed. `nCZ` accordingly denotes the squares a king could reach in exactly three steps and no other piece could reach in one, each by way of whichever of its three orderings of those steps is clear.
+
+3.4.18 - A behaviour modifier will carry a **modality**, written as the modifier letter alone, the letter doubled, or the letter followed by `y`.
+
+3.4.18.1 - The meaning of a modality will be specific to the modifier carrying it. It will not be assumed to be a repetition count: for one modifier the doubled form widens a quantity, and for another it selects a different set of pieces.
+
+3.4.18.1.1 - Consequently `p` and `j` spend their modalities on different things -- `p` on how many hurdles, `j` on whose pieces -- and neither can express what the other's modality expresses. A hop restricted by allegiance must be written with `j` and a continuation; a visit of a stated number of pieces must be written as a chain of `j` legs.
+
+3.4.18.2 - A hurdle hopped over will be unaffected, whatever its allegiance: passing over a piece is not a capture, and so nothing about the hurdle's owner bears on whether the hop is available. Only the leg's destination is subject to allegiance, under the ordinary rule.
+
+3.4.18.3 - The modalities of the hurdle-related modifiers will be:
+
+| Written | Meaning |
+| --- | --- |
+| `p` | exactly one hurdle, of either allegiance |
+| `pp` | any number of hurdles, of either allegiance, but at least one |
+| `j` | visits an enemy piece |
+| `jj` | visits a friendly piece |
+| `jy` | visits a piece of either allegiance |
+| `g` | leaps a piece of either allegiance |
+| `gg` | leaps a friendly piece, but not an enemy one |
+
+---
+
+#### Exponents
+
+3.4.19 - An exponent will denote repetition of the atom-expression it is attached to. For an atom-expression `A`, a modifier string `m`, and a count `N`, the exponent `A m N` will denote `N` copies of `A` joined by `N - 1` joints, each joint carrying `m`.
+
+3.4.19.1 - The count will include the copy written out. `W3` denotes three wazir legs in total, not one leg followed by three more.
+
+3.4.19.2 - The repeated unit will be the atom-expression alone -- a label, a leaper literal, or a parenthesised expression -- and never a chain the exponent happens to follow. In `A - B m N` the unit is `B`; repeating a chain requires parenthesising it, as in `(F - lF) - r0`.
+
+3.4.20 - The modifier string of an exponent will decorate the **joints** between the copies, not the interior of a copy. Consequently `(F - lF) - r0` denotes `F - lF - rF - lF - rF ...`: the `l` belongs to the repeated unit and is preserved in every copy, while the `r` governs only how each copy attaches to the last.
+
+3.4.20.1 - A copy will carry the behaviour modifiers of the leg written out, and will not carry its direction modifiers. `fjyB-[3]` denotes `fjyB - jyB - jyB`.
+
+3.4.21 - Where the modifier string of an exponent contains no direction modifier, `f` will be supplied. Each repetition therefore continues straight ahead of the previous one (3.4.26), which is what makes `W3` a straight run rather than a wandering path.
+
+3.4.22 - Where the modifier string of an exponent contains no chain operator, the joints will be optional.
+
+3.4.22.1 - Consequently `bF3` denotes one, two, or three backward-diagonal steps, and `R = W0` denotes a rook: unbounded repetition whose joints may each be declined, so the piece may stop anywhere along the ray.
+
+3.4.22.2 - Where the modifier string does contain a chain operator, the modality of the joints will be that operator's (3.4.29). `X-3` therefore denotes exactly three legs, and `X-[3]` one to three.
+
+3.4.23 - The exponent `0` will denote unbounded repetition.
+
+3.4.24 - The exponent `0*` will denote unbounded repetition of which only the longest available run belongs to the moveset: the piece travels to the last square it could have reached in that direction, and to no earlier one.
+
+3.4.24.1 - Consequently `W0*` denotes a rook which must slide as far as it can go. On an otherwise empty board a piece so defined, standing in a corner, has exactly two moves available: the two corners adjacent to it.
+
+3.4.25 - Declining a joint will end the repetition, not the move: control passes to whatever chain leg follows the exponent. Consequently in `fjyB-[3] - B` a single repetition may be followed by the mandatory `B`.
+
+---
+
+#### Chains
+
+3.4.26 - A chain `E1 <chain-operator> E2` will denote sequential composition: each move of the chain consists of a move of `E1` followed by a move of `E2` taken from the destination of the first.
+
+3.4.27 - A **step** chain, written `-`, will interpret direction modifiers on its continuation **relative to the direction of the leg preceding it**. `f` on such a leg denotes straight ahead of the previous leg, `b` its reverse, and so on.
+
+3.4.27.1 - A continuation of a step chain carrying no direction modifier at all will be read as carrying `f`. A leg therefore continues straight ahead of the leg before it unless it says otherwise, which is what makes `(D A H G f:4,4: - [Q])` a leap continued along the line of the leap rather than a leap followed by a slide in any of the eight directions. The same default supplies the `f` of an exponent's joints (3.4.21), that being the same rule applied to the joints an exponent expands into.
+
+3.4.27.2 - Consequently a direction modifier prefixed to a parenthesised chain constrains that chain's first leg only, every later leg taking its orientation from its predecessor. `f(X - Y)`, `(fX) - Y`, and `fX - Y` denote the same moveset.
+
+3.4.27.3 - Consequently `(cmK - bK)` denotes a capture on an adjacent square followed by a return to the origin square, in any of the eight directions, rather than a step followed by an absolute backward step.
+
+3.4.28 - A **sequence** chain, written `--`, will interpret direction modifiers on its continuation in the frame of the move's first leg rather than relative to the leg preceding it. The two chain operators differ in this and in nothing else.
+
+3.4.28.1 - A continuation joined by a sequence chain will carry no implicit direction. The default of 3.4.27.1 follows from a leg inheriting its predecessor's orientation, and a sequence chain is precisely the operator that withholds that inheritance, so a bare continuation after `--` is unconstrained and may set off in any direction.
+
+3.4.28.2 - Chains will associate to the right, so that `X -- Y - Z` is `X -- (Y - Z)`. The continuation `Y` may therefore set off in any direction whatever `X` turned out to be, while `Z`, joined to `Y` by a step chain, is relative to the direction `Y` took. Inheritance resumes within the continuation; only the joint written `--` interrupts it.
+
+3.4.29 - A chain operator of either kind will carry a **modality**, written as follows:
+
+| Written | Modality |
+| --- | --- |
+| `E1 - E2` | the continuation is mandatory |
+| `E1 -[E2]` | the continuation may be declined, the move ending at the destination of `E1` |
+| `E1 -{E2}` | the continuation belongs to the move if it is unblocked, and does not if it is blocked |
+
+3.4.29.1 - The braced modality will not be a choice. Where the continuation is unblocked it is compulsory; where it is blocked the move ends at the destination of `E1`. This distinguishes it from the bracketed modality, which the moving side elects to take or decline.
+
+3.4.29.2 - Consequently `K - {((fr)K)0*}` denotes a king which, having taken a step, must then continue around a circular path turning 45 degrees at each step, stopping only where the path becomes blocked.
+
+---
+
+#### Setup
+
+3.4.30 - The setup operator `!` will prefix a leg, preceding any modifier and any exponent of that leg, and will mark the square the piece occupies at the moment the operator is encountered as the **setup square**.
+
+3.4.30.1 - On its first occurrence in a move, the setup operator will mean: take the succeeding legs, then return the piece to the setup square.
+
+3.4.30.2 - On any later occurrence in the same move, it will mean: return the piece to the setup square, then take the succeeding legs, then return it to the setup square again.
+
+3.4.30.3 - Consequently `mQ - {!cK}` denotes capture by withdrawal: a quiet queen move, then -- where that continuation is unblocked -- a single step onward capturing the piece there, after which the piece returns to the square it stepped from.
+
+---
+
+#### Grouping
+
+3.4.31 - Parentheses will group without contributing any moves of their own: `(E)` and `E` denote the same moveset.
+
+3.4.32 - A modifier applied to a parenthesised union will distribute over that union: `f(W F)` and `fW fF` denote the same moveset. Applied to a parenthesised chain it constrains the head only (3.4.27.2).
 ---
 
 ## 3.5 Semantic Constraints
 
-TODO
+This subsection lists expressions which [Section 3.2](#32-grammar) admits but which denote nothing useful, or nothing at all. Each is either an error (the expression is rejected) or a warning (the expression is compiled as specified, and reported).
+
+3.5.1 - Each component of an amalgamated direction will be one of `f`, `b`, `l`, or `r`. An amalgamated direction with a component `a`, `s`, or `v` will produce an error log with cause `invalid value`.
+
+3.5.2 - The two components of an amalgamated direction will not be contradictory. An amalgamated direction combining `f` with `b`, or `l` with `r`, selects nothing and will produce an error log with cause `invalid value`.
+
+3.5.3 - A leaper literal will not be the left-hand side of an assignment. A leaper literal is a geometric value rather than a name, and assigning to one will produce an error log with cause `invalid statement`.
+
+3.5.4 - An expression whose direction modifiers select none of its displacements denotes the empty moveset, and will produce a warning log with cause `empty moveset`. `<fr>D` is such an expression: no displacement of `:2,0:` is both forward and rightward.
+
+3.5.5 - The final leg of a move will not be a visit. A leg qualified `j` ends on an occupied square, which is not a square the piece may rest on (3.4.17.2), so a chain ending in one denotes no completed move and will produce an error log with cause `invalid statement`.
+
+3.5.6 - An exponent will have a count of at least 1. `A m 0` denotes unbounded repetition (3.4.23) and is not a count of zero.
 
 ---
 
 ## 3.6 Examples
 
-TODO
+The pieces of orthodox chess, as defined in terms of the standard prelude (cf. [Section 5](#5-standard-prelude)):
+
+```betza
+export K = F W;         # King
+export N;               # Knight
+export R = W0;          # Rook
+export B = F0;          # Bishop
+export Q = R B;         # Queen
+
+export P =
+        fW              # forward move
+        fcF             # diagonal capture
+        fiD;            # initial double step
+```
+
+**`K = F W`** -- the union (3.4.10) of the ferz `:1,1:` and the wazir `:1,0:`. By 3.4.6 the ferz denotes the 4 diagonal displacements and the wazir the 4 orthogonal ones, giving the king's 8. Each is a single leg, hence a final leg, hence captures by 3.4.14.1.
+
+**`R = W0`** -- the wazir under unbounded repetition (3.4.23) whose joints carry no chain operator and are therefore optional (3.4.22), so the rook may stop anywhere along a ray. Each joint supplies `f` by 3.4.21, so the ray is straight.
+
+**`P = fW fcF fiD`** -- three restricted atoms unioned together. `fW` is the wazir restricted to its forward displacement (3.4.11); `fcF` is the ferz restricted forward and qualified capture-only; `fiD` is the dabbaba `:2,0:` restricted forward and available only from the initial square.
+
+**`<fr>N` versus `frN` versus `<ff>N`** -- by 3.4.13.2 the first denotes the single displacement `(1,2)`, forward being its greater component and rightward its lesser, and reversing the pair names a different one, `<rf>N` being `(2,1)`. By 3.4.13 the second denotes six of the eight, every displacement going forward or rightward at all. By 3.4.13.3 the third denotes the two forward-most, `(1,2)` and `(-1,2)`: the doubled form constrains only the greater component, which is what distinguishes it from the plain `f` of 3.4.12.
+
+---
+
+A piece exercising the whole of this subsection, the Taikyoku shogi free eagle:
+
+```betza
+export :free eagle: =
+        Q                       # slider
+        (D A H G f:4,4: - [Q])  # leap and slide
+        (cmK - bK)              # igui and jitto
+        (cmK-[3] - [Q])         # sweep capture
+        f(cmF-[4] - [Q]);       # sweep capture, forward diagonal
+```
+
+**`(D A H G f:4,4: - [Q])`** -- a leap to any of the special squares, optionally continued as a slide. Because the continuation is optional, the leap is the final leg of the branch that declines it and may capture there; in the branch that takes it, the leap is quiet and the capture falls at the end of the slide (3.4.15.1).
+
+**`(cmK - bK)`** -- igui: a capture on an adjacent square, then a mandatory return leg whose `b` is relative to the first leg (3.4.27.3), landing back on the origin. Written `cm` on the first leg because that leg is not final (3.4.14.3). The branch in which the first leg is quiet is jitto, a null move.
+
+**`(cmK-[3] - [Q])`** -- the sweep: one to three king steps in a straight line (3.4.21, 3.4.22.2), every one of them able to capture because the head carries `cm` and the repeated unit is the head (3.4.19), followed by an optional ordinary slide. Occupants of the swept squares are therefore consumed rather than blocking, and the run may halt after one or two steps.
+
+---
+
+## 3.7 Undecided Semantics
+
+Section 3.4 now gives every construct of [Section 3.2](#32-grammar) a meaning. What remains open is whether some of those meanings are kept, and a few points of detail their sources leave unstated.
+
+**3.7.1 - Whether `n` survives.** 3.4.17.3 specifies it, but a modifier that turns one destination into a disjunction over several distinct paths is unlike every other modifier here, and it may be dropped while the intermediate representation is being specified rather than carried into it.
+
+**3.7.2 - Whether `g` survives.** 3.4.17 specifies it, but two objections stand against it. Its modality is asymmetric in a way no other modifier is -- `gg` restricts leaping to friendly pieces while no form restricts it to enemy ones, and there is no `gy`. And it is not clear what a leaper is supposed to have leapt *over*: for a slider the intervening squares are well defined, whereas the squares a knight passes are not, so `g` applied to a leaper may have no meaning to give.
+
+**3.7.3 - Whether `p` is exactly a shorthand for `jy`.** Its source calls `p` redundant -- expressible with `j` at greater length -- and now that both are blind to allegiance (3.4.18.2), `jy` is the corresponding form. Whether `pX` is to be *defined* as `jyX - X`, or merely to coincide with it in simple cases, is undecided. The two part company under chaining: `p` requires an empty square between consecutive hurdles, and a chain of `jy` legs does not, so `(pX)3` and a three-fold `jy` chain are different pieces.
 
 ---
 
