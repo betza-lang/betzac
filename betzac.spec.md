@@ -511,6 +511,8 @@ This subsection gives the meaning of each construct of [Section 3.2](#32-grammar
 
 3.4.6.2 - The null leaper will be unaffected by any direction modifier: `x:0,0:` denotes `:0,0:` for every direction modifier `x`, there being no component whose magnitude could decide the comparison of 3.4.12.
 
+3.4.6.3 - The null leaper will denote a move that leaves the board unchanged -- a pass. It is an ordinary moveset of one displacement, not an empty one, and is what makes the quiet branch of `(cmK - bK)` a null move rather than nothing at all.
+
 3.4.7 - A leaper literal will denote a single leg. Whether the squares between the origin and the destination are relevant will be determined by the behaviour modifiers applied to it (cf. 3.4.16), not by the leaper itself.
 
 ---
@@ -597,7 +599,7 @@ This subsection gives the meaning of each construct of [Section 3.2](#32-grammar
 | --- | --- |
 | `m` | the leg may only be taken to an empty square |
 | `c` | the leg may only be taken as a capture |
-| `i` | the leg may only be taken from the piece's initial square |
+| `i` | the leg may only be taken if the piece has not yet been moved this game |
 | `j` | the leg moves to an occupied square without capturing what stands there (a **visit**) |
 | `p` | the leg must hop over a hurdle of either allegiance, which may stand anywhere along its path |
 | `g` | the leg moves as the slider it names, but leaping rather than sliding |
@@ -726,7 +728,13 @@ This subsection lists expressions which [Section 3.2](#32-grammar) admits but wh
 
 3.5.5 - The final leg of a move will not be a visit. A leg qualified `j` ends on an occupied square, which is not a square the piece may rest on (3.4.17.2), so a chain ending in one denotes no completed move and will produce an error log with cause `invalid statement`.
 
-3.5.6 - An exponent will have a count of at least 1. `A m 0` denotes unbounded repetition (3.4.23) and is not a count of zero.
+3.5.6 - A modifier which changes nothing about the leg it is applied to will produce a warning log with cause `redundant modifier`. A modifier is redundant when
+
+1. an equal modifier is already applied to the same leg, as the second `m` of `mmX` or the second `f` of `ffX`;
+2. another modifier applied to the same leg selects everything it selects -- `f` beside `v`, `l` beside `s`, anything beside `a`, `<fr>` beside `f` -- or the modifiers applied to that leg together select every direction, which is what `a` alone selects;
+3. it restates what the language would have supplied anyway: `f` on a leg that inherits its direction (3.4.27.1), `cm` on a leg that is unconditionally final (3.4.14.1), or `a` on a leg whose direction is not inherited (3.4.12.2, 3.4.28.1).
+
+3.5.7 - An exponent will have a count of at least 1. `A m 0` denotes unbounded repetition (3.4.23) and is not a count of zero.
 
 ---
 
@@ -751,7 +759,7 @@ export P =
 
 **`R = W0`** -- the wazir under unbounded repetition (3.4.23) whose joints carry no chain operator and are therefore optional (3.4.22), so the rook may stop anywhere along a ray. Each joint supplies `f` by 3.4.21, so the ray is straight.
 
-**`P = fW fcF fiD`** -- three restricted atoms unioned together. `fW` is the wazir restricted to its forward displacement (3.4.11); `fcF` is the ferz restricted forward and qualified capture-only; `fiD` is the dabbaba `:2,0:` restricted forward and available only from the initial square.
+**`P = fW fcF fiD`** -- three restricted atoms unioned together. `fW` is the wazir restricted to its forward displacement (3.4.11); `fcF` is the ferz restricted forward and qualified capture-only; `fiD` is the dabbaba `:2,0:` restricted forward and available only while the pawn has not yet moved.
 
 **`<fr>N` versus `frN` versus `<ff>N`** -- by 3.4.13.2 the first denotes the single displacement `(1,2)`, forward being its greater component and rightward its lesser, and reversing the pair names a different one, `<rf>N` being `(2,1)`. By 3.4.13 the second denotes six of the eight, every displacement going forward or rightward at all. By 3.4.13.3 the third denotes the two forward-most, `(1,2)` and `(-1,2)`: the doubled form constrains only the greater component, which is what distinguishes it from the plain `f` of 3.4.12.
 
