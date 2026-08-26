@@ -33,18 +33,23 @@ skipped whitespace/comments in between. Use the last actually-consumed token's o
 -}
 spanning :: Parser (PsX -> a) -> Parser a
 spanning p = do
-    beforeOffset <- getOffset
-    before <- unBetzaTokenStream <$> getInput
+    st <- getParserState
+    let before = unBetzaTokenStream (stateInput st)
+        beforeOffset = stateOffset st
     f <- p
     afterOffset <- getOffset
-    s <- case before of
-        (t : _) -> pure $ startPos t
-        [] -> getSourcePos -- at eof there is no token to ask
     let consumed = afterOffset - beforeOffset
-        e
-            | consumed <= 0 = s
-            | otherwise = endPos (before !! (consumed - 1))
-    return $ f $ PsX $ RealSpan s e
+    case before of
+        (t : _) ->
+            let s = startPos t
+                e
+                    | consumed <= 0 = s
+                    | otherwise = endPos (before !! (consumed - 1))
+             in return $ f $ PsX $ RealSpan s e
+        -- At eof there is no token to ask, and nothing was consumed either.
+        [] -> do
+            s <- getSourcePos
+            return $ f $ PsX $ RealSpan s s
 
 withModality ::
     (B.ChainOperator Ps -> Parser (PsX -> a)) -> -- mandatory
