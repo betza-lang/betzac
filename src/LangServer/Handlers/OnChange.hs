@@ -2,6 +2,7 @@
 
 module LangServer.Handlers.OnChange (onChange) where
 
+import LangServer.Cache (BlsCache)
 import qualified LangServer.Config as B (ConfigBLS)
 import qualified LangServer.Handlers.Core as B (publishDiagnostics)
 
@@ -19,11 +20,11 @@ getChangeText :: TextDocumentContentChangeEvent -> Text
 getChangeText (TextDocumentContentChangeEvent (InL partial)) = partial ^. text
 getChangeText (TextDocumentContentChangeEvent (InR whole)) = whole ^. text
 
-onChange :: TNotificationMessage Method_TextDocumentDidChange -> LspM B.ConfigBLS ()
-onChange msg = do
+onChange :: BlsCache -> TNotificationMessage Method_TextDocumentDidChange -> LspM B.ConfigBLS ()
+onChange cache msg = do
     let docId = msg ^. params . textDocument
         u = docId ^. uri
         f = maybe "" id $ uriToFilePath u
         changes = msg ^. params . contentChanges
         content = maybe T.empty getChangeText (listToMaybe (reverse changes))
-    B.publishDiagnostics f u content
+    B.publishDiagnostics cache f u content

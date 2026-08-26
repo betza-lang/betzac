@@ -22,6 +22,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Text.Megaparsec.Pos (SourcePos (..), unPos)
 
+import LangServer.Cache (BlsCache)
 import LangServer.Config (ConfigBLS)
 import LangServer.Handlers.Core (contextFor)
 import Language.LSP.Protocol.Lens (HasParams (params), HasPosition (position), HasTextDocument (textDocument), HasUri (uri))
@@ -36,17 +37,18 @@ of its own assignment -- resolves to whichever definition wins in this file's ef
 scope, in whatever file that turns out to be, prelude included.
 -}
 onDefinition ::
+    BlsCache ->
     TRequestMessage Method_TextDocumentDefinition ->
     (Either (TResponseError Method_TextDocumentDefinition) (Definition |? ([DefinitionLink] |? Null)) -> LspM ConfigBLS ()) ->
     LspM ConfigBLS ()
-onDefinition req responder = do
+onDefinition cache req responder = do
     let u = req ^. params . textDocument . uri
         pos = req ^. params . position
     case uriToFilePath u of
         Nothing -> responder $ Right nowhere
         Just fp -> do
             mvf <- getVirtualFile (toNormalizedUri u)
-            result <- contextFor fp (maybe T.empty virtualFileText mvf)
+            result <- contextFor cache fp (maybe T.empty virtualFileText mvf)
             responder $ Right $ case result of
                 Left _ -> nowhere
                 Right ctx -> maybe nowhere (InL . Definition . InL) (definitionAt ctx fp pos)

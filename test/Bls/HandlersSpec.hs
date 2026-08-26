@@ -59,6 +59,11 @@ locationsOf (InR (InR Null)) = []
 lineRange :: UInt -> UInt -> UInt -> UInt -> Range
 lineRange sl sc el ec = Range (Position sl sc) (Position el ec)
 
+-- | How many semantic tokens an answer carries; the wire format is five ints each.
+tokenCount :: SemanticTokens |? Null -> Int
+tokenCount (InL (SemanticTokens _ dat)) = length dat `div` 5
+tokenCount (InR Null) = 0
+
 spec :: Spec
 spec = describe "bls handlers" $ do
     describe "onOpen" $ do
@@ -201,6 +206,51 @@ spec = describe "bls handlers" $ do
                     let diagsFor u = concat [n ^. params . diagnostics | n <- notes, n ^. params . uri == u]
                     liftIO $ length (diagsFor depUri) `shouldBe` 1
                     liftIO $ diagsFor mainUri `shouldBe` []
+
+    describe "reuse between requests" $ do
+        it "serves semantic tokens for the text after an edit, not the text before it" $
+            blsSession $ do
+                doc <- createDoc "test.betza" betzaKind (pack (preamble ++ "export X = W;"))
+                _ <- waitForDiagnostics
+                before <- getSemanticTokens doc
+                changeDoc
+                    doc
+                    [ TextDocumentContentChangeEvent $
+                        InR $
+                            TextDocumentContentChangeWholeDocument (pack (preamble ++ "export X = fbslvW;"))
+                    ]
+                _ <- waitForDiagnostics
+                after <- getSemanticTokens doc
+                liftIO $ tokenCount after `shouldSatisfy` (> tokenCount before)
+
+        it "sees a dependency's edited buffer from the file that uses it" $
+            withSystemTempDirectory "bls-handlers-spec" $ \rawDir -> do
+                dir <- canonicalizePath rawDir
+                writeFile (dir </> "dep.betza") "export X = :1,0:;\n"
+                writeFile (dir </> "main.betza") "using dep;\nexport Y = X;\n"
+                let mainUri = filePathToUri (dir </> "main.betza")
+                runSession "bls" fullLatestClientCaps dir $ do
+                    mainDoc <- openDoc "main.betza" betzaKind
+                    _ <- replicateM 2 publishDiagnosticsNotification
+                    depDoc <- openDoc "dep.betza" betzaKind
+                    _ <- publishDiagnosticsNotification
+                    -- dep stops exporting X, so main's reference to it no longer resolves.
+                    changeDoc
+                        depDoc
+                        [ TextDocumentContentChangeEvent $
+                            InR $
+                                TextDocumentContentChangeWholeDocument (pack "export Z = :1,0:;\n")
+                        ]
+                    _ <- publishDiagnosticsNotification
+                    changeDoc
+                        mainDoc
+                        [ TextDocumentContentChangeEvent $
+                            InR $
+                                TextDocumentContentChangeWholeDocument (pack "using dep;\nexport Y = X;\n\n")
+                        ]
+                    notes <- replicateM 2 publishDiagnosticsNotification
+                    let diagsFor u = concat [n ^. params . diagnostics | n <- notes, n ^. params . uri == u]
+                    liftIO $ length (diagsFor mainUri) `shouldBe` 1
 
     describe "go to definition" $ do
         it "jumps to a definition in the same file" $

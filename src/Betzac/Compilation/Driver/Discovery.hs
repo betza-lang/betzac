@@ -1,4 +1,4 @@
-module Betzac.Compilation.Driver.Discovery (SourceReader, discover) where
+module Betzac.Compilation.Driver.Discovery (SourceReader, SourceCompiler, SourceAccess (..), discover, discoverWith) where
 
 import Control.Exception (IOException, try)
 import Control.Monad (foldM)
@@ -26,11 +26,24 @@ import Betzac.Diagnostic (
     Severity (Error, Warning),
     mkProblem,
  )
-import Betzac.Pipeline (PipelineResult (..), fromScratch)
+import Betzac.Pipeline (PipelineError, PipelineResult (..), fromScratch)
 import Betzac.Span (HasSpan (getSpan), Span (Generated))
 
 -- | Injected so bls can serve live editor buffers where the CLI just reads disk.
 type SourceReader = FilePath -> IO Text
+
+-- | Injected so bls can serve an already-compiled file where the CLI compiles afresh.
+type SourceCompiler = FilePath -> Text -> IO (Either PipelineError PipelineResult)
+
+-- | How discovery obtains a file's text and its pipeline result.
+data SourceAccess = SourceAccess
+    { saRead :: SourceReader
+    , saCompile :: SourceCompiler
+    }
+
+-- | Reading from disk and compiling from scratch: what the CLI wants every time.
+fromDisk :: SourceReader -> SourceAccess
+fromDisk readSource = SourceAccess readSource (\path src -> return $ fromScratch path src)
 
 {- | Discover every file reachable from a target's @using@ directives, plus the standard
 prelude when one is given. Each one is read and parsed once, so a diamond dependency is
@@ -38,7 +51,11 @@ only compiled once; a cycle shows up as a target that is already 'Discovered' bu
 yet 'Parsed'.
 -}
 discover :: SourceReader -> FilePath -> FilePath -> Maybe FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
-discover readSource workspaceRoot target preludePath opts = do
+discover readSource = discoverWith (fromDisk readSource)
+
+-- | 'discover', over a caller-supplied way of reading and compiling each file.
+discoverWith :: SourceAccess -> FilePath -> FilePath -> Maybe FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
+discoverWith access workspaceRoot target preludePath opts = do
     rootExists <- doesDirectoryExist workspaceRoot
     if not rootExists
         then return $ Left $ systemError $ "workspace directory not found: " ++ workspaceRoot
@@ -47,56 +64,58 @@ discover readSource workspaceRoot target preludePath opts = do
             absTarget <- canonicalizePath target
             absPrelude <- traverse canonicalizePath preludePath
             let ctx0 = emptyContext absRoot absTarget absPrelude opts
-            seeded <- maybe (return $ Right ctx0) (\p -> visit readSource p ctx0) absPrelude
-            either (return . Left) (visit readSource absTarget) seeded
+            seeded <- maybe (return $ Right ctx0) (\p -> visit access p ctx0) absPrelude
+            either (return . Left) (visit access absTarget) seeded
   where
     systemError msg = mkProblem Error (SystemFailure msg) Generated
 
 -- | Read, parse, and record one file, then recurse into its @using@ targets.
-visit :: SourceReader -> FilePath -> CompilationContext -> IO (Either SemanticProblem CompilationContext)
-visit readSource path ctx
+visit :: SourceAccess -> FilePath -> CompilationContext -> IO (Either SemanticProblem CompilationContext)
+visit access path ctx
     | Map.member path (ccFiles ctx) = return $ Right ctx
     | otherwise = do
-        readResult <- try $ readSource path
+        readResult <- try $ saRead access path
         case readResult of
             Left ioErr ->
                 return $ Left $ mkProblem Error (SystemFailure $ "could not read " ++ path ++ ": " ++ show (ioErr :: IOException)) Generated
-            Right src -> case fromScratch path src of
-                -- Unreachable with the current pipeline
-                Left _ -> return $ Right ctx
-                Right pr -> do
-                    let placeholder =
-                            FileEntry
-                                { fePipeline = pr
-                                , feUsingTargets = []
-                                , feExported = Nothing
-                                , feEffective = Nothing
-                                , feDiagnostics = []
-                                , feStatus = Discovered
-                                }
-                        ctx0 = ctx{ccFiles = Map.insert path placeholder $ ccFiles ctx}
-                    (ctx1, deps) <- foldM (processTarget readSource path) (ctx0, []) $ rawUsingTargets pr
-                    let (kept, dupes) = dedupeTargets deps
-                        ctx2 = foldl' (flip $ addDiagnostic path) ctx1 dupes
-                        finalEntry =
-                            placeholder
-                                { feUsingTargets = kept
-                                , feDiagnostics = feDiagnostics $ ccFiles ctx2 Map.! path
-                                , feStatus = Parsed
-                                }
-                    return $ Right ctx2{ccFiles = Map.insert path finalEntry $ ccFiles ctx2}
+            Right src -> do
+                compiled <- saCompile access path src
+                case compiled of
+                    -- Unreachable with the current pipeline
+                    Left _ -> return $ Right ctx
+                    Right pr -> do
+                        let placeholder =
+                                FileEntry
+                                    { fePipeline = pr
+                                    , feUsingTargets = []
+                                    , feExported = Nothing
+                                    , feEffective = Nothing
+                                    , feDiagnostics = []
+                                    , feStatus = Discovered
+                                    }
+                            ctx0 = ctx{ccFiles = Map.insert path placeholder $ ccFiles ctx}
+                        (ctx1, deps) <- foldM (processTarget access path) (ctx0, []) $ rawUsingTargets pr
+                        let (kept, dupes) = dedupeTargets deps
+                            ctx2 = foldl' (flip $ addDiagnostic path) ctx1 dupes
+                            finalEntry =
+                                placeholder
+                                    { feUsingTargets = kept
+                                    , feDiagnostics = feDiagnostics $ ccFiles ctx2 Map.! path
+                                    , feStatus = Parsed
+                                    }
+                        return $ Right ctx2{ccFiles = Map.insert path finalEntry $ ccFiles ctx2}
 
 {- | Resolve one @using@ target and recurse into it. An unresolvable, circular, or
 unreadable target is reported on 'referrer' and skipped, leaving the rest of its
 directives to be discovered.
 -}
 processTarget ::
-    SourceReader ->
+    SourceAccess ->
     FilePath ->
     (CompilationContext, [UsingTarget]) ->
     UsingTarget ->
     IO (CompilationContext, [UsingTarget])
-processTarget readSource referrer (ctx, deps) t = do
+processTarget access referrer (ctx, deps) t = do
     resolved <- resolveUsingTarget (ccWorkspaceRoot ctx) (usingPath t)
     case resolved of
         Nothing -> return (addDiagnostic referrer (mkProblem Error (UsingUnknown $ usingPath t) Generated) ctx, deps)
@@ -105,7 +124,7 @@ processTarget readSource referrer (ctx, deps) t = do
                 | feStatus entry == Discovered ->
                     return (addDiagnostic referrer (mkProblem Error (UsingCircular [referrer, path]) Generated) ctx, deps)
             _ -> do
-                visited <- visit readSource path ctx
+                visited <- visit access path ctx
                 case visited of
                     Left problem -> return (addDiagnostic referrer problem ctx, deps)
                     Right ctx' -> return (ctx', deps ++ [t{usingPath = path}])

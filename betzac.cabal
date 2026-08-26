@@ -80,6 +80,7 @@ library
       Betzac.Token
       Betzac.Utils.Unparse
       Betzac.Version
+      LangServer.Cache
       LangServer.Config
       LangServer.Handlers.Core
       LangServer.Handlers.OnChange

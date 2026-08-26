@@ -7,7 +7,7 @@ module LangServer.Handlers.OnSemanticTokens (onSemanticTokens) where
 import Betzac.AST.Generic (universeOf)
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types
-import Betzac.Pipeline (PipelineResult (..), fromScratch)
+import Betzac.Pipeline (PipelineResult (..))
 import Betzac.Span (HasSpan (getSpan), Span (..))
 
 import Control.Lens ((^.))
@@ -15,7 +15,9 @@ import Data.List (sortOn)
 import qualified Data.Text as T
 import Text.Megaparsec.Pos (SourcePos (..), unPos)
 
+import LangServer.Cache (BlsCache)
 import LangServer.Config (ConfigBLS)
+import LangServer.Handlers.Core (pipelineFor)
 import Language.LSP.Protocol.Lens (HasParams (params), HasTextDocument (textDocument), HasUri (uri))
 import Language.LSP.Protocol.Message
 import Language.LSP.Protocol.Types
@@ -29,17 +31,16 @@ default. Live buffer content only (no disk fallback): a request always targets a
 open document.
 -}
 onSemanticTokens ::
+    BlsCache ->
     TRequestMessage Method_TextDocumentSemanticTokensFull ->
     (Either (TResponseError Method_TextDocumentSemanticTokensFull) (SemanticTokens |? Null) -> LspM ConfigBLS ()) ->
     LspM ConfigBLS ()
-onSemanticTokens req responder = do
+onSemanticTokens cache req responder = do
     let u = req ^. params . textDocument . uri
         fp = maybe "" id (uriToFilePath u)
     mvf <- getVirtualFile (toNormalizedUri u)
-    let src = maybe T.empty virtualFileText mvf
-        prog = case fromScratch fp src of
-            Right pr -> maybe [] fst (parseResult pr)
-            Left _ -> []
+    mpr <- pipelineFor cache fp (maybe T.empty virtualFileText mvf)
+    let prog = maybe [] (maybe [] fst . parseResult) mpr
         toks = sortOn (\(SemanticTokenAbsolute l c _ _ _) -> (l, c)) (collectTokens prog)
     responder $ Right $ case makeSemanticTokens defaultSemanticTokensLegend toks of
         Right semTokens -> InL semTokens

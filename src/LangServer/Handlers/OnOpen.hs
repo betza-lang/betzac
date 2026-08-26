@@ -3,6 +3,7 @@
 module LangServer.Handlers.OnOpen (onOpen) where
 
 import Control.Lens ((^.))
+import LangServer.Cache (BlsCache)
 import LangServer.Config (ConfigBLS)
 import LangServer.Handlers.Core (publishDiagnostics)
 import Language.LSP.Protocol.Lens (
@@ -18,9 +19,9 @@ import Language.LSP.Protocol.Message (
 import Language.LSP.Protocol.Types (uriToFilePath)
 import Language.LSP.Server (LspM)
 
-onOpen :: TNotificationMessage Method_TextDocumentDidOpen -> LspM ConfigBLS ()
-onOpen msg = do
+onOpen :: BlsCache -> TNotificationMessage Method_TextDocumentDidOpen -> LspM ConfigBLS ()
+onOpen cache msg = do
     let doc = msg ^. params . textDocument
         u = doc ^. uri
         f = maybe "" id $ uriToFilePath u
-    publishDiagnostics f u (doc ^. text)
+    publishDiagnostics cache f u (doc ^. text)

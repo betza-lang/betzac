@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module LangServer.Handlers.Core (contextFor, publishDiagnostics, makeDiagnostic) where
+module LangServer.Handlers.Core (contextFor, pipelineFor, publishDiagnostics, makeDiagnostic) where
 
 import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
-import Betzac.Compilation.Driver (SourceReader, discover, resolvePrelude, resolveScopes, sealPrelude)
+import Betzac.Compilation.Driver (SourceAccess (..), SourceReader, discoverWith, resolvePrelude, resolveScopes, sealPrelude)
 import Betzac.Compilation.Flag (CompilerFlag (..), CompilerOptions, Wspecifier (..), optionsFromFlags)
 import Betzac.Debug.PrettyPrint (prettyPrint)
 import Betzac.Diagnostic (SemanticProblem (..), Severity (..))
@@ -24,6 +24,7 @@ import qualified Data.Text.IO as TIO
 import System.Directory (canonicalizePath)
 import System.FilePath (takeDirectory)
 
+import LangServer.Cache (BlsCache, CompileKey (..), cachingCompiler, rememberContext, reusableContext)
 import LangServer.Config
 import Language.LSP.Diagnostics (partitionBySource)
 import Language.LSP.Protocol.Lens (HasVersion (version))
@@ -46,15 +47,31 @@ maxDiagnostics = 100
 discovered against the workspace root, every scope resolved, and the prelude settled.
 'src' is the file's live buffer, which the reader serves in place of what is on disk.
 -}
-contextFor :: FilePath -> Text -> LspM ConfigBLS (Either SemanticProblem CompilationContext)
-contextFor fp src = do
+contextFor :: BlsCache -> FilePath -> Text -> LspM ConfigBLS (Either SemanticProblem CompilationContext)
+contextFor cache fp src = do
     mRoot <- getRootPath
     let root = fromMaybe (takeDirectory fp) mRoot
     reader <- overlayReader fp src
     liftIO $ runExceptT $ do
         prelude <- ExceptT $ resolvePrelude Nothing
-        ctx0 <- ExceptT $ discover reader root fp (Just prelude) blsOptions
-        ExceptT $ return $ sealPrelude $ resolveScopes ctx0
+        let key = CompileKey fp root (Just prelude)
+        reusable <- liftIO $ reusableContext cache key reader
+        case reusable of
+            Just ctx -> return ctx
+            Nothing -> do
+                ctx0 <- ExceptT $ discoverWith (SourceAccess reader (cachingCompiler cache)) root fp (Just prelude) blsOptions
+                ctx <- ExceptT $ return $ sealPrelude $ resolveScopes ctx0
+                ctx <$ liftIO (rememberContext cache key ctx)
+
+{- | One file's own lex/parse/semantic result, reusing whatever the last compile of
+this exact text produced. No dependency graph is consulted: callers that only need a
+file's own syntax should not pay for one. The path is canonicalized first, since that
+is what discovery keyed its own entry by.
+-}
+pipelineFor :: BlsCache -> FilePath -> Text -> LspM ConfigBLS (Maybe B.PipelineResult)
+pipelineFor cache fp src = liftIO $ do
+    path <- canonicalizePath fp
+    either (const Nothing) Just <$> cachingCompiler cache path src
 
 {- | Compile 'fp' (and everything it @using@s, transitively) and publish diagnostics
 for every file reached, each against its own URI — matching how established
@@ -75,9 +92,9 @@ entirely (e.g. its last @using@ reference gets deleted) keeps showing its last
 diagnostics until something else republishes for it — a real but narrow gap, tracked
 as a known limitation rather than solved here.
 -}
-publishDiagnostics :: FilePath -> Uri -> Text -> LspM ConfigBLS ()
-publishDiagnostics fp _u src = do
-    result <- contextFor fp src
+publishDiagnostics :: BlsCache -> FilePath -> Uri -> Text -> LspM ConfigBLS ()
+publishDiagnostics cache fp _u src = do
+    result <- contextFor cache fp src
     case result of
         -- A system failure (missing workspace root/target) isn't attributable to any
         -- particular file's own text; best-effort attach it to the file being edited
