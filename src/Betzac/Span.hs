@@ -8,7 +8,7 @@ import Text.Megaparsec (SourcePos)
 data Span
     = RealSpan SourcePos SourcePos
     | Generated
-    deriving (Eq, Show, Data)
+    deriving (Eq, Ord, Show, Data)
 
 -- For uniform error reporting
 class HasSpan x where

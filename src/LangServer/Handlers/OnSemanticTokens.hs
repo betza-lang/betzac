@@ -12,6 +12,7 @@ import Betzac.Span (HasSpan (getSpan), Span (..))
 
 import Control.Lens ((^.))
 import Data.List (sortOn)
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Text.Megaparsec.Pos (SourcePos (..), unPos)
 
@@ -96,9 +97,9 @@ labelTokens :: BetzaProgram Ps -> [SemanticTokenAbsolute]
 labelTokens prog = defTokens ++ refTokens
   where
     defs = [lbl | qs <- prog, Just lbl <- [assignLabelOf qs]]
-    defSpans = map getSpan defs
+    defSpans = Set.fromList (map getSpan defs)
     defTokens = concatMap (labelToken [SemanticTokenModifiers_Definition]) defs
-    refs = [lbl | lbl <- universeOf prog, getSpan lbl `notElem` defSpans]
+    refs = [lbl | lbl <- universeOf prog, not (getSpan lbl `Set.member` defSpans)]
     refTokens = concatMap (labelToken []) refs
 
 labelToken :: [SemanticTokenModifiers] -> Label Ps -> [SemanticTokenAbsolute]
