@@ -10,9 +10,17 @@ module Betzac.Alphabet.Expr (
     exprAlphabet,
     direction,
     behaviour,
+    isUpper,
+    isAlphanum,
+    isDirection,
+    isBehaviour,
+    isWhitespace,
+    isDescriptorChar,
 )
 where
 
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Prelude hiding (Word)
 
 space :: Char
@@ -47,3 +55,23 @@ symbol = "(,)<>-[]{}*:+?!"
 
 exprAlphabet :: String
 exprAlphabet = alphanum ++ symbol
+
+{- | Membership in the alphabets above. Each is a set built once, since a lexer or
+parser asks these of every character it looks at, and the lists run to 62 entries
+with the digits last.
+-}
+isUpper, isAlphanum, isDirection, isBehaviour, isWhitespace, isDescriptorChar :: Char -> Bool
+isUpper c = Set.member c upperSet
+isAlphanum c = Set.member c alphanumSet
+isDirection c = Set.member c directionSet
+isBehaviour c = Set.member c behaviourSet
+isWhitespace c = Set.member c whitespaceSet
+isDescriptorChar c = Set.member c descriptorSet
+
+upperSet, alphanumSet, directionSet, behaviourSet, whitespaceSet, descriptorSet :: Set Char
+upperSet = Set.fromList upper
+alphanumSet = Set.fromList alphanum
+directionSet = Set.fromList direction
+behaviourSet = Set.fromList behaviour
+whitespaceSet = Set.fromList whitespace
+descriptorSet = Set.fromList (',' : space : alphanum)

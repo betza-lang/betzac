@@ -5,7 +5,7 @@ module Betzac.Parser.Parser (parseTokens, parseTokensRecovering) where
 import Betzac.AST.Phases (Ps, PsX (..))
 import qualified Betzac.AST.Types as B
 
-import Betzac.Alphabet.Expr (alphanum)
+import Betzac.Alphabet.Expr (isAlphanum)
 import Betzac.Located (Located (endPos, startPos), tokenVal)
 import Betzac.Parser.BetzaTokenStream (BetzaTokenStream (unBetzaTokenStream))
 import Betzac.Parser.Core
@@ -288,8 +288,8 @@ parseDescriptor s = case span isDigit s of
     _ -> if validDescriptor s then Just $ B.Descriptor s else Nothing
   where
     validDescriptor (c : cs) =
-        c `elem` alphanum
-            && last (c : cs) `elem` alphanum
+        isAlphanum c
+            && isAlphanum (last (c : cs))
             && noConsecutiveSpaces (c : cs)
     validDescriptor [] = False
 
@@ -297,6 +297,6 @@ parseDescriptor s = case span isDigit s of
         | c == ' ' = case cs of
             ' ' : _ -> False
             _ -> noConsecutiveSpaces cs
-        | c `elem` alphanum = noConsecutiveSpaces cs
+        | isAlphanum c = noConsecutiveSpaces cs
         | otherwise = False
     noConsecutiveSpaces [] = True

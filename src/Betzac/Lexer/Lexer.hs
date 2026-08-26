@@ -104,18 +104,18 @@ lexToken =
         <?> "valid character as part of a token"
 
 lexAtom :: Lexer B.Token
-lexAtom = B.TokAtom <$> satisfy (`elem` B.upper)
+lexAtom = B.TokAtom <$> satisfy B.isUpper
 
 lexDescriptor :: Lexer B.Token
 lexDescriptor = try $ B.TokDescriptor <$> (char ':' *> descriptor <* char ':')
   where
-    descriptor = takeWhile1P (Just "descriptor character") (\c -> c `elem` [',', B.space] || c `elem` B.alphanum)
+    descriptor = takeWhile1P (Just "descriptor character") B.isDescriptorChar
 
 lexDirection :: Lexer B.Token
-lexDirection = B.TokDirection <$> satisfy (`elem` B.direction)
+lexDirection = B.TokDirection <$> satisfy B.isDirection
 
 lexBehaviour :: Lexer B.Token
-lexBehaviour = B.TokBehaviour <$> satisfy (`elem` B.behaviour)
+lexBehaviour = B.TokBehaviour <$> satisfy B.isBehaviour
 
 lexParen :: Lexer B.Token
 lexParen = lparen <|> rparen
@@ -163,7 +163,7 @@ lexEndStmt :: Lexer B.Token
 lexEndStmt = B.TokEndStmt <$ char B.stmtEnd
 
 lexKeyword :: String -> B.Token -> Lexer B.Token
-lexKeyword kw t = t <$ string kw <* notFollowedBy (oneOf B.alphanum)
+lexKeyword kw t = t <$ string kw <* notFollowedBy (satisfy B.isAlphanum)
 
 lexOverride :: Lexer B.Token
 lexOverride = lexKeyword "override" B.TokOverride
@@ -175,4 +175,4 @@ lexUsing :: Lexer B.Token
 lexUsing = B.TokUsing <$> (string "using" *> lexIgnoreSome *> path)
   where
     path = (<>) <$> part <*> (concat <$> (many $ try $ (:) <$> char '.' <*> part))
-    part = takeWhile1P (Just "path character") (`elem` B.alphanum)
+    part = takeWhile1P (Just "path character") B.isAlphanum
