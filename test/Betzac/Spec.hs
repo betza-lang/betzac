@@ -1,3 +1,4 @@
+import qualified AST.GenericSpec as GenericSpec
 import qualified Compilation.DriverSpec as DriverSpec
 import qualified Compilation.FlagSpec as FlagSpec
 import qualified Compilation.PreludeSpec as PreludeSpec
@@ -21,5 +22,6 @@ main = do
     hspec LiteralAssignmentSpec.spec
     hspec RedundantModifierSpec.spec
     putStrLn "" >> putStrLn "========= Properties ========="
+    hspec GenericSpec.spec
     hspec LexerQC.spec
     hspec ParserHedgehog.spec
