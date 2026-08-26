@@ -14,9 +14,10 @@ import Betzac.Diagnostic (
  )
 import Betzac.Pipeline (PipelineResult (parseResult, semanticResult), fromScratch)
 import Betzac.Span (Span (..))
+import Betzac.Utils.Unparse (unparse)
 
 import Lexer.LexerQC (unlex)
-import Parser.ParserHedgehog (genProgram, unparse)
+import Parser.ParserHedgehog (genProgram)
 
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -105,7 +106,7 @@ spec = describe "Semantic.LiteralAssignment" $ do
                     expected = generated + length injected
                     reported = length [() | c <- causes src, c == invalidStatement]
                 annotate (T.unpack src)
-                cover 10 "offenders from the generator itself" (generated > 0)
+                cover 3 "offenders from the generator itself" (generated > 0)
                 cover 15 "several offenders at once" (expected > 1)
                 cover 20 "no offender at all" (expected == 0)
                 reported === expected

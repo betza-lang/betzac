@@ -61,6 +61,7 @@ library
       Betzac.Debug.Dot.Visitor
       Betzac.Debug.PrettyPrint
       Betzac.Diagnostic
+      Betzac.Geometry.Symmetry
       Betzac.Lexer.Core
       Betzac.Lexer.Lexer
       Betzac.Lexer.Space
@@ -69,12 +70,15 @@ library
       Betzac.Parser.Core
       Betzac.Parser.Parser
       Betzac.Pipeline
-      Betzac.Semantic.Direction.All
       Betzac.Semantic.Direction.AmalgamatedDirection
       Betzac.Semantic.Label.LiteralAssignment
+      Betzac.Semantic.Modifier
+      Betzac.Semantic.Modifier.Duplicate
+      Betzac.Semantic.Modifier.Subsume
       Betzac.Semantic.Passes
       Betzac.Span
       Betzac.Token
+      Betzac.Utils.Unparse
       Betzac.Version
       LangServer.Config
       LangServer.Handlers.Core
@@ -156,6 +160,7 @@ test-suite betzac-test
       Parser.ParserHedgehog
       Pipeline.RecoverySpec
       Semantic.LiteralAssignmentSpec
+      Semantic.RedundantModifierSpec
       Paths_betzac
   hs-source-dirs:
       test/Betzac

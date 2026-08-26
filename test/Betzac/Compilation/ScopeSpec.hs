@@ -12,7 +12,7 @@ import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..), UsingTarg
 import Betzac.Compilation.Label.Scope (ImportedScope (..), LabelTable, effectiveScope, exportedScope, localDefs, unexportedLabelRefs)
 import Betzac.Diagnostic (
     SemanticProblem,
-    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnnecessaryOverride, UnresolvedLabel),
+    SemanticProblemKind (DuplicateDirective, DuplicateLabel, RedundantOverride, UnresolvedLabel),
     causeOf,
     semKind,
  )
@@ -134,7 +134,7 @@ spec = describe "Compilation.Scope" $ do
             fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "dep"
             -- A plain import would have outranked the local plain by itself, so the
             -- override on the using changes nothing.
-            causes probs `shouldBe` [causeOf DuplicateLabel, causeOf UnnecessaryOverride]
+            causes probs `shouldBe` [causeOf DuplicateLabel, causeOf RedundantOverride]
 
         it "suppresses the duplicate-label warning for an imported loser when the winner is override-class" $ do
             let prog = parseProgram "override N = fF;\n"
@@ -153,18 +153,18 @@ spec = describe "Compilation.Scope" $ do
                 (resolved, probs) = effectiveScope "main" (localDefs prog) [usingDep True "export N = fW;\n"] Nothing
             fmap rdFrom (Map.lookup "N" resolved) `shouldBe` Just "main"
             -- The using won nothing, so its own override earned nothing either.
-            causes probs `shouldBe` [causeOf UnnecessaryOverride]
+            causes probs `shouldBe` [causeOf RedundantOverride]
 
-    describe "unnecessary override" $ do
+    describe "redundant override" $ do
         it "flags a local override with nothing to outrank" $ do
             let prog = parseProgram "override A = fW;\n"
                 (_, probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
-            causes probs `shouldBe` [causeOf UnnecessaryOverride]
+            causes probs `shouldBe` [causeOf RedundantOverride]
 
         it "flags a local override that already came first" $ do
             let prog = parseProgram "override A = fW;\nA = fF;\n"
                 (_, probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
-            causes probs `shouldBe` [causeOf DuplicateLabel, causeOf UnnecessaryOverride]
+            causes probs `shouldBe` [causeOf DuplicateLabel, causeOf RedundantOverride]
 
         it "stays quiet when the override is what beats an earlier plain definition" $ do
             let prog = parseProgram "A = fW;\noverride A = fF;\n"
@@ -185,7 +185,7 @@ spec = describe "Compilation.Scope" $ do
             let prog = parseProgram "export A;\n"
                 dep = usingDep True "export A = fW;\nexport B = fF;\nexport C = fA;\n"
                 (_, probs) = effectiveScope "main" (localDefs prog) [dep] Nothing
-            causes probs `shouldBe` [causeOf UnnecessaryOverride]
+            causes probs `shouldBe` [causeOf RedundantOverride]
 
         it "spares an override using when even one of its labels needed the promotion" $ do
             let prog = parseProgram "export N;\n"
@@ -199,7 +199,7 @@ spec = describe "Compilation.Scope" $ do
                 overriding = usingDepAs "first" True "export N = fW;\n"
                 plain = usingDepAs "second" False "export N = fF;\n"
                 (_, probs) = effectiveScope "main" (localDefs prog) [overriding, plain] Nothing
-            causes probs `shouldBe` [causeOf UnnecessaryOverride]
+            causes probs `shouldBe` [causeOf RedundantOverride]
 
     describe "priority resolution property" $
         it "always selects an override-class candidate over any plain candidate, and the earliest among ties" $
@@ -218,6 +218,6 @@ spec = describe "Compilation.Scope" $ do
                     countOf c = length $ filter (== causeOf c) (causes probs)
                 annotate (show flags)
                 countOf DuplicateLabel === length flags - 1
-                countOf UnnecessaryOverride === (if onlyLeadingOverride then 1 else 0)
+                countOf RedundantOverride === (if onlyLeadingOverride then 1 else 0)
                 fmap (edOrder . rdDef) (Map.lookup "A" resolved) === Just expectedWinnerIx
                 fmap (edIsOverride . rdDef) (Map.lookup "A" resolved) === Just (or flags)

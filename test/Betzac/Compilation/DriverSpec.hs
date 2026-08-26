@@ -211,7 +211,7 @@ spec = describe "Compilation.Driver" $ do
                         let ctx = Driver.resolveScopes ctx0
                             mainDiags = diagnosticsOn "main.betza" ctx
                         length (diagnosticsOn "dep.betza" ctx) `shouldBe` 0
-                        map (causeOf . semKind) mainDiags `shouldBe` ["unnecessary override"]
+                        map (causeOf . semKind) mainDiags `shouldBe` ["redundant override"]
                         all (onLine 1) mainDiags `shouldBe` True
 
         it "stays quiet about an override using that outranks an earlier plain import" $
@@ -224,7 +224,7 @@ spec = describe "Compilation.Driver" $ do
                     Left _ -> fail "did not expect a system failure"
                     Right ctx -> do
                         let probs = allDiagnostics (Driver.resolveScopes ctx)
-                        hasCause "unnecessary override" probs `shouldBe` False
+                        hasCause "redundant override" probs `shouldBe` False
 
         it "warns a local plain definition shadowed by an import on its own statement, not on the import" $
             withSystemTempDirectory "betzac-driver-spec" $ \dir -> do

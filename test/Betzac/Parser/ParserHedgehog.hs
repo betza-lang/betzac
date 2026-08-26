@@ -2,13 +2,14 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser.ParserHedgehog (spec, genProgram, unparse) where
+module Parser.ParserHedgehog (spec, genProgram) where
 
 import Betzac.AST as B
 import Betzac.Located
 import Betzac.Parser.BetzaTokenStream
 import Betzac.Parser.Parser
 import qualified Betzac.Token as B
+import Betzac.Utils.Unparse
 
 import Lexer.LexerQC (unlex)
 
@@ -24,117 +25,6 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Test.Hspec (Spec, describe, it)
 import Test.Hspec.Hedgehog
-
--- unparse
-
-unparse :: BetzaProgram Stripped -> [B.Token]
-unparse stmts = concat $ unparseQualifiedStmt <$> stmts
-
-unparseQualifiedStmt :: QualifiedStmt Stripped -> [B.Token]
-unparseQualifiedStmt (Override d _) = B.TokOverride : unparseDirective d <> [B.TokEndStmt]
-unparseQualifiedStmt (Plain d _) = unparseDirective d <> [B.TokEndStmt]
-
-unparseDirective :: Directive Stripped -> [B.Token]
-unparseDirective (Using f _) = [B.TokUsing $ unparseFilePath f]
-unparseDirective (Export s _) = B.TokExport : unparseStmt s
-unparseDirective (Bare s _) = unparseStmt s
-
-unparseFilePath :: FilePath -> FilePath
-unparseFilePath f = (\c -> if c == '/' then '.' else c) <$> f
-
-unparseStmt :: BetzaStmt Stripped -> [B.Token]
-unparseStmt (Assign l e _) = unparseLabel l : B.TokAssign : unparseExpr e
-unparseStmt (LabelRef l _) = [unparseLabel l]
-
-unparseLabel :: Label Stripped -> B.Token
-unparseLabel (Upper c _) = B.TokAtom c
-unparseLabel (Descriptor s _) = B.TokDescriptor s
-unparseLabel (Leaper a b _) = B.TokDescriptor $ show a ++ "," ++ show b
-
-unparseExpr :: BetzaExpr Stripped -> [B.Token]
-unparseExpr (BetzaExpr c _) = unparseChain c
-
-unparseChain :: ChainExpr Stripped -> [B.Token]
-unparseChain (ChainExpr u mcl _) = unparseUnion u <> maybe [] unparseChainLeg mcl
-
-unparseChainLeg :: ChainLeg Stripped -> [B.Token]
-unparseChainLeg (ChainLeg op c _) = unparseChainOp op c
-
-unparseChainOp :: ChainOperator Stripped -> ChainExpr Stripped -> [B.Token]
-unparseChainOp (ChainOperator k (Mandatory _) _) c =
-    unparseChainKind k : unparseChain c
-unparseChainOp (ChainOperator k (IffUnblocked _) _) c =
-    [unparseChainKind k, B.TokLBrace] <> unparseChain c <> [B.TokRBrace]
-unparseChainOp (ChainOperator k (Choose _) _) c =
-    [unparseChainKind k, B.TokLBracket] <> unparseChain c <> [B.TokRBracket]
-
-unparseChainKind :: ChainKind Stripped -> B.Token
-unparseChainKind (Step _) = B.TokChainStep
-unparseChainKind (Sequence _) = B.TokChainSequence
-
-unparseUnion :: UnionExpr Stripped -> [B.Token]
-unparseUnion (UnionExpr ms _) = concat $ unparseModExpr <$> ms
-
-unparseModExpr :: ModifierExpr Stripped -> [B.Token]
-unparseModExpr (ModifierExpr s ms e _) =
-    (if s then [B.TokBang] else [])
-        <> (ms >>= unparseModifier)
-        <> unparseExponentExpr e
-
-unparseModifier :: Modifier Stripped -> [B.Token]
-unparseModifier (Directional m _) = unparseDirectionMod m
-unparseModifier (Behavioural m _) = unparseBehaviour m
-
-unparseDirectionMod :: DirectionModifier Stripped -> [B.Token]
-unparseDirectionMod (Amalgamated d1 d2 _) =
-    [ B.TokLAngle
-    , unparseDirection d1
-    , unparseDirection d2
-    , B.TokRAngle
-    ]
-unparseDirectionMod (Single d _) = [unparseDirection d]
-
-unparseDirection :: Direction Stripped -> B.Token
-unparseDirection (Forward _) = B.TokDirection 'f'
-unparseDirection (Backward _) = B.TokDirection 'b'
-unparseDirection (Leftward _) = B.TokDirection 'l'
-unparseDirection (Rightward _) = B.TokDirection 'r'
-unparseDirection (Sideway _) = B.TokDirection 's'
-unparseDirection (Vertically _) = B.TokDirection 'v'
-unparseDirection (All _) = B.TokDirection 'a'
-
-unparseBehaviour :: Behaviour Stripped -> [B.Token]
-unparseBehaviour (Behaviour kind (Once _) _) = [unparseBehaviourOnce kind]
-unparseBehaviour (Behaviour kind (Twice _) _) = [unparseBehaviourOnce kind, unparseBehaviourOnce kind]
-unparseBehaviour (Behaviour kind (Any _) _) = [unparseBehaviourOnce kind, B.TokBehaviour 'y']
-
-unparseBehaviourOnce :: BehaviourKind Stripped -> B.Token
-unparseBehaviourOnce (Capture _) = B.TokBehaviour 'c'
-unparseBehaviourOnce (Leap _) = B.TokBehaviour 'g'
-unparseBehaviourOnce (Initial _) = B.TokBehaviour 'i'
-unparseBehaviourOnce (Jump _) = B.TokBehaviour 'j'
-unparseBehaviourOnce (Move _) = B.TokBehaviour 'm'
-unparseBehaviourOnce (NoJump _) = B.TokBehaviour 'n'
-unparseBehaviourOnce (Hop _) = B.TokBehaviour 'p'
-
-unparseExponentExpr :: ExponentExpr Stripped -> [B.Token]
-unparseExponentExpr (ExponentExpr a me _) = unparseAtom a <> maybe [] unparseExponent me
-
-unparseAtom :: AtomExpr Stripped -> [B.Token]
-unparseAtom (Paren e _) = [B.TokLParen] <> unparseExpr e <> [B.TokRParen]
-unparseAtom (From l _) = [unparseLabel l]
-
-unparseExponent :: Exponent Stripped -> [B.Token]
-unparseExponent (Exponent mop ms k _) = case mop of
-    Nothing -> (ms >>= unparseModifier) <> [unparseExponentKind k]
-    Just (ChainOperator ck (Mandatory _) _) -> [unparseChainKind ck] <> (ms >>= unparseModifier) <> [unparseExponentKind k]
-    Just (ChainOperator ck (IffUnblocked _) _) -> [unparseChainKind ck, B.TokLBrace] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBrace]
-    Just (ChainOperator ck (Choose _) _) -> [unparseChainKind ck, B.TokLBracket] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBracket]
-
-unparseExponentKind :: ExponentKind Stripped -> B.Token
-unparseExponentKind (Infinite _) = B.TokNumber 0
-unparseExponentKind (Slippery _) = B.TokSlippery
-unparseExponentKind (Repeat n _) = B.TokNumber n
 
 -- generators
 

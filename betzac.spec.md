@@ -565,9 +565,11 @@ This subsection gives the meaning of each construct of [Section 3.2](#32-grammar
 
 3.4.13.3 - Where the two modifiers are equal, only the component of greater magnitude will be constrained, the lesser being left free. `<ff>N` therefore denotes `(1,2)` and `(-1,2)`, and `<rr>N` denotes `(2,1)` and `(2,-1)`.
 
+3.4.13.3.1 - A displacement with a zero component has a component of greater magnitude, and nothing constrains its lesser one, so an amalgamated direction of two equal modifiers selects it. `<ff>W` accordingly denotes what `fW` denotes.
+
 3.4.13.4 - Where a displacement's two components are equal in magnitude, neither is the greater, and an amalgamated direction of two distinct modifiers naming them will select it in either order: `<fr>F` and `<rf>F` both denote `(1,1)`. An amalgamated direction of two equal modifiers selects no such displacement.
 
-3.4.13.5 - Where a displacement has a zero component, it has no second direction to be named, and no amalgamated direction will select it. `<fr>D` accordingly denotes the empty moveset (cf. 3.5.4).
+3.4.13.5 - Where a displacement has a zero component and the two modifiers are distinct, the zero component has no direction to be named by the second modifier, and no such amalgamated direction will select it. `<fr>D` accordingly denotes the empty moveset (cf. 3.5.4), while `<ff>D` denotes `(0,2)` by 3.4.13.3.1.
 
 3.4.13.6 - Direction modifiers being a restriction, an expression whose modifiers select none of its displacements will denote the empty moveset (cf. 3.5.4).
 

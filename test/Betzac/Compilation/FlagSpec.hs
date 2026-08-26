@@ -8,7 +8,7 @@ import Betzac.Compilation.Flag (
  )
 import Betzac.Diagnostic (
     SemanticProblem (..),
-    SemanticProblemKind (AllInFirstLeg, DuplicateDirective, DuplicateLabel, UnnecessaryOverride, UnresolvedLabel, UnusedUsing),
+    SemanticProblemKind (DuplicateDirective, DuplicateLabel, RedundantOverride, UnresolvedLabel, UnusedUsing),
     Severity (Error, Warning),
     mkProblem,
  )
@@ -48,17 +48,17 @@ spec = describe "Compilation.Flag" $ do
             length (applyOptions opts [problem DuplicateLabel]) `shouldBe` 0
 
         it "silences an unnecessary override by default, and reveals it under -Wdirective" $ do
-            length (applyOptions (optionsFromFlags []) [problem UnnecessaryOverride]) `shouldBe` 0
-            map semSev (applyOptions (optionsFromFlags [GenerateWarnings Wdirective]) [problem UnnecessaryOverride])
+            length (applyOptions (optionsFromFlags []) [problem RedundantOverride]) `shouldBe` 0
+            map semSev (applyOptions (optionsFromFlags [GenerateWarnings Wdirective]) [problem RedundantOverride])
                 `shouldBe` [Warning]
 
         it "promotes an unnecessary override under -Werror=directive" $ do
             let opts = optionsFromFlags [PromoteWarningsToError Wdirective]
-            map semSev (applyOptions opts [problem UnnecessaryOverride]) `shouldBe` [Error]
+            map semSev (applyOptions opts [problem RedundantOverride]) `shouldBe` [Error]
 
         it "does not reveal an unnecessary override under -Wunused, since it is not unused-governed" $ do
             let opts = optionsFromFlags [GenerateWarnings Wunused]
-            length (applyOptions opts [problem UnnecessaryOverride]) `shouldBe` 0
+            length (applyOptions opts [problem RedundantOverride]) `shouldBe` 0
 
         it "governs an unused using by -Wunused, not -Wdirective" $ do
             length (applyOptions (optionsFromFlags [GenerateWarnings Wdirective]) [problem UnusedUsing])
@@ -73,8 +73,8 @@ spec = describe "Compilation.Flag" $ do
 
         it "-w silences a warning that no -W flag governs" $ do
             let opts = optionsFromFlags [SuppressWarnings]
-            length (applyOptions opts [problem AllInFirstLeg]) `shouldBe` 0
+            length (applyOptions opts [problem UnresolvedLabel]) `shouldBe` 0
 
         it "keeps a warning that no -W flag governs when -w is absent" $ do
             let opts = optionsFromFlags []
-            map semSev (applyOptions opts [problem AllInFirstLeg]) `shouldBe` [Warning]
+            map semSev (applyOptions opts [problem UnresolvedLabel]) `shouldBe` [Warning]

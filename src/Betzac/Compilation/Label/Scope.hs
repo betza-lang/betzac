@@ -26,7 +26,7 @@ import Betzac.Compilation.Context (
  )
 import Betzac.Diagnostic (
     SemanticProblem,
-    SemanticProblemKind (DuplicateDirective, DuplicateLabel, UnnecessaryOverride, UnresolvedLabel),
+    SemanticProblemKind (DuplicateDirective, DuplicateLabel, RedundantOverride, UnresolvedLabel),
     Severity (Error, Warning),
     mkProblem,
  )
@@ -170,7 +170,7 @@ unnecessaryOverrides imports contests = localProbs ++ usingProbs
     verdicts = [(w, overrideWasNeeded w losers) | (w, losers) <- contests]
 
     localProbs =
-        [ mkProblem Warning UnnecessaryOverride (candDiagSpan w)
+        [ mkProblem Warning RedundantOverride (candDiagSpan w)
         | (w, needed) <- verdicts
         , candPrecedence w == LocalOverride
         , not needed
@@ -186,7 +186,7 @@ unnecessaryOverrides imports contests = localProbs ++ usingProbs
             ]
 
     usingProbs =
-        [ mkProblem Warning UnnecessaryOverride (usingSpan via)
+        [ mkProblem Warning RedundantOverride (usingSpan via)
         | (i, ImportedScope via _) <- zip [0 ..] imports
         , usingIsOverride via
         , Map.findWithDefault Redundant i uses == Redundant

@@ -6,9 +6,10 @@ import Data.Maybe (isJust)
 import qualified Data.Text as T
 
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
+import Betzac.Utils.Unparse (unparse)
 
 import Lexer.LexerQC (unlex)
-import Parser.ParserHedgehog (genProgram, unparse)
+import Parser.ParserHedgehog (genProgram)
 
 import Text.Megaparsec (errorBundlePretty)
 
@@ -17,20 +18,23 @@ import qualified Hedgehog.Gen as Gen
 import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe, shouldContain, shouldSatisfy)
 import Test.Hspec.Hedgehog (hedgehog)
 
--- | A statement that fails during lexing itself (an unrecognized character) —
--- it contributes no tokens to the stream at all, so any recovery it triggers
--- has to happen inside 'Betzac.Lexer.Lexer.runLexer'.
+{- | A statement that fails during lexing itself (an unrecognized character) —
+it contributes no tokens to the stream at all, so any recovery it triggers
+has to happen inside 'Betzac.Lexer.Lexer.runLexer'.
+-}
 lexCorruptStmt :: String
 lexCorruptStmt = "~;\n"
 
--- | A statement that lexes cleanly but can't parse — a bare ';' with nothing
--- before it. 'Betzac.Parser.Parser.parseStmt' needs at least one atom/modifier,
--- so this is a parser-level, not lexer-level, failure.
+{- | A statement that lexes cleanly but can't parse — a bare ';' with nothing
+before it. 'Betzac.Parser.Parser.parseStmt' needs at least one atom/modifier,
+so this is a parser-level, not lexer-level, failure.
+-}
 parseCorruptStmt :: String
 parseCorruptStmt = ";\n"
 
--- | A freshly generated, known-valid program rendered back to source, paired
--- with its statement count.
+{- | A freshly generated, known-valid program rendered back to source, paired
+with its statement count.
+-}
 genSource :: Gen (String, Int)
 genSource = do
     prog <- genProgram

@@ -23,6 +23,7 @@ import Betzac.Span (HasSpan (..), Span)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
 import Control.Monad.Trans.Writer (Writer, execWriter, runWriter, tell)
+import Data.List (intercalate)
 
 {- | A single-file semantic pass: accumulates 'SemanticProblem's as it goes, never
 halts early.
@@ -38,47 +39,48 @@ type Stage = MaybeT Pass
 data Severity = Info | Warning | Error
     deriving (Show, Eq, Ord)
 
+-- TODO: are IllFormedDirective, IllFormedLabel, and IllFormedStatement worth keeping?
 data SemanticProblemKind
-    = InvalidValue String
-    | InvalidStatement String
-    | AllInFirstLeg
-    | IllFormedStatement
+    = CircularLabel [String]
+    | DuplicateDirective
+    | DuplicateLabel
+    | IllFormedDirective
     | IllFormedLabel
+    | IllFormedStatement
+    | InvalidStatement String
+    | InvalidValue String
+    | RedundantModifier String
+    | RedundantOverride
     | UnresolvedLabel
     | UnusedLabel String
     | UnusedUsing
-    | IllFormedDirective
-    | UsingUnknown FilePath
     | UsingCircular [FilePath]
-    | CircularLabel [String]
-    | DuplicateDirective
-    | DuplicateLabel
-    | UnnecessaryOverride
-    | CompilationSucceeded
+    | UsingUnknown FilePath
     | SystemFailure String
     | Unknown
+    | CompilationSucceeded
     deriving (Show)
 
 -- | The literal `cause` string for a given problem kind, as it should be rendered in a log.
 causeOf :: SemanticProblemKind -> String
-causeOf (InvalidValue _) = "invalid value"
-causeOf (InvalidStatement _) = "invalid statement"
-causeOf AllInFirstLeg = "invalid value"
-causeOf IllFormedStatement = "ill-formed statement"
-causeOf IllFormedLabel = "ill-formed label"
-causeOf UnresolvedLabel = "unresolved label"
-causeOf (UnusedLabel _) = "unused label"
-causeOf UnusedUsing = "unused using"
-causeOf IllFormedDirective = "ill-formed directive"
-causeOf (UsingUnknown _) = "using unknown"
-causeOf (UsingCircular _) = "using circular"
 causeOf (CircularLabel _) = "circular label"
 causeOf DuplicateDirective = "duplicate directive"
 causeOf DuplicateLabel = "duplicate label"
-causeOf UnnecessaryOverride = "unnecessary override"
-causeOf CompilationSucceeded = "success"
+causeOf IllFormedDirective = "ill-formed directive"
+causeOf IllFormedLabel = "ill-formed label"
+causeOf IllFormedStatement = "ill-formed statement"
+causeOf (InvalidStatement _) = "invalid statement"
+causeOf (InvalidValue _) = "invalid value"
+causeOf (RedundantModifier _) = "redundant modifier"
+causeOf RedundantOverride = "redundant override"
+causeOf UnresolvedLabel = "unresolved label"
+causeOf (UnusedLabel _) = "unused label"
+causeOf UnusedUsing = "unused using"
+causeOf (UsingCircular _) = "using circular"
+causeOf (UsingUnknown _) = "using unknown"
 causeOf (SystemFailure _) = "system"
 causeOf Unknown = "unknown"
+causeOf CompilationSucceeded = "success"
 
 data SemanticProblem = SemanticProblem
     { semSev :: Severity
@@ -129,7 +131,12 @@ runStage_ :: Stage a -> [SemanticProblem]
 runStage_ = snd . runStage
 
 instance PrettyPrint SemanticProblemKind where
-    prettyPrint (InvalidValue s) = "Invalid Value: " <> s
-    prettyPrint (InvalidStatement s) = "Invalid Statement: " <> s
-    prettyPrint AllInFirstLeg = "`a` present in first leg of a chain"
+    prettyPrint (CircularLabel labels) = "CircularLabel: " <> intercalate " -> " labels
+    prettyPrint (InvalidStatement s) = "InvalidStatement: " <> s
+    prettyPrint (InvalidValue s) = "InvalidValue: " <> s
+    prettyPrint (RedundantModifier s) = "RedundantModifier: " <> s
+    prettyPrint (UnusedLabel s) = "UnusedLabel: " <> s
+    prettyPrint (UsingCircular files) = "UsingCircular: " <> intercalate " -> " files
+    prettyPrint (UsingUnknown file) = "UsingUnknown: " <> file
+    prettyPrint (SystemFailure s) = "SystemFailure: " <> s
     prettyPrint x = show x
