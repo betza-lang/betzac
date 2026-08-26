@@ -88,11 +88,11 @@ module Betzac.AST.Types (
 
 import Betzac.Span (HasSpan (..))
 
-import Betzac.AST.Generic (Walk, WalkField)
+import Betzac.AST.Generic (GWalk (gwalk), Walk (..), WalkField)
 import Data.Data (Data, Typeable)
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
-import GHC.Generics (Generic)
+import GHC.Generics (Generic, from)
 
 -- Extension type families, giving these constructors annotations
 -- XConstructorName Phase = FieldType
@@ -566,28 +566,93 @@ deriving instance Generic (Exponent p)
 deriving instance Generic (ExponentKind p)
 deriving instance Generic (Label p)
 
-instance (WalkX p) => Walk (QualifiedStmt p)
-instance (WalkX p) => Walk (Directive p)
-instance (WalkX p) => Walk (BetzaStmt p)
-instance (WalkX p) => Walk (BetzaExpr p)
-instance (WalkX p) => Walk (ChainExpr p)
-instance (WalkX p) => Walk (ChainLeg p)
-instance (WalkX p) => Walk (UnionExpr p)
-instance (WalkX p) => Walk (ModifierExpr p)
-instance (WalkX p) => Walk (ExponentExpr p)
-instance (WalkX p) => Walk (AtomExpr p)
-instance (WalkX p) => Walk (ChainOperator p)
-instance (WalkX p) => Walk (ChainKind p)
-instance (WalkX p) => Walk (ChainModality p)
-instance (WalkX p) => Walk (Modifier p)
-instance (WalkX p) => Walk (DirectionModifier p)
-instance (WalkX p) => Walk (Direction p)
-instance (WalkX p) => Walk (Behaviour p)
-instance (WalkX p) => Walk (BehaviourKind p)
-instance (WalkX p) => Walk (BehaviourModality p)
-instance (WalkX p) => Walk (Exponent p)
-instance (WalkX p) => Walk (ExponentKind p)
-instance (WalkX p) => Walk (Label p)
+instance (WalkX p) => Walk (QualifiedStmt p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (Directive p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (BetzaStmt p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (BetzaExpr p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (ChainExpr p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (ChainLeg p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (UnionExpr p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (ModifierExpr p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (ExponentExpr p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (AtomExpr p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (ChainOperator p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (ChainKind p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (ChainModality p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (Modifier p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (DirectionModifier p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (Direction p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (Behaviour p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (BehaviourKind p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (BehaviourModality p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (Exponent p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (ExponentKind p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (Label p) where
+    walk = gwalk . from
+    {-# INLINE walk #-}
 
 -- HasSpan
 type SpanX p =

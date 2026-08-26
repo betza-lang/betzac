@@ -9,11 +9,11 @@ module Betzac.AST.Phases (
     PsX (..),
 ) where
 
-import Betzac.AST.Generic (Walk)
+import Betzac.AST.Generic (GWalk (gwalk), Walk (..))
 import Betzac.AST.Types
 import Betzac.Span (HasSpan (..), Span (Generated))
 import Data.Data (Data)
-import GHC.Generics (Generic)
+import GHC.Generics (Generic, from)
 
 -- Phase indices
 data Stripped deriving (Data) -- all extensions are unit type
@@ -25,7 +25,9 @@ data Ps deriving (Data) -- parsed
 data PsX = PsX {psSpan :: Span}
     deriving (Eq, Show, Data, Generic)
 
-instance Walk PsX
+instance Walk PsX where
+    walk = gwalk . from
+    {-# INLINE walk #-}
 
 -- Stripped phase instances
 type instance XOverride Stripped = ()

@@ -83,9 +83,11 @@ class GWalk f where
 
 instance GWalk V1 where
     gwalk v = case v of {}
+    {-# INLINE gwalk #-}
 
 instance GWalk U1 where
     gwalk _ acc = acc
+    {-# INLINE gwalk #-}
 
 instance (GWalk f, GWalk g) => GWalk (f :*: g) where
     gwalk (a :*: b) acc = gwalk a (gwalk b acc)
