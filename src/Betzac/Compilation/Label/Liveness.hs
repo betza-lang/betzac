@@ -1,4 +1,4 @@
-module Betzac.Compilation.Label.Liveness (checkDeadLabels, checkDeadRefs, checkUnusedImports) where
+module Betzac.Compilation.Label.Liveness (liveLabels, checkDeadLabels, checkDeadRefs, checkUnusedImports) where
 
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaProgram, Labelling)
@@ -28,15 +28,13 @@ liveLabels eff exported file = foldl' reach roots $ Map.elems exported
     refsOf :: ExportedDef -> [Labelling]
     refsOf = foldMap (map labelText . exprLabels) . edExpr
 
-checkDeadLabels :: LabelTable ResolvedDef -> LabelTable ExportedDef -> FilePath -> [SemanticProblem]
-checkDeadLabels eff exported file =
+checkDeadLabels :: LabelTable ResolvedDef -> Set.Set Labelling -> FilePath -> [SemanticProblem]
+checkDeadLabels eff live file =
     [ mkProblem Warning (UnusedLabel name) (getSpan def)
     | (name, ResolvedDef from def) <- Map.toList eff
     , from == file
     , not $ name `Set.member` live
     ]
-  where
-    live = liveLabels eff exported file
 
 {- | A bare label reference that resolves, but is neither exported nor bound to
 anything: naming a label on its own achieves nothing.
@@ -51,14 +49,12 @@ checkDeadRefs eff prog =
 {- | A @using@ that carries nothing into the file: either it won no label at all, or
 every label it won is itself dead.
 -}
-checkUnusedImports ::
-    LabelTable ResolvedDef -> LabelTable ExportedDef -> FilePath -> [ImportedScope] -> [SemanticProblem]
-checkUnusedImports eff exported file imports =
+checkUnusedImports :: LabelTable ResolvedDef -> Set.Set Labelling -> [ImportedScope] -> [SemanticProblem]
+checkUnusedImports eff live imports =
     [ mkProblem Warning UnusedUsing (getSpan via)
     | ImportedScope via _ <- imports
     , not $ usingPath via `Set.member` contributing
     ]
   where
-    live = liveLabels eff exported file
     contributing =
         Set.fromList [from | (name, ResolvedDef from _) <- Map.toList eff, name `Set.member` live]

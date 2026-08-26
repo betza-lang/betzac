@@ -3,7 +3,7 @@ module Betzac.Compilation.Label (checkLabels) where
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaProgram)
 import Betzac.Compilation.Context
-import Betzac.Compilation.Label.Liveness (checkDeadLabels, checkDeadRefs, checkUnusedImports)
+import Betzac.Compilation.Label.Liveness (checkDeadLabels, checkDeadRefs, checkUnusedImports, liveLabels)
 import Betzac.Compilation.Label.Resolution (checkUnresolvedRefs, resolveLabelBody)
 import Betzac.Compilation.Label.Scope
 import Betzac.Diagnostic
@@ -22,10 +22,11 @@ checkLabels ::
 checkLabels eff exported file imports prog = runStage_ $ do
     stage () (bodyProbs ++ checkUnresolvedRefs eff prog)
     logProblems $
-        checkDeadLabels eff exported file
+        checkDeadLabels eff live file
             ++ checkDeadRefs eff prog
-            ++ checkUnusedImports eff exported file imports
+            ++ checkUnusedImports eff live imports
   where
+    live = liveLabels eff exported file
     bodyProbs =
         [ prob
         | (name, ResolvedDef from def) <- Map.toList eff
