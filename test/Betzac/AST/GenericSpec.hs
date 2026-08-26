@@ -12,9 +12,11 @@ import qualified Data.Text as T
 import Betzac.AST.Generic (universeOf)
 import Betzac.AST.Phases (Ps, Stripped)
 import Betzac.AST.Types
+import Betzac.AST.Utils (stmtOf)
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
 import Betzac.Span (Span)
 import Betzac.Utils.Unparse (unparse)
+import Data.Maybe (mapMaybe)
 
 import Lexer.LexerQC (unlex)
 import Parser.ParserHedgehog (genProgram)
@@ -70,6 +72,12 @@ spec = describe "AST.Generic" $ do
                 universeOf prog === (universeOfData prog :: [Direction Stripped])
                 universeOf prog === (universeOfData prog :: [ModifierExpr Stripped])
                 universeOf prog === (universeOfData prog :: [Label Stripped])
+
+        it "finds every statement in the directives alone, no descent needed" $
+            hedgehog $ do
+                prog <- forAll genProgram
+                let ps = parsedBack prog
+                mapMaybe stmtOf ps === (universeOf ps :: [BetzaStmt Ps])
 
         it "yields a span where one is asked for, without descending into it" $
             hedgehog $ do
