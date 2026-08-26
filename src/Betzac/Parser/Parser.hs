@@ -6,7 +6,7 @@ import Betzac.AST.Phases (Ps, PsX (..))
 import qualified Betzac.AST.Types as B
 
 import Betzac.Alphabet.Expr (alphanum)
-import Betzac.Located (Located (endPos), tokenVal)
+import Betzac.Located (Located (endPos, startPos), tokenVal)
 import Betzac.Parser.BetzaTokenStream (BetzaTokenStream (unBetzaTokenStream))
 import Betzac.Parser.Core
 import Betzac.Span (Span (..))
@@ -33,11 +33,13 @@ skipped whitespace/comments in between. Use the last actually-consumed token's o
 -}
 spanning :: Parser (PsX -> a) -> Parser a
 spanning p = do
-    s <- getSourcePos
     beforeOffset <- getOffset
     before <- unBetzaTokenStream <$> getInput
     f <- p
     afterOffset <- getOffset
+    s <- case before of
+        (t : _) -> pure $ startPos t
+        [] -> getSourcePos -- at eof there is no token to ask
     let consumed = afterOffset - beforeOffset
         e
             | consumed <= 0 = s
