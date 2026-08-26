@@ -1,5 +1,7 @@
-.stack-work/
+.stack-work*/
 dist-newstyle/
+*.prof
+*.hp
 .vscode/
 *~
 TODO
