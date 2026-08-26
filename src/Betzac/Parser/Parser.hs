@@ -34,10 +34,11 @@ skipped whitespace/comments in between. Use the last actually-consumed token's o
 spanning :: Parser (PsX -> a) -> Parser a
 spanning p = do
     s <- getSourcePos
+    beforeOffset <- getOffset
     before <- unBetzaTokenStream <$> getInput
     f <- p
-    after <- unBetzaTokenStream <$> getInput
-    let consumed = length before - length after
+    afterOffset <- getOffset
+    let consumed = afterOffset - beforeOffset
         e
             | consumed <= 0 = s
             | otherwise = endPos (before !! (consumed - 1))
@@ -76,8 +77,9 @@ withOptionalModality noOp withOp = optional (withModality withOp withOp withOp) 
 
 -- parsing
 
--- | Plain best-effort AST, ignoring any recovered errors (used where callers
--- already know their input is well-formed, e.g. the parser round-trip test).
+{- | Plain best-effort AST, ignoring any recovered errors (used where callers
+already know their input is well-formed, e.g. the parser round-trip test).
+-}
 parseTokens :: Parser (B.BetzaProgram Ps)
 parseTokens = fst <$> parseTokensRecovering
 
