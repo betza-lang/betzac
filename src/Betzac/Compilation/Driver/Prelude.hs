@@ -9,7 +9,7 @@ import System.Directory (canonicalizePath, doesFileExist)
 import System.Environment (lookupEnv)
 import System.FilePath ((</>))
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
+import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feDiagnostics)
 import Betzac.Diagnostic (
     SemanticProblem (..),
     SemanticProblemKind (SystemFailure),
@@ -57,7 +57,8 @@ sealPrelude ctx = case ccPrelude ctx >>= \p -> (,) p <$> Map.lookup p (ccFiles c
   where
     silenced entry =
         entry
-            { feDiagnostics = []
+            { feDirectiveProblems = []
+            , feScopeProblems = []
             , fePipeline = (fePipeline entry){semanticResult = fmap (const []) (semanticResult $ fePipeline entry)}
             }
 

@@ -8,7 +8,7 @@ import Options
 import Betzac.Debug.Dot.Visitor (toDot)
 import qualified Betzac.Pipeline as B (PipelineResult (..))
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
+import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feDiagnostics)
 import Betzac.Compilation.Driver (discover, resolvePrelude, resolveScopes, sealPrelude)
 import Betzac.Compilation.Flag (CompilerOptions (terminateOnFirstError), applyOptions, optionsFromFlags)
 import Betzac.Debug.PrettyPrint (PrettyPrint (..))
@@ -172,7 +172,8 @@ applyOptionsToContext copts ctx = ctx{ccFiles = Map.map adjustEntry (ccFiles ctx
   where
     adjustEntry entry =
         entry
-            { feDiagnostics = applyOptions copts (feDiagnostics entry)
+            { feDirectiveProblems = applyOptions copts (feDirectiveProblems entry)
+            , feScopeProblems = applyOptions copts (feScopeProblems entry)
             , fePipeline = (fePipeline entry){B.semanticResult = fmap (applyOptions copts) (B.semanticResult (fePipeline entry))}
             }
 

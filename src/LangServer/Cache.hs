@@ -8,6 +8,7 @@ module LangServer.Cache (
     newCache,
     cachingCompiler,
     cachedPipeline,
+    previousContext,
     reusableContext,
     rememberContext,
     contextMatches,
@@ -76,20 +77,31 @@ cachingCompiler cache@(BlsCache var) path src = do
                 modifyMVar_ var $ \st -> return st{csFiles = Map.insert path pr (csFiles st)}
                 return $ Right pr
 
+{- | The last context compiled for this job, whether or not it is still current. What
+it already resolved can be carried into the next compile file by file, which is a
+weaker claim than 'reusableContext' makes and holds far more often.
+-}
+previousContext :: BlsCache -> CompileKey -> IO (Maybe CompilationContext)
+previousContext (BlsCache var) key = do
+    st <- readMVar var
+    return $ case csLast st of
+        Just lc | lcKey lc == key -> Just (lcContext lc)
+        _ -> Nothing
+
 {- | The last compiled context, when it is still current: same job, and every file it
 reached still reads exactly as it did then. Reading goes through the caller's own
 reader so an open buffer is compared against, never the stale file behind it.
 -}
 reusableContext :: BlsCache -> CompileKey -> (FilePath -> IO Text) -> IO (Maybe CompilationContext)
-reusableContext (BlsCache var) key readSource = do
-    st <- readMVar var
-    case csLast st of
-        Just lc | lcKey lc == key -> do
-            let paths = Map.keys $ ccFiles $ lcContext lc
+reusableContext cache key readSource = do
+    previous <- previousContext cache key
+    case previous of
+        Nothing -> return Nothing
+        Just ctx -> do
+            let paths = Map.keys $ ccFiles ctx
             readings <- traverse (try . readSource) paths
             let now = Map.fromList [(p, t) | (p, Right t) <- zip paths (readings :: [Either IOException Text])]
-            return $ if contextMatches (lcContext lc) now then Just (lcContext lc) else Nothing
-        _ -> return Nothing
+            return $ if contextMatches ctx now then Just ctx else Nothing
 
 rememberContext :: BlsCache -> CompileKey -> CompilationContext -> IO ()
 rememberContext (BlsCache var) key ctx =

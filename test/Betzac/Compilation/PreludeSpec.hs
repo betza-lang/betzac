@@ -9,7 +9,8 @@ import System.IO.Temp (withSystemTempDirectory)
 
 import Betzac.Compilation.Context (
     CompilationContext (..),
-    FileEntry (feDiagnostics, feEffective),
+    FileEntry (feEffective),
+    feDiagnostics,
     ResolvedDef (rdFrom),
  )
 import qualified Betzac.Compilation.Driver as Driver

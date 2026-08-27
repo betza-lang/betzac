@@ -90,7 +90,8 @@ visit access path ctx
                                     , feUsingTargets = []
                                     , feExported = Nothing
                                     , feEffective = Nothing
-                                    , feDiagnostics = []
+                                    , feDirectiveProblems = []
+                                    , feScopeProblems = []
                                     , feStatus = Discovered
                                     }
                             ctx0 = ctx{ccFiles = Map.insert path placeholder $ ccFiles ctx}
@@ -100,7 +101,7 @@ visit access path ctx
                             finalEntry =
                                 placeholder
                                     { feUsingTargets = kept
-                                    , feDiagnostics = feDiagnostics $ ccFiles ctx2 Map.! path
+                                    , feDirectiveProblems = feDirectiveProblems $ ccFiles ctx2 Map.! path
                                     , feStatus = Parsed
                                     }
                         return $ Right ctx2{ccFiles = Map.insert path finalEntry $ ccFiles ctx2}
@@ -159,7 +160,7 @@ resolveUsingTarget root rel = go sourceExtensions
 
 addDiagnostic :: FilePath -> SemanticProblem -> CompilationContext -> CompilationContext
 addDiagnostic path diag ctx =
-    ctx{ccFiles = Map.adjust (\e -> e{feDiagnostics = feDiagnostics e ++ [diag]}) path $ ccFiles ctx}
+    ctx{ccFiles = Map.adjust (\e -> e{feDirectiveProblems = feDirectiveProblems e ++ [diag]}) path $ ccFiles ctx}
 
 -- | A parsed file's @using@ targets, in lexical order, still unresolved.
 rawUsingTargets :: PipelineResult -> [UsingTarget]

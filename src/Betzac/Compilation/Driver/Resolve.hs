@@ -1,8 +1,9 @@
-module Betzac.Compilation.Driver.Resolve (resolveScopes) where
+module Betzac.Compilation.Driver.Resolve (resolveScopes, resolveScopesFrom) where
 
 import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
 
 import Betzac.Compilation.Context (
     CompilationContext (..),
@@ -23,28 +24,78 @@ is never added to 'feUsingDeps'), so a plain per-file memoized recursion is enou
 process dependencies before dependents — no separate topological sort is needed.
 -}
 resolveScopes :: CompilationContext -> CompilationContext
-resolveScopes ctx0 = foldl' (flip resolveFile) ctx0 $ Map.keys $ ccFiles ctx0
+resolveScopes = resolveScopesFrom Nothing
 
-resolveFile :: FilePath -> CompilationContext -> CompilationContext
-resolveFile path ctx = case Map.lookup path $ ccFiles ctx of
-    Nothing -> ctx
+{- | 'resolveScopes', carrying over whatever an earlier context already resolved. A
+file's result depends only on its own text and its dependencies' exports, so it can be
+taken as-is when its text and @using@ targets are unchanged and every dependency was
+itself carried over — the same acyclic ordering the recursion already relies on makes
+that an induction rather than a guess. What an editor recompiles per keystroke is then
+proportional to the edit, not to the workspace.
+-}
+resolveScopesFrom :: Maybe CompilationContext -> CompilationContext -> CompilationContext
+resolveScopesFrom prev ctx0 =
+    rsContext $ foldl' (flip $ resolveFile prev) (Resolution ctx0 Set.empty) $ Map.keys $ ccFiles ctx0
+
+-- | The context being built, plus the files whose resolution was carried over intact.
+data Resolution = Resolution
+    { rsContext :: CompilationContext
+    , rsCarried :: Set.Set FilePath
+    }
+
+resolveFile :: Maybe CompilationContext -> FilePath -> Resolution -> Resolution
+resolveFile prev path st = case Map.lookup path $ ccFiles (rsContext st) of
+    Nothing -> st
     Just entry -> case feEffective entry of
-        Just _ -> ctx
+        Just _ -> st
         Nothing ->
-            let deps = map usingPath (feUsingTargets entry) ++ filter (/= path) (toList $ ccPrelude ctx)
-                ctx1 = foldl' (flip resolveFile) ctx deps
+            let deps = dependenciesOf (rsContext st) path entry
+                st1 = foldl' (flip $ resolveFile prev) st deps
+                ctx1 = rsContext st1
                 entry1 = ccFiles ctx1 Map.! path
-                (result, probs) = runStage $ resolveFileStage path ctx1
-                (exportedMap, effective) = fromMaybe (Map.empty, Map.empty) result
+             in case carriedEntry prev (rsCarried st1) deps path entry1 of
+                    Just entry2 ->
+                        Resolution
+                            ctx1{ccFiles = Map.insert path entry2 $ ccFiles ctx1}
+                            (Set.insert path $ rsCarried st1)
+                    Nothing ->
+                        let (result, probs) = runStage $ resolveFileStage path ctx1
+                            (exportedMap, effective) = fromMaybe (Map.empty, Map.empty) result
+                            entry2 =
+                                entry1
+                                    { feExported = Just exportedMap
+                                    , feEffective = Just effective
+                                    , feScopeProblems = probs
+                                    , feStatus = ScopesResolved
+                                    }
+                         in st1{rsContext = ctx1{ccFiles = Map.insert path entry2 $ ccFiles ctx1}}
 
-                entry2 =
-                    entry1
-                        { feExported = Just exportedMap
-                        , feEffective = Just effective
-                        , feDiagnostics = feDiagnostics entry1 ++ probs
-                        , feStatus = ScopesResolved
-                        }
-             in ctx1{ccFiles = Map.insert path entry2 $ ccFiles ctx1}
+-- | What a file's scope is computed from: its @using@ targets, and the prelude.
+dependenciesOf :: CompilationContext -> FilePath -> FileEntry -> [FilePath]
+dependenciesOf ctx path entry =
+    map usingPath (feUsingTargets entry) ++ filter (/= path) (toList $ ccPrelude ctx)
+
+{- | 'entry' with an earlier resolution of the same file grafted on, when that
+resolution still describes it: same text, same @using@ targets, and every dependency
+carried over too, so every export it was computed against is unchanged.
+-}
+carriedEntry :: Maybe CompilationContext -> Set.Set FilePath -> [FilePath] -> FilePath -> FileEntry -> Maybe FileEntry
+carriedEntry prev carried deps path entry = do
+    old <- Map.lookup path . ccFiles =<< prev
+    exported <- feExported old
+    effective <- feEffective old
+    if sourceText (fePipeline old) == sourceText (fePipeline entry)
+        && feUsingTargets old == feUsingTargets entry
+        && all (`Set.member` carried) deps
+        then
+            Just
+                entry
+                    { feExported = Just exported
+                    , feEffective = Just effective
+                    , feScopeProblems = feScopeProblems old
+                    , feStatus = ScopesResolved
+                    }
+        else Nothing
 
 {- | The exported/effective scope computation for one file, as a single Stage
 sequence, both lifted by logProblems (which never halts the chain). effectiveScope

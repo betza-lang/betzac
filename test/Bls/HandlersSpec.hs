@@ -252,6 +252,27 @@ spec = describe "bls handlers" $ do
                     let diagsFor u = concat [n ^. params . diagnostics | n <- notes, n ^. params . uri == u]
                     liftIO $ length (diagsFor mainUri) `shouldBe` 1
 
+        it "re-resolves against a dependency that changed on disk without ever being opened" $
+            withSystemTempDirectory "bls-handlers-spec" $ \rawDir -> do
+                dir <- canonicalizePath rawDir
+                writeFile (dir </> "dep.betza") "export X = :1,0:;\n"
+                writeFile (dir </> "main.betza") "using dep;\nexport Y = X;\n"
+                let mainUri = filePathToUri (dir </> "main.betza")
+                runSession "bls" fullLatestClientCaps dir $ do
+                    mainDoc <- openDoc "main.betza" betzaKind
+                    _ <- replicateM 2 publishDiagnosticsNotification
+                    -- Behind the editor's back: no didOpen, no didChange for dep.
+                    liftIO $ writeFile (dir </> "dep.betza") "export Z = :1,0:;\n"
+                    changeDoc
+                        mainDoc
+                        [ TextDocumentContentChangeEvent $
+                            InR $
+                                TextDocumentContentChangeWholeDocument (pack "using dep;\nexport Y = X;\n\n")
+                        ]
+                    notes <- replicateM 2 publishDiagnosticsNotification
+                    let diagsFor u = concat [n ^. params . diagnostics | n <- notes, n ^. params . uri == u]
+                    liftIO $ length (diagsFor mainUri) `shouldBe` 1
+
     describe "go to definition" $ do
         it "jumps to a definition in the same file" $
             inWorkspace $ \dir -> do

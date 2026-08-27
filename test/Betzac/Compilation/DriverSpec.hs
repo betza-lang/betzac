@@ -10,8 +10,9 @@ import System.IO.Temp (withSystemTempDirectory)
 
 import Betzac.Compilation.Context (
     CompilationContext (..),
-    FileEntry (feDiagnostics, feUsingTargets),
+    FileEntry (feEffective, feExported, feUsingTargets),
     UsingTarget (usingIsOverride),
+    feDiagnostics,
  )
 import qualified Betzac.Compilation.Driver as Driver
 import Betzac.Compilation.Flag (optionsFromFlags)
@@ -21,7 +22,7 @@ import Betzac.Span (Span (..))
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
-import Test.Hspec (Spec, describe, it, shouldBe)
+import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe)
 import Test.Hspec.Hedgehog
 import Text.Megaparsec.Pos (SourcePos (sourceColumn, sourceLine), mkPos)
 
@@ -38,6 +39,20 @@ hasCause c = any ((== c) . causeOf . semKind)
 diagnosticsOn :: String -> CompilationContext -> [SemanticProblem]
 diagnosticsOn suffix ctx =
     concat [feDiagnostics e | (p, e) <- Map.toList (ccFiles ctx), suffix `isSuffixOf` p]
+
+{- | Everything a resolved context is observed by: each file's exported and effective
+scope keys, and the diagnostics attributed to it. 'ExportedDef' has no 'Eq' (it carries
+a whole statement), so the keys stand in for the maps.
+-}
+resolutionOf :: CompilationContext -> Map.Map FilePath ([String], [String], [String])
+resolutionOf ctx = Map.map summarise (ccFiles ctx)
+  where
+    summarise entry =
+        ( maybe [] Map.keys (feExported entry)
+        , maybe [] Map.keys (feEffective entry)
+        , map describeProblem (feDiagnostics entry)
+        )
+    describeProblem p = causeOf (semKind p) ++ " " ++ show (semSpan p)
 
 onLine :: Int -> SemanticProblem -> Bool
 onLine n p = case semSpan p of
@@ -287,3 +302,41 @@ spec = describe "Compilation.Driver" $ do
                     Right ctx -> do
                         Map.size (ccFiles ctx) === n
                         assert (hasCause "using circular" (allDiagnostics ctx))
+
+    describe "resolveScopesFrom" $ do
+        it "resolves a chain to exactly what a fresh resolve would, whatever changed since" $
+            hedgehog $ do
+                n <- forAll $ Gen.int (Range.linear 2 6)
+                edited <- forAll $ Gen.int (Range.linear 0 (n - 1))
+                -- Adding an export, dropping one, and renaming one each reach the
+                -- dependents differently: only the last two change what they import.
+                edit <- forAll $ Gen.element ["export Z = fW;\n", "", "export Y = bW;\n"]
+                (fresh, carried) <- liftIO $ withSystemTempDirectory "betzac-driver-spec" $ \dir -> do
+                    writeChain dir n
+                    before <- resolvedChain dir
+                    let target = dir </> ("f" ++ show edited ++ ".betza")
+                        usingLine = if edited < n - 1 then "using f" ++ show (edited + 1) ++ ";\n" else ""
+                    writeFile target (usingLine ++ edit)
+                    after <- resolvedChain dir
+                    let carryFrom b a = Driver.resolveScopesFrom (Just (Driver.resolveScopes b)) a
+                    return (Driver.resolveScopes <$> after, carryFrom <$> before <*> after)
+                case (fresh, carried) of
+                    (Right a, Right b) -> resolutionOf a === resolutionOf b
+                    _ -> annotate "discovery failed" >> failure
+
+        it "carries nothing over from a context compiled for a different workspace" $
+            withSystemTempDirectory "betzac-driver-spec" $ \dir ->
+                withSystemTempDirectory "betzac-driver-spec" $ \other -> do
+                    writeChain dir 3
+                    writeChain other 3
+                    elsewhere <- resolvedChain other
+                    here <- resolvedChain dir
+                    case (elsewhere, here) of
+                        (Right e, Right h) ->
+                            resolutionOf (Driver.resolveScopesFrom (Just (Driver.resolveScopes e)) h)
+                                `shouldBe` resolutionOf (Driver.resolveScopes h)
+                        _ -> expectationFailure "discovery failed"
+
+-- | Discover a chain written by 'writeChain', leaving every scope still unresolved.
+resolvedChain :: FilePath -> IO (Either SemanticProblem CompilationContext)
+resolvedChain dir = Driver.discover TIO.readFile dir (dir </> "f0.betza") Nothing (optionsFromFlags [])

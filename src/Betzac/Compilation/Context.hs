@@ -7,6 +7,7 @@ module Betzac.Compilation.Context (
     edIsOverride,
     edExpr,
     ResolvedDef (..),
+    feDiagnostics,
     emptyContext,
 ) where
 
@@ -73,10 +74,18 @@ data FileEntry = FileEntry
     -- ^ In lexical order.
     , feExported :: Maybe (Map.Map String ExportedDef)
     , feEffective :: Maybe (Map.Map String ResolvedDef)
-    , feDiagnostics :: [SemanticProblem]
-    -- ^ From directive resolution, distinct from 'fePipeline''s own per-node ones.
+    , feDirectiveProblems :: [SemanticProblem]
+    -- ^ From discovery: an unresolvable, circular or duplicated @using@.
+    , feScopeProblems :: [SemanticProblem]
+    -- ^ From scope resolution, kept apart so a reused resolution carries its own.
     , feStatus :: FileStatus
     }
+
+{- | Every problem attributed to the file itself, distinct from 'fePipeline''s own
+per-node ones.
+-}
+feDiagnostics :: FileEntry -> [SemanticProblem]
+feDiagnostics entry = feDirectiveProblems entry ++ feScopeProblems entry
 
 data CompilationContext = CompilationContext
     { ccWorkspaceRoot :: FilePath

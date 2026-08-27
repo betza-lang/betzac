@@ -2,8 +2,8 @@
 
 module LangServer.Handlers.Core (contextFor, pipelineFor, publishDiagnostics, makeDiagnostic) where
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
-import Betzac.Compilation.Driver (SourceAccess (..), SourceReader, discoverWith, resolvePrelude, resolveScopes, sealPrelude)
+import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feDiagnostics)
+import Betzac.Compilation.Driver (SourceAccess (..), SourceReader, discoverWith, resolvePrelude, resolveScopesFrom, sealPrelude)
 import Betzac.Compilation.Flag (CompilerFlag (..), CompilerOptions, Wspecifier (..), optionsFromFlags)
 import Betzac.Debug.PrettyPrint (prettyPrint)
 import Betzac.Diagnostic (SemanticProblem (..), Severity (..))
@@ -24,7 +24,7 @@ import qualified Data.Text.IO as TIO
 import System.Directory (canonicalizePath)
 import System.FilePath (takeDirectory)
 
-import LangServer.Cache (BlsCache, CompileKey (..), cachingCompiler, rememberContext, reusableContext)
+import LangServer.Cache (BlsCache, CompileKey (..), cachingCompiler, previousContext, rememberContext, reusableContext)
 import LangServer.Config
 import Language.LSP.Diagnostics (partitionBySource)
 import Language.LSP.Protocol.Lens (HasVersion (version))
@@ -60,7 +60,8 @@ contextFor cache fp src = do
             Just ctx -> return ctx
             Nothing -> do
                 ctx0 <- ExceptT $ discoverWith (SourceAccess reader (cachingCompiler cache)) root fp (Just prelude) blsOptions
-                ctx <- ExceptT $ return $ sealPrelude $ resolveScopes ctx0
+                previous <- liftIO $ previousContext cache key
+                ctx <- ExceptT $ return $ sealPrelude $ resolveScopesFrom previous ctx0
                 ctx <$ liftIO (rememberContext cache key ctx)
 
 {- | One file's own lex/parse/semantic result, reusing whatever the last compile of
