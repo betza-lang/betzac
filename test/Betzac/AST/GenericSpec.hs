@@ -9,7 +9,7 @@ module AST.GenericSpec (spec) where
 import Data.Data (Data, Typeable, cast, gmapQr)
 import qualified Data.Text as T
 
-import Betzac.AST.Generic (universeOf)
+import Betzac.AST.Generic (Collector (..), universeBy, universeOf)
 import Betzac.AST.Phases (Ps, Stripped)
 import Betzac.AST.Types
 import Betzac.AST.Utils (stmtOf)
@@ -79,6 +79,22 @@ spec = describe "AST.Generic" $ do
                 let ps = parsedBack prog
                 mapMaybe stmtOf ps === (universeOf ps :: [BetzaStmt Ps])
 
+    describe "universeBy" $
+        it "gathers several types in one descent, in the order separate walks would meet them" $
+            hedgehog $ do
+                prog <- forAll genProgram
+                let ps = parsedBack prog
+                    -- Tagged so a merged walk's interleaving stays visible.
+                    tagged = Collector $ \node acc -> case cast node :: Maybe (Direction Ps) of
+                        Just d -> Left d : acc
+                        Nothing -> case cast node :: Maybe (Label Ps) of
+                            Just l -> Right l : acc
+                            Nothing -> acc
+                    merged = universeBy tagged ps :: [Either (Direction Ps) (Label Ps)]
+                [d | Left d <- merged] === (universeOf ps :: [Direction Ps])
+                [l | Right l <- merged] === (universeOf ps :: [Label Ps])
+
+    describe "universeOf" $
         it "yields a span where one is asked for, without descending into it" $
             hedgehog $ do
                 prog <- forAll genProgram

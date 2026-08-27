@@ -4,7 +4,7 @@
 
 module LangServer.Handlers.OnSemanticTokens (onSemanticTokens) where
 
-import Betzac.AST.Generic (universeOf)
+import Betzac.AST.Generic (Collector (..), universeBy)
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types
 import Betzac.Pipeline (PipelineResult (..))
@@ -14,6 +14,7 @@ import Control.Lens ((^.))
 import Data.List (sortOn)
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import Data.Typeable (cast)
 import Text.Megaparsec.Pos (SourcePos (..), unPos)
 
 import LangServer.Cache (BlsCache)
@@ -50,10 +51,28 @@ onSemanticTokens cache req responder = do
 collectTokens :: BetzaProgram Ps -> [SemanticTokenAbsolute]
 collectTokens prog =
     concatMap keywordTokens prog
-        ++ concatMap directionToken (universeOf prog :: [Direction Ps])
-        ++ concatMap behaviourToken (universeOf prog :: [Behaviour Ps])
-        ++ concatMap chainOperatorToken (universeOf prog :: [ChainOperator Ps])
-        ++ labelTokens prog
+        ++ universeBy (highlighted (defSpansOf prog)) prog
+
+{- | The one descent every highlighted node is found in. Four separate 'universeOf'
+walks would each cross every node of the program to reach their own type.
+-}
+highlighted :: Set.Set Span -> Collector SemanticTokenAbsolute
+highlighted defSpans = Collector $ \node acc ->
+    case cast node :: Maybe (Direction Ps) of
+        Just d -> directionToken d ++ acc
+        Nothing -> case cast node :: Maybe (Behaviour Ps) of
+            Just b -> behaviourToken b ++ acc
+            Nothing -> case cast node :: Maybe (ChainOperator Ps) of
+                Just c -> chainOperatorToken c ++ acc
+                Nothing -> case cast node :: Maybe (Label Ps) of
+                    Just lbl -> labelToken (definitionModifier defSpans lbl) lbl ++ acc
+                    Nothing -> acc
+
+-- | Whether a label occurrence is the one being defined, rather than a reference.
+definitionModifier :: Set.Set Span -> Label Ps -> [SemanticTokenModifiers]
+definitionModifier defSpans lbl
+    | getSpan lbl `Set.member` defSpans = [SemanticTokenModifiers_Definition]
+    | otherwise = []
 
 {- | "override"/"export"/"using" don't have their own span-carrying node — each one's
 extension field spans the *whole* directive it introduces, but the grammar
@@ -90,17 +109,11 @@ behaviourToken = semanticToken SemanticTokenTypes_Modifier []
 chainOperatorToken :: ChainOperator Ps -> [SemanticTokenAbsolute]
 chainOperatorToken = semanticToken SemanticTokenTypes_Operator []
 
-{- | Every label, tagged SemanticTokenModifiers_Definition if it's the label being
-defined (the LHS of an assignment) and left untagged otherwise (a reference)
+{- | Where each label a statement defines (the LHS of an assignment) sits, so every
+other occurrence of a label can be told apart as a reference.
 -}
-labelTokens :: BetzaProgram Ps -> [SemanticTokenAbsolute]
-labelTokens prog = defTokens ++ refTokens
-  where
-    defs = [lbl | qs <- prog, Just lbl <- [assignLabelOf qs]]
-    defSpans = Set.fromList (map getSpan defs)
-    defTokens = concatMap (labelToken [SemanticTokenModifiers_Definition]) defs
-    refs = [lbl | lbl <- universeOf prog, not (getSpan lbl `Set.member` defSpans)]
-    refTokens = concatMap (labelToken []) refs
+defSpansOf :: BetzaProgram Ps -> Set.Set Span
+defSpansOf prog = Set.fromList [getSpan lbl | qs <- prog, Just lbl <- [assignLabelOf qs]]
 
 labelToken :: [SemanticTokenModifiers] -> Label Ps -> [SemanticTokenAbsolute]
 labelToken = semanticToken SemanticTokenTypes_Variable

@@ -567,91 +567,91 @@ deriving instance Generic (ExponentKind p)
 deriving instance Generic (Label p)
 
 instance (WalkX p) => Walk (QualifiedStmt p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (Directive p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (BetzaStmt p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (BetzaExpr p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (ChainExpr p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (ChainLeg p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (UnionExpr p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (ModifierExpr p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (ExponentExpr p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (AtomExpr p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (ChainOperator p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (ChainKind p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (ChainModality p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (Modifier p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (DirectionModifier p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (Direction p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (Behaviour p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (BehaviourKind p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (BehaviourModality p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (Exponent p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (ExponentKind p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (Label p) where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 -- HasSpan

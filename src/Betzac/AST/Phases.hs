@@ -26,7 +26,7 @@ data PsX = PsX {psSpan :: Span}
     deriving (Eq, Show, Data, Generic)
 
 instance Walk PsX where
-    walk = gwalk . from
+    walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
 -- Stripped phase instances
