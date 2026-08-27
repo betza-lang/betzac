@@ -16,7 +16,7 @@ import System.IO.Temp (withSystemTempDirectory)
 import Language.LSP.Protocol.Lens hiding (context, length, name)
 import Language.LSP.Protocol.Types
 import Language.LSP.Test
-import Test.Hspec
+import Test.Hspec hiding (before, after)
 
 betzaKind :: LanguageKind
 betzaKind = LanguageKind_Custom "betza"
