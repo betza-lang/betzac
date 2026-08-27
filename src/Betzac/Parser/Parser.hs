@@ -189,14 +189,47 @@ parseModifierExpr =
     )
         <?> "atom or modifier"
 
+{- | The next token, without consuming it. Cheaper than 'lookAhead' over a parser,
+which the stream's own bookkeeping would have to unwind.
+-}
+peekToken :: Parser (Maybe B.Token)
+peekToken = do
+    st <- getParserState
+    return $ case unBetzaTokenStream (stateInput st) of
+        (t : _) -> Just (tokenVal t)
+        [] -> Nothing
+
+{- | Whether a behaviour token names a kind 'parseBehaviourKind' recognises. 'y' is
+lexed as a behaviour but only ever modifies one, so a modifier starting with it is an
+error the alternation below has to report in full.
+-}
+isBehaviourKind :: B.Token -> Bool
+isBehaviourKind (B.TokBehaviour c) = c `elem` "cgijmnp"
+isBehaviourKind _ = False
+
+{- | A directional or behavioural modifier. The next token settles which wherever the
+branch it picks cannot then fail; everything else still goes through the alternation,
+so an error is reported against both possibilities exactly as before.
+-}
 parseModifier :: Parser (B.Modifier Ps)
-parseModifier = spanning $ parseDirectional' <|> parseBehavioural'
+parseModifier = spanning $ do
+    next <- peekToken
+    case next of
+        Just t
+            | isBehaviourKind t -> parseBehavioural'
+        Just (B.TokDirection _) -> parseDirectional'
+        Just B.TokLAngle -> parseDirectional'
+        _ -> parseDirectional' <|> parseBehavioural'
   where
     parseDirectional' = B.Directional <$> parseDirectional
     parseBehavioural' = B.Behavioural <$> parseBehaviour
 
 parseDirectional :: Parser (B.DirectionModifier Ps)
-parseDirectional = spanning $ parseAmalgamated <|> (B.Single <$> parseDirection)
+parseDirectional = spanning $ do
+    next <- peekToken
+    case next of
+        Just (B.TokDirection _) -> B.Single <$> parseDirection
+        _ -> parseAmalgamated <|> (B.Single <$> parseDirection)
   where
     parseAmalgamated =
         B.Amalgamated

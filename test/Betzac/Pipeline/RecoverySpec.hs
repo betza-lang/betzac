@@ -106,3 +106,13 @@ spec = describe "Pipeline recovery" $ do
                 Right pr -> case parseResult pr of
                     Just (_, Just bundle) -> errorBundlePretty bundle `shouldContain` "atom"
                     _ -> expectationFailure "expected a recorded parse error"
+
+        {- 'y' lexes as a behaviour but names no behaviour kind, so it is the one
+        behaviour character a modifier cannot start with -- the case a dispatch on the
+        next token must hand back to the full alternation instead of committing to it. -}
+        it "still reports both a directional and a behavioural expectation for a modifier starting with 'y'" $
+            case fromScratch "<test>" "X = ycW;\n" of
+                Left e -> expectationFailure (show e)
+                Right pr -> case parseResult pr of
+                    Just (_, Just bundle) -> errorBundlePretty bundle `shouldContain` "expression"
+                    _ -> expectationFailure "expected a recorded parse error"

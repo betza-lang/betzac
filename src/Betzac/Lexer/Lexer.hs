@@ -61,9 +61,8 @@ recoverableToken :: Bool -> Lexer (Either (ParseError String Void) (Located B.To
 recoverableToken hasContent =
     withRecovery
         (\e -> Left e <$ recover)
-        (Right <$> (spanned lexToken' <* lexIgnore))
+        (Right <$> (spanned lexDirectiveOrToken <* lexIgnore))
   where
-    lexToken' = lexDirective <|> lexToken
     recover = do
         _ <- takeWhileP (Just "recovery: skipped input") (/= B.stmtEnd)
         if hasContent
@@ -81,6 +80,21 @@ lexSource = lexIgnore *> go False
                     Right t -> tokenVal t /= B.TokEndStmt
                     Left _ -> hasContent
             (result :) <$> go hasContent'
+
+{- | A directive keyword or a token. An atom, direction or behaviour letter settles
+which one from its first character alone -- no keyword starts with any of them, and
+each of those branches always succeeds -- so the alternation below, and every error
+message shaped by it, is only reached for a character that needs it.
+-}
+lexDirectiveOrToken :: Lexer B.Token
+lexDirectiveOrToken = do
+    input <- getInput
+    case input of
+        c : _
+            | B.isUpper c -> lexAtom
+            | B.isDirection c -> lexDirection
+            | B.isBehaviour c -> lexBehaviour
+        _ -> lexDirective <|> lexToken
 
 lexDirective :: Lexer B.Token
 lexDirective = lexExport <|> lexUsing <|> lexOverride <?> "directive keyword"
