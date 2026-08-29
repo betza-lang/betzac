@@ -8,7 +8,8 @@ import qualified Data.Text as T
 
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaProgram)
-import Betzac.Compilation.Context (ExportedDef (..), ResolvedDef (..), UsingTarget (..), edIsOverride)
+import Betzac.Compilation.Context (ResolvedDef (..), UsingTarget (..), sdEntry, sdIsOverride)
+import Betzac.Compilation.Interface (ieLabel, ieOrder)
 import Betzac.Compilation.Label.Scope (ImportedScope (..), LabelTable, effectiveScope, exportedScope, localDefs, unexportedLabelRefs)
 import Betzac.Diagnostic (
     SemanticProblem,
@@ -45,7 +46,7 @@ scopeOf self prog = fst $ effectiveScope self (localDefs prog) [] Nothing
 usingDepAs :: FilePath -> Bool -> Text -> ImportedScope
 usingDepAs path overriding src =
     ImportedScope (UsingTarget path overriding Generated) $
-        Map.fromList [(edLabel d, d) | d <- fst (exportedScope (scopeOf path prog) prog)]
+        Map.fromList [(ieLabel e, e) | e <- fst (exportedScope (scopeOf path prog) prog)]
   where
     prog = parseProgram src
 
@@ -62,21 +63,21 @@ spec = describe "Compilation.Scope" $ do
         it "yields one definition per exported label" $ do
             let prog = parseProgram "export A = fW;\nexport B = fF;\n"
                 (defs, probs) = exportedScope (scopeOf "<test>" prog) prog
-            map edLabel defs `shouldBe` ["A", "B"]
+            map ieLabel defs `shouldBe` ["A", "B"]
             length probs `shouldBe` 0
 
         it "resolves a bare label-resolving export against the effective winner, not a synthetic label" $ do
             let prog = parseProgram "override N = fA;\nN = fW;\nexport N;\n"
                 (defs, probs) = exportedScope (scopeOf "<test>" prog) prog
-            map edLabel defs `shouldBe` ["N"]
-            map edIsOverride defs `shouldBe` [True]
+            map ieLabel defs `shouldBe` ["N"]
+            map ieOrder defs `shouldBe` [0] -- the override statement, not the plain one after it
             length probs `shouldBe` 0
 
         it "resolves a bare label-resolving export against a label pulled in via using, not just local definitions" $ do
             let prog = parseProgram "using dep;\nexport N;\n"
                 eff = fst $ effectiveScope "main" (localDefs prog) [usingDep False "export N = :2,1:;\n"] Nothing
                 (defs, probs) = exportedScope eff prog
-            map edLabel defs `shouldBe` ["N"]
+            map ieLabel defs `shouldBe` ["N"]
             length probs `shouldBe` 0
 
         it "reports an unresolved label for a bare export with no definition anywhere in scope" $ do
@@ -88,23 +89,24 @@ spec = describe "Compilation.Scope" $ do
         it "keeps only the highest-priority definition for a same-label export repeated in one file, warning on the rest" $ do
             let prog = parseProgram "export A = fW;\noverride export A = fF;\n"
                 (defs, probs) = exportedScope (scopeOf "<test>" prog) prog
-            map edIsOverride defs `shouldBe` [True]
+            map ieOrder defs `shouldBe` [1] -- the override statement, not the export before it
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateDirective]
 
         it "publishes the effective winner for a direct assign export, not the exporting statement's own body" $ do
             let prog = parseProgram "export A = fW;\noverride A = fF;\n"
                 (defs, probs) = exportedScope (scopeOf "<test>" prog) prog
-            map edLabel defs `shouldBe` ["A"]
-            map edIsOverride defs `shouldBe` [True]
-            map edOrder defs `shouldBe` [1] -- the override statement, not the export statement (order 0)
+            map ieLabel defs `shouldBe` ["A"]
+            map ieOrder defs `shouldBe` [1] -- the override statement, not the export statement (order 0)
             length probs `shouldBe` 0
 
         it "treats `export A = expr;` as sugar for `export A; A = expr;`, publishing identically either way" $ do
             let exportOf prog = exportedScope (scopeOf "<test>" prog) prog
                 (sugarDefs, sugarProbs) = exportOf $ parseProgram "export A = fW;\noverride A = fF;\n"
                 (desugarDefs, desugarProbs) = exportOf $ parseProgram "A = fW;\nexport A;\noverride A = fF;\n"
-            map edLabel sugarDefs `shouldBe` map edLabel desugarDefs
-            map edIsOverride sugarDefs `shouldBe` map edIsOverride desugarDefs
+            map ieLabel sugarDefs `shouldBe` map ieLabel desugarDefs
+            -- Each publishes its own override statement; only its position differs.
+            map ieOrder sugarDefs `shouldBe` [1]
+            map ieOrder desugarDefs `shouldBe` [2]
             length sugarProbs `shouldBe` length desugarProbs
 
     describe "unexportedLabelRefs" $ do
@@ -120,13 +122,13 @@ spec = describe "Compilation.Scope" $ do
         it "prefers override over plain regardless of lexical order" $ do
             let prog = parseProgram "A = fW;\noverride A = fF;\n"
                 (resolved, probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
-            fmap (edIsOverride . rdDef) (Map.lookup "A" resolved) `shouldBe` Just True
+            fmap (sdIsOverride . rdDef) (Map.lookup "A" resolved) `shouldBe` Just True
             map (causeOf . semKind) probs `shouldBe` [causeOf DuplicateLabel]
 
         it "picks the earliest definition among equal precedence" $ do
             let prog = parseProgram "A = fW;\nA = fF;\n"
                 (resolved, _probs) = effectiveScope "<test>" (localDefs prog) [] Nothing
-            fmap (edOrder . rdDef) (Map.lookup "A" resolved) `shouldBe` Just 0
+            fmap (ieOrder . sdEntry . rdDef) (Map.lookup "A" resolved) `shouldBe` Just 0
 
         it "promotes every export from an overriding using to override-class" $ do
             let prog = parseProgram "N = fF;\n"
@@ -219,5 +221,5 @@ spec = describe "Compilation.Scope" $ do
                 annotate (show flags)
                 countOf DuplicateLabel === length flags - 1
                 countOf RedundantOverride === (if onlyLeadingOverride then 1 else 0)
-                fmap (edOrder . rdDef) (Map.lookup "A" resolved) === Just expectedWinnerIx
-                fmap (edIsOverride . rdDef) (Map.lookup "A" resolved) === Just (or flags)
+                fmap (ieOrder . sdEntry . rdDef) (Map.lookup "A" resolved) === Just expectedWinnerIx
+                fmap (sdIsOverride . rdDef) (Map.lookup "A" resolved) === Just (or flags)

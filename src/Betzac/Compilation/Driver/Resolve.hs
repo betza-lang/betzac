@@ -7,12 +7,12 @@ import qualified Data.Set as Set
 
 import Betzac.Compilation.Context (
     CompilationContext (..),
-    ExportedDef (edLabel),
     FileEntry (..),
     FileStatus (ScopesResolved),
     ResolvedDef,
     UsingTarget (usingPath),
  )
+import Betzac.Compilation.Interface (InterfaceEntry, ieLabel)
 import Betzac.Compilation.Label (checkLabels)
 import Betzac.Compilation.Label.Scope (ImportedScope (..), PreludeScope (..), effectiveScope, exportedScope, localDefs)
 import Betzac.Diagnostic (Stage, logProblems, runStage)
@@ -102,7 +102,7 @@ sequence, both lifted by logProblems (which never halts the chain). effectiveSco
 runs first -- a bare re-export (@export A;@) resolves against the file's *effective*
 scope (local or pulled in via @using@), so exportedScope needs it already computed.
 -}
-resolveFileStage :: FilePath -> CompilationContext -> Stage (Map.Map String ExportedDef, Map.Map String ResolvedDef)
+resolveFileStage :: FilePath -> CompilationContext -> Stage (Map.Map String InterfaceEntry, Map.Map String ResolvedDef)
 resolveFileStage path ctx1 = do
     let entry1 = ccFiles ctx1 Map.! path
         prog = maybe [] fst (parseResult $ fePipeline entry1)
@@ -119,7 +119,7 @@ resolveFileStage path ctx1 = do
         (effective, effectiveProbs) = effectiveScope path localCands imports prelude
 
         (exported, exportProbs) = exportedScope effective prog
-        exportedMap = Map.fromList [(edLabel d, d) | d <- exported]
+        exportedMap = Map.fromList [(ieLabel e, e) | e <- exported]
 
     logProblems exportProbs
     logProblems effectiveProbs

@@ -53,6 +53,7 @@ library
       Betzac.Compilation.Driver.Prelude
       Betzac.Compilation.Driver.Resolve
       Betzac.Compilation.Flag
+      Betzac.Compilation.Interface
       Betzac.Compilation.Label
       Betzac.Compilation.Label.Liveness
       Betzac.Compilation.Label.Resolution

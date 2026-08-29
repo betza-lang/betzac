@@ -3,7 +3,7 @@ module Betzac.Compilation.Label.Resolution (resolveLabelBody, checkUnresolvedRef
 import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaExpr, BetzaProgram, Label (Leaper), Labelling)
 import Betzac.AST.Utils (exprLabels)
-import Betzac.Compilation.Context (ResolvedDef (..), edExpr)
+import Betzac.Compilation.Context (ResolvedDef (..), sdExpr)
 import Betzac.Compilation.Label.Scope (LabelTable, labelText, unexportedLabelRefs)
 import Betzac.Diagnostic
 import Betzac.Span (HasSpan (getSpan))
@@ -42,6 +42,6 @@ resolveLabelBody eff file lbl = snd . walk (Set.singleton lbl) [lbl]
             -- definition it runs through, not to every consumer of it.
             | name == lbl -> (seen, [mkProblem Error (CircularLabel $ trail ++ [name]) $ getSpan ref])
             | name `Set.member` seen -> (seen, []) -- expanded already, or a cycle of its own
-            | otherwise -> maybe (seen, []) (walk (Set.insert name seen) (trail ++ [name])) (edExpr def)
+            | otherwise -> maybe (seen, []) (walk (Set.insert name seen) (trail ++ [name])) (sdExpr def)
       where
         name = labelText ref

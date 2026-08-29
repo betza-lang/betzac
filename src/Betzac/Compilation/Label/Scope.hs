@@ -21,9 +21,14 @@ import Betzac.AST.Utils (definedLabel, isExported, referencedLabel, stmtLabel, s
 import Betzac.Compilation.Context (
     ExportedDef (..),
     ResolvedDef (..),
+    ScopeDef,
     UsingTarget (..),
-    edIsOverride,
+    importedDef,
+    localDef,
+    sdEntry,
+    sdIsOverride,
  )
+import Betzac.Compilation.Interface (InterfaceEntry, ieLabel, ieOrder)
 import Betzac.Diagnostic (
     SemanticProblem,
     SemanticProblemKind (DuplicateDirective, DuplicateLabel, RedundantOverride, UnresolvedLabel),
@@ -61,7 +66,7 @@ localDefs prog =
 data ExportOccurrence = ExportOccurrence
     { occOrder :: Int
     , occStmt :: QualifiedStmt Ps
-    , occDef :: ExportedDef
+    , occEntry :: InterfaceEntry
     }
 
 {- | The labels a file exposes to other files. @export label = expr;@ is shorthand for
@@ -69,24 +74,24 @@ data ExportOccurrence = ExportOccurrence
 label in the effective scope, never its own body directly. Repeating an export of the
 same label publishes it once and warns on every later occurrence.
 -}
-exportedScope :: LabelTable ResolvedDef -> BetzaProgram Ps -> ([ExportedDef], [SemanticProblem])
+exportedScope :: LabelTable ResolvedDef -> BetzaProgram Ps -> ([InterfaceEntry], [SemanticProblem])
 exportedScope eff prog = (winners, dupProbs ++ unresolved)
   where
     (unresolved, occurrences) =
         partitionEithers
             [ case Map.lookup (labelText (stmtLabel stmt)) eff of
-                Just (ResolvedDef _ def) -> Right (ExportOccurrence i qs def)
+                Just (ResolvedDef _ def) -> Right (ExportOccurrence i qs (sdEntry def))
                 Nothing -> Left (mkProblem Error UnresolvedLabel (getSpan stmt))
             | (i, qs) <- zip [0 ..] prog
             , isExported qs
             , Just stmt <- [stmtOf qs]
             ]
 
-    (winners, dupProbs) = Map.foldr collect ([], []) (groupOn (edLabel . occDef) occurrences)
+    (winners, dupProbs) = Map.foldr collect ([], []) (groupOn (ieLabel . occEntry) occurrences)
 
     collect occs (defs, probs) =
         let (winner, losers) = winnerAndLosers occOrder occs
-         in (occDef winner : defs, probs ++ map dupWarning losers)
+         in (occEntry winner : defs, probs ++ map dupWarning losers)
 
     dupWarning = mkProblem Warning DuplicateDirective . getSpan . occStmt
 
@@ -119,7 +124,7 @@ isImported p = p `elem` [ImportedOverride, ImportedPlain]
 
 data Candidate = Candidate
     { candFrom :: FilePath
-    , candDef :: ExportedDef
+    , candDef :: ScopeDef
     , candPrecedence :: Precedence
     , candOrder :: (Int, Int)
     -- ^ Position of the @using@ that introduced it, then within its own file.
@@ -195,13 +200,13 @@ unnecessaryOverrides imports contests = localProbs ++ usingProbs
 -- | A dependency's exported scope, and the @using@ directive that pulled it in.
 data ImportedScope = ImportedScope
     { importedVia :: UsingTarget
-    , importedDefs :: LabelTable ExportedDef
+    , importedDefs :: LabelTable InterfaceEntry
     }
 
 -- | The standard prelude's exported scope, in scope everywhere with no directive.
 data PreludeScope = PreludeScope
     { preludeFile :: FilePath
-    , preludeDefs :: LabelTable ExportedDef
+    , preludeDefs :: LabelTable InterfaceEntry
     }
 
 {- | Resolve a file's effective scope: its own definitions, everything its dependencies
@@ -217,23 +222,23 @@ effectiveScope ::
 effectiveScope self locals imports prelude = (accepted, loserProbs ++ overrideProbs)
   where
     contests = Map.map (winnerAndLosers candKey) grouped
-    grouped = groupOn (edLabel . candDef) (localCandidates ++ importedCandidates ++ preludeCandidates)
+    grouped = groupOn (ieLabel . sdEntry . candDef) (localCandidates ++ importedCandidates ++ preludeCandidates)
 
-    localPrec d = if edIsOverride d then LocalOverride else LocalPlain
+    localPrec d = if sdIsOverride d then LocalOverride else LocalPlain
     importedPrec via = if usingIsOverride via then ImportedOverride else ImportedPlain
 
-    localCandidates = [Candidate self d (localPrec d) (0, edOrder d) (getSpan d) | d <- locals]
+    localCandidates = [Candidate self d (localPrec d) (0, edOrder l) (getSpan l) | l <- locals, let d = localDef self l]
 
     importedCandidates =
-        [ Candidate (usingPath via) d (importedPrec via) (order, edOrder d) (getSpan via)
+        [ Candidate (usingPath via) (importedDef e) (importedPrec via) (order, ieOrder e) (getSpan via)
         | (order, ImportedScope via defs) <- zip [0 ..] imports
-        , d <- Map.elems defs
+        , e <- Map.elems defs
         ]
 
     preludeCandidates =
-        [ Candidate (preludeFile p) d Prelude (0, edOrder d) (getSpan d)
+        [ Candidate (preludeFile p) (importedDef e) Prelude (0, ieOrder e) (getSpan e)
         | Just p <- [prelude]
-        , d <- Map.elems (preludeDefs p)
+        , e <- Map.elems (preludeDefs p)
         ]
 
     accepted = Map.map (\(w, _) -> ResolvedDef (candFrom w) (candDef w)) contests

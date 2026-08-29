@@ -12,6 +12,7 @@ import Betzac.Compilation.Context (
     FileEntry (..),
     ResolvedDef (..),
     UsingTarget (..),
+    rdOrigin,
  )
 import Betzac.Compilation.Label.Scope (labelText)
 import qualified Betzac.Pipeline as B (PipelineResult (parseResult))
@@ -75,8 +76,8 @@ definitionAt ctx fp pos = do
     labelTarget entry = do
         lbl <- lookupSpan (labels entry)
         eff <- feEffective entry
-        ResolvedDef from def <- Map.lookup (labelText lbl) eff
-        pure $ Location (filePathToUri from) (toRange (getSpan def))
+        rd <- Map.lookup (labelText lbl) eff
+        pure $ Location (filePathToUri $ rdOrigin rd) (toRange $ getSpan (rdDef rd))
 
     labels entry = universeOf (maybe [] fst (B.parseResult (fePipeline entry))) :: [Label Ps]
 

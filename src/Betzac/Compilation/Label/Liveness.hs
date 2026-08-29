@@ -4,6 +4,7 @@ import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaProgram, Labelling)
 import Betzac.AST.Utils (exprLabels)
 import Betzac.Compilation.Context
+import Betzac.Compilation.Interface (InterfaceEntry)
 import Betzac.Compilation.Label.Scope
 import Betzac.Diagnostic
 import Betzac.Span
@@ -14,19 +15,20 @@ import qualified Data.Set as Set
 {- | Every label reachable from a file's exported scope. An imported label is marked
 reached but not expanded, its body belonging to the file that defines it.
 -}
-liveLabels :: LabelTable ResolvedDef -> LabelTable ExportedDef -> FilePath -> Set.Set Labelling
-liveLabels eff exported file = foldl' reach roots $ Map.elems exported
+liveLabels :: LabelTable ResolvedDef -> LabelTable InterfaceEntry -> FilePath -> Set.Set Labelling
+liveLabels eff exported file = foldl' expand roots $ Map.keys exported
   where
     roots = Map.keysSet exported -- exported names are live by definition
-    reach seen def = foldl' visit seen $ refsOf def
+    expand seen name = foldl' visit seen $ maybe [] refsOf (ownBody name)
     visit seen name
         | name `Set.member` seen = seen
-        | otherwise = case Map.lookup name eff of
-            Just (ResolvedDef from def) | from == file -> reach (Set.insert name seen) def
-            Just _ -> Set.insert name seen
-            _ -> seen -- undefined, and reported by the resolution pass
-    refsOf :: ExportedDef -> [Labelling]
-    refsOf = foldMap (map labelText . exprLabels) . edExpr
+        | Map.member name eff = expand (Set.insert name seen) name
+        | otherwise = seen -- undefined, and reported by the resolution pass
+        -- Only a definition in this file has a body to walk.
+    ownBody name = do
+        ResolvedDef from def <- Map.lookup name eff
+        if from == file then sdExpr def else Nothing
+    refsOf = map labelText . exprLabels
 
 checkDeadLabels :: LabelTable ResolvedDef -> Set.Set Labelling -> FilePath -> [SemanticProblem]
 checkDeadLabels eff live file =

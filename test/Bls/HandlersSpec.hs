@@ -16,7 +16,7 @@ import System.IO.Temp (withSystemTempDirectory)
 import Language.LSP.Protocol.Lens hiding (context, length, name)
 import Language.LSP.Protocol.Types
 import Language.LSP.Test
-import Test.Hspec hiding (before, after)
+import Test.Hspec hiding (after, before)
 
 betzaKind :: LanguageKind
 betzaKind = LanguageKind_Custom "betza"
@@ -286,6 +286,14 @@ spec = describe "bls handlers" $ do
                 writeFile (dir </> "main.betza") "using dep;\nexport Y = X;\n"
                 locs <- definitionsAt dir "main.betza" (Position 1 11)
                 map (view uri) locs `shouldBe` [filePathToUri (dir </> "dep.betza")]
+
+        it "jumps past a re-exporting file to the one that really defines the label" $
+            inWorkspace $ \dir -> do
+                writeFile (dir </> "base.betza") "export X = :1,0:;\n"
+                writeFile (dir </> "mid.betza") "using base;\nexport X;\n"
+                writeFile (dir </> "main.betza") "using mid;\nexport Y = X;\n"
+                locs <- definitionsAt dir "main.betza" (Position 1 11)
+                locs `shouldBe` [Location (filePathToUri (dir </> "base.betza")) (lineRange 0 0 0 17)]
 
         it "jumps to the file a using directive names, from the path itself" $
             inWorkspace $ \dir -> do
