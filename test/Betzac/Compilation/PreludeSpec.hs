@@ -33,7 +33,7 @@ writePrelude dir = do
 -- | Compile 'target' against a prelude, returning the fully resolved context.
 compileWith :: FilePath -> FilePath -> Maybe FilePath -> IO (Either SemanticProblem CompilationContext)
 compileWith dir target prelude = do
-    result <- Driver.discover TIO.readFile dir target prelude allWarnings
+    result <- Driver.discover TIO.readFile Nothing dir target prelude allWarnings
     return $ Driver.sealPrelude . Driver.resolveScopes =<< result
 
 diagnosticsOn :: String -> CompilationContext -> [SemanticProblem]

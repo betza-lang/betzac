@@ -11,6 +11,9 @@ import Betzac.Compilation.Context (
     FileStatus (ScopesResolved),
     ResolvedDef,
     UsingTarget (usingPath),
+    feIsInterfaced,
+    fePipeline,
+    feSourceHash,
  )
 import Betzac.Compilation.Interface (InterfaceEntry, ieLabel)
 import Betzac.Compilation.Label (checkLabels)
@@ -46,6 +49,9 @@ data Resolution = Resolution
 resolveFile :: Maybe CompilationContext -> FilePath -> Resolution -> Resolution
 resolveFile prev path st = case Map.lookup path $ ccFiles (rsContext st) of
     Nothing -> st
+    -- Served from its stored interface: its exports are known and nothing here
+    -- recomputes them, so it counts as carried for every dependent.
+    Just entry | feIsInterfaced entry -> st{rsCarried = Set.insert path (rsCarried st)}
     Just entry -> case feEffective entry of
         Just _ -> st
         Nothing ->
@@ -84,7 +90,7 @@ carriedEntry prev carried deps path entry = do
     old <- Map.lookup path . ccFiles =<< prev
     exported <- feExported old
     effective <- feEffective old
-    if sourceText (fePipeline old) == sourceText (fePipeline entry)
+    if feSourceHash old == feSourceHash entry
         && feUsingTargets old == feUsingTargets entry
         && all (`Set.member` carried) deps
         then
@@ -105,7 +111,7 @@ scope (local or pulled in via @using@), so exportedScope needs it already comput
 resolveFileStage :: FilePath -> CompilationContext -> Stage (Map.Map String InterfaceEntry, Map.Map String ResolvedDef)
 resolveFileStage path ctx1 = do
     let entry1 = ccFiles ctx1 Map.! path
-        prog = maybe [] fst (parseResult $ fePipeline entry1)
+        prog = maybe [] fst (parseResult =<< fePipeline entry1)
         localCands = localDefs prog
 
         imports = [ImportedScope t (exportsOf $ usingPath t) | t <- feUsingTargets entry1]

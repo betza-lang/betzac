@@ -4,12 +4,11 @@ directive naming it.
 module Betzac.Compilation.Driver.Prelude (resolvePrelude, sealPrelude) where
 
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
 import System.Directory (canonicalizePath, doesFileExist)
 import System.Environment (lookupEnv)
 import System.FilePath ((</>))
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feHasError)
+import Betzac.Compilation.Context (CompilationContext (..), FileBody (..), FileEntry (..), feHasError)
 import Betzac.Diagnostic (
     SemanticProblem (..),
     SemanticProblemKind (SystemFailure),
@@ -59,8 +58,12 @@ sealPrelude ctx = case ccPrelude ctx >>= \p -> (,) p <$> Map.lookup p (ccFiles c
         entry
             { feDirectiveProblems = []
             , feScopeProblems = []
-            , fePipeline = (fePipeline entry){semanticResult = fmap (const []) (semanticResult $ fePipeline entry)}
+            , feBody = silencedBody (feBody entry)
             }
+
+    -- An interfaced prelude never carried diagnostics in the first place.
+    silencedBody (Compiled pr) = Compiled pr{semanticResult = fmap (const []) (semanticResult pr)}
+    silencedBody body = body
 
 systemError :: String -> SemanticProblem
 systemError msg = mkProblem Error (SystemFailure msg) Generated

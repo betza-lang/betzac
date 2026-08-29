@@ -12,6 +12,7 @@ import Betzac.Compilation.Context (
     FileEntry (..),
     ResolvedDef (..),
     UsingTarget (..),
+    fePipeline,
     rdOrigin,
  )
 import Betzac.Compilation.Label.Scope (labelText)
@@ -79,7 +80,7 @@ definitionAt ctx fp pos = do
         rd <- Map.lookup (labelText lbl) eff
         pure $ Location (filePathToUri $ rdOrigin rd) (toRange $ getSpan (rdDef rd))
 
-    labels entry = universeOf (maybe [] fst (B.parseResult (fePipeline entry))) :: [Label Ps]
+    labels entry = universeOf (maybe [] fst (B.parseResult =<< fePipeline entry)) :: [Label Ps]
 
     lookupSpan :: (HasSpan a) => [a] -> Maybe a
     lookupSpan = foldr (\x acc -> if covers (getSpan x) pos then Just x else acc) Nothing

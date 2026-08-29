@@ -19,8 +19,9 @@ import Control.Exception (IOException, try)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..))
+import Betzac.Compilation.Context (CompilationContext (..), feSourceHash)
 import Betzac.Compilation.Driver (SourceCompiler)
+import Betzac.Compilation.Interface (hashText)
 import Betzac.Pipeline (PipelineResult (..), fromScratch)
 
 {- | What a cached context was compiled for. A context is only reusable for the same
@@ -115,6 +116,6 @@ contextMatches :: CompilationContext -> Map.Map FilePath Text -> Bool
 contextMatches ctx now =
     Map.size now == Map.size (ccFiles ctx)
         && and
-            [ Map.lookup path now == Just (sourceText $ fePipeline entry)
+            [ (hashText <$> Map.lookup path now) == Just (feSourceHash entry)
             | (path, entry) <- Map.toList (ccFiles ctx)
             ]

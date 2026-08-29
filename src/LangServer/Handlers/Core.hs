@@ -2,8 +2,9 @@
 
 module LangServer.Handlers.Core (contextFor, pipelineFor, publishDiagnostics, makeDiagnostic) where
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feDiagnostics)
+import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feDiagnostics, fePipeline)
 import Betzac.Compilation.Driver (SourceAccess (..), SourceReader, discoverWith, resolvePrelude, resolveScopesFrom, sealPrelude)
+import Betzac.Compilation.Driver.Store (defaultStore, publishInterfaces)
 import Betzac.Compilation.Flag (CompilerFlag (..), CompilerOptions, Wspecifier (..), optionsFromFlags)
 import Betzac.Debug.PrettyPrint (prettyPrint)
 import Betzac.Diagnostic (SemanticProblem (..), Severity (..))
@@ -54,14 +55,16 @@ contextFor cache fp src = do
     reader <- overlayReader fp src
     liftIO $ runExceptT $ do
         prelude <- ExceptT $ resolvePrelude Nothing
+        store <- liftIO defaultStore
         let key = CompileKey fp root (Just prelude)
         reusable <- liftIO $ reusableContext cache key reader
         case reusable of
             Just ctx -> return ctx
             Nothing -> do
-                ctx0 <- ExceptT $ discoverWith (SourceAccess reader (cachingCompiler cache)) root fp (Just prelude) blsOptions
+                ctx0 <- ExceptT $ discoverWith (SourceAccess reader (cachingCompiler cache) (Just store)) root fp (Just prelude) blsOptions
                 previous <- liftIO $ previousContext cache key
                 ctx <- ExceptT $ return $ sealPrelude $ resolveScopesFrom previous ctx0
+                liftIO $ publishInterfaces store ctx
                 ctx <$ liftIO (rememberContext cache key ctx)
 
 {- | One file's own lex/parse/semantic result, reusing whatever the last compile of
@@ -148,10 +151,13 @@ attributed to it.
 -}
 fileDiagnostics :: FileEntry -> [Diagnostic]
 fileDiagnostics entry =
-    lexDiags (fePipeline entry)
-        <> parseDiags (fePipeline entry)
-        <> map semanticProblemToDiagnostic (fromMaybe [] (B.semanticResult (fePipeline entry)))
+    foldMap pipelineDiags (fePipeline entry)
         <> map semanticProblemToDiagnostic (feDiagnostics entry)
+  where
+    pipelineDiags pr =
+        lexDiags pr
+            <> parseDiags pr
+            <> map semanticProblemToDiagnostic (fromMaybe [] (B.semanticResult pr))
 
 lexDiags :: B.PipelineResult -> [Diagnostic]
 lexDiags result = maybe [] (foldMap bundleToDiagnostics . snd) (B.lexResult result)

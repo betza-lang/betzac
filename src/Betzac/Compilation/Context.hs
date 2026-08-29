@@ -1,7 +1,11 @@
 module Betzac.Compilation.Context (
     CompilationContext (..),
     FileEntry (..),
+    FileBody (..),
     FileStatus (..),
+    fePipeline,
+    feSourceHash,
+    feIsInterfaced,
     UsingTarget (..),
     ExportedDef (..),
     edIsOverride,
@@ -29,7 +33,7 @@ import Betzac.AST.Phases (Ps)
 import Betzac.AST.Types (BetzaExpr, Labelling, QualifiedStmt)
 import Betzac.AST.Utils (exprOf, isOverride, stmtOf)
 import Betzac.Compilation.Flag (CompilerOptions)
-import Betzac.Compilation.Interface (InterfaceEntry, ieOrigin, interfaceEntry)
+import Betzac.Compilation.Interface (Interface (..), InterfaceEntry, InterfaceHash, hashText, ieOrigin, interfaceEntry)
 import Betzac.Diagnostic (SemanticProblem (..), Severity (Error))
 import Betzac.Pipeline (PipelineResult (..))
 import Betzac.Span (HasSpan (..), Span)
@@ -113,15 +117,22 @@ re-exports something it imported.
 rdOrigin :: ResolvedDef -> FilePath
 rdOrigin = ieOrigin . sdEntry . rdDef
 
-data FileStatus = Discovered | Parsed | ScopesResolved | Failed
+data FileStatus = Discovered | Parsed | ScopesResolved | FromInterface | Failed
     deriving (Eq, Show)
+
+{- | What is known about a file: everything, for one this run compiled, or only what
+its dependents need, for one served from a stored interface.
+-}
+data FileBody
+    = Compiled PipelineResult
+    | Interfaced Interface
 
 {- | Everything known about one file discovered during a compilation job. Entries are
 keyed by canonicalized absolute path in 'ccFiles', so a file reached by more than one
 path is only ever parsed and compiled once.
 -}
 data FileEntry = FileEntry
-    { fePipeline :: PipelineResult
+    { feBody :: FileBody
     , feUsingTargets :: [UsingTarget]
     -- ^ In lexical order.
     , feExported :: Maybe (Map.Map String InterfaceEntry)
@@ -140,15 +151,34 @@ per-node ones.
 feDiagnostics :: FileEntry -> [SemanticProblem]
 feDiagnostics entry = feDirectiveProblems entry ++ feScopeProblems entry
 
+-- | The pipeline, for a file this run actually compiled.
+fePipeline :: FileEntry -> Maybe PipelineResult
+fePipeline entry = case feBody entry of
+    Compiled pr -> Just pr
+    Interfaced _ -> Nothing
+
+{- | The digest of the text the file was compiled from, however it is known. This is
+what says whether a recorded result still describes what is on disk.
+-}
+feSourceHash :: FileEntry -> InterfaceHash
+feSourceHash entry = case feBody entry of
+    Compiled pr -> hashText $ sourceText pr
+    Interfaced i -> ifSource i
+
+-- | Whether the file was served from its stored interface instead of being compiled.
+feIsInterfaced :: FileEntry -> Bool
+feIsInterfaced entry = case feBody entry of
+    Compiled _ -> False
+    Interfaced _ -> True
+
 -- | Everything the file's compilation had to say about it, at any severity.
 feProblems :: FileEntry -> [SemanticProblem]
-feProblems entry = feDiagnostics entry ++ concat (semanticResult $ fePipeline entry)
+feProblems entry = feDiagnostics entry ++ concat (semanticResult =<< fePipeline entry)
 
 -- | Whether the lexer or the parser had to recover.
 feBundleFailed :: FileEntry -> Bool
-feBundleFailed entry = failed (lexResult pr) || failed (parseResult pr)
+feBundleFailed entry = maybe False (\pr -> failed (lexResult pr) || failed (parseResult pr)) (fePipeline entry)
   where
-    pr = fePipeline entry
     failed :: Maybe (a, Maybe b) -> Bool
     failed = maybe False (maybe False (const True) . snd)
 

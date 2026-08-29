@@ -14,11 +14,13 @@ import Betzac.AST.Types (Directive (Using), QualifiedStmt)
 import Betzac.AST.Utils (directiveOf, isOverride)
 import Betzac.Compilation.Context (
     CompilationContext (..),
+    FileBody (Compiled),
     FileEntry (..),
     FileStatus (Discovered, Parsed),
     UsingTarget (..),
     emptyContext,
  )
+import Betzac.Compilation.Driver.Store (InterfaceStore, interfacedEntry, usableInterface)
 import Betzac.Compilation.Flag (CompilerOptions)
 import Betzac.Diagnostic (
     SemanticProblem,
@@ -35,14 +37,18 @@ type SourceReader = FilePath -> IO Text
 -- | Injected so bls can serve an already-compiled file where the CLI compiles afresh.
 type SourceCompiler = FilePath -> Text -> IO (Either PipelineError PipelineResult)
 
--- | How discovery obtains a file's text and its pipeline result.
+{- | How discovery obtains a file's text, its pipeline result, and its dependencies'
+stored interfaces.
+-}
 data SourceAccess = SourceAccess
     { saRead :: SourceReader
     , saCompile :: SourceCompiler
+    , saStore :: Maybe InterfaceStore
+    -- ^ Where a dependency may be read from instead of compiled.
     }
 
 -- | Reading from disk and compiling from scratch: what the CLI wants every time.
-fromDisk :: SourceReader -> SourceAccess
+fromDisk :: SourceReader -> Maybe InterfaceStore -> SourceAccess
 fromDisk readSource = SourceAccess readSource (\path src -> return $ fromScratch path src)
 
 {- | Discover every file reachable from a target's @using@ directives, plus the standard
@@ -50,8 +56,8 @@ prelude when one is given. Each one is read and parsed once, so a diamond depend
 only compiled once; a cycle shows up as a target that is already 'Discovered' but not
 yet 'Parsed'.
 -}
-discover :: SourceReader -> FilePath -> FilePath -> Maybe FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
-discover readSource = discoverWith (fromDisk readSource)
+discover :: SourceReader -> Maybe InterfaceStore -> FilePath -> FilePath -> Maybe FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
+discover readSource store = discoverWith (fromDisk readSource store)
 
 -- | 'discover', over a caller-supplied way of reading and compiling each file.
 discoverWith :: SourceAccess -> FilePath -> FilePath -> Maybe FilePath -> CompilerOptions -> IO (Either SemanticProblem CompilationContext)
@@ -64,16 +70,23 @@ discoverWith access workspaceRoot target preludePath opts = do
             absTarget <- canonicalizePath target
             absPrelude <- traverse canonicalizePath preludePath
             let ctx0 = emptyContext absRoot absTarget absPrelude opts
-            seeded <- maybe (return $ Right ctx0) (\p -> visit access p ctx0) absPrelude
-            either (return . Left) (visit access absTarget) seeded
+            seeded <- maybe (return $ Right ctx0) (\p -> visit access (saStore access) p ctx0) absPrelude
+            -- The target is always compiled: its diagnostics are the point of the run.
+            either (return . Left) (visit access Nothing absTarget) seeded
   where
     systemError msg = mkProblem Error (SystemFailure msg) Generated
 
 -- | Read, parse, and record one file, then recurse into its @using@ targets.
-visit :: SourceAccess -> FilePath -> CompilationContext -> IO (Either SemanticProblem CompilationContext)
-visit access path ctx
+visit :: SourceAccess -> Maybe InterfaceStore -> FilePath -> CompilationContext -> IO (Either SemanticProblem CompilationContext)
+visit access store path ctx
     | Map.member path (ccFiles ctx) = return $ Right ctx
     | otherwise = do
+        cached <- maybe (return Nothing) (\s -> usableInterface s (saRead access) path) store
+        case cached of
+            Just i -> return $ Right ctx{ccFiles = Map.insert path (interfacedEntry i) $ ccFiles ctx}
+            Nothing -> compile
+  where
+    compile = do
         readResult <- try $ saRead access path
         case readResult of
             Left ioErr ->
@@ -86,7 +99,7 @@ visit access path ctx
                     Right pr -> do
                         let placeholder =
                                 FileEntry
-                                    { fePipeline = pr
+                                    { feBody = Compiled pr
                                     , feUsingTargets = []
                                     , feExported = Nothing
                                     , feEffective = Nothing
@@ -125,7 +138,7 @@ processTarget access referrer (ctx, deps) t = do
                 | feStatus entry == Discovered ->
                     return (addDiagnostic referrer (mkProblem Error (UsingCircular [referrer, path]) Generated) ctx, deps)
             _ -> do
-                visited <- visit access path ctx
+                visited <- visit access (saStore access) path ctx
                 case visited of
                     Left problem -> return (addDiagnostic referrer problem ctx, deps)
                     Right ctx' -> return (ctx', deps ++ [t{usingPath = path}])

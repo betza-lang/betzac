@@ -8,7 +8,7 @@ import Options
 import Betzac.Debug.Dot.Visitor (toDot)
 import qualified Betzac.Pipeline as B (PipelineResult (..))
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feDiagnostics, feHasError)
+import Betzac.Compilation.Context (CompilationContext (..), FileBody (Compiled), FileEntry (..), feDiagnostics, feHasError, fePipeline)
 import Betzac.Compilation.Driver (discover, resolvePrelude, resolveScopes, sealPrelude)
 import Betzac.Compilation.Driver.Store (defaultStore, publishInterfaces)
 import Betzac.Compilation.Flag (CompilerOptions (terminateOnFirstError), applyOptions, optionsFromFlags)
@@ -96,11 +96,11 @@ showDependencies ctx = do
             ++ show (feStatus entry)
             ++ "]"
             ++ " lex="
-            ++ resultTag (B.lexResult (fePipeline entry))
+            ++ resultTag (B.lexResult =<< fePipeline entry)
             ++ " parse="
-            ++ resultTag (B.parseResult (fePipeline entry))
+            ++ resultTag (B.parseResult =<< fePipeline entry)
             ++ " analysis="
-            ++ maybe passed (\ps -> if any ((== Error) . semSev) ps then failure else success) (B.semanticResult (fePipeline entry))
+            ++ maybe passed (\ps -> if any ((== Error) . semSev) ps then failure else success) (B.semanticResult =<< fePipeline entry)
             ++ concatMap ((" " ++) . describeDiag) (feDiagnostics entry)
 
     describeDiag d = "(" ++ show (semSev d) ++ " " ++ causeOf (semKind d) ++ ")"
@@ -167,8 +167,10 @@ applyOptionsToContext copts ctx = ctx{ccFiles = Map.map adjustEntry (ccFiles ctx
         entry
             { feDirectiveProblems = applyOptions copts (feDirectiveProblems entry)
             , feScopeProblems = applyOptions copts (feScopeProblems entry)
-            , fePipeline = (fePipeline entry){B.semanticResult = fmap (applyOptions copts) (B.semanticResult (fePipeline entry))}
+            , feBody = adjustBody (feBody entry)
             }
+    adjustBody (Compiled pr) = Compiled pr{B.semanticResult = fmap (applyOptions copts) (B.semanticResult pr)}
+    adjustBody body = body
 
 hPutIndentLn :: S.Handle -> String -> IO ()
 hPutIndentLn h s = S.hPutStrLn h $ "    " ++ s
@@ -190,9 +192,10 @@ main = do
     -- Discovery lexes and parses the whole `using` dependency tree (not just the
     -- target) to even find out what that tree is, so it runs before, and subsumes,
     -- the target's own single-file LEXER/PARSER/ANALYSIS stages below.
+    store <- defaultStore
     result <- runExceptT $ do
         prelude <- ExceptT $ resolvePrelude (preludePath opts)
-        ctx0 <- ExceptT $ discover T.readFile root fp (Just prelude) copts
+        ctx0 <- ExceptT $ discover T.readFile (Just store) root fp (Just prelude) copts
         ExceptT $ return $ sealPrelude $ resolveScopes ctx0
     case result of
         -- A `system`-cause failure always terminates immediately, regardless of flags.
@@ -201,15 +204,13 @@ main = do
             S.exitFailure
         Right ctx1 -> do
             -- Before warning flags are applied: what is cacheable must not depend on them.
-            store <- defaultStore
             publishInterfaces store ctx1
             let ctx = applyOptionsToContext copts ctx1
             case Map.lookup (ccTarget ctx) (ccFiles ctx) of
                 Nothing -> do
                     S.hPutStrLn S.stderr "Fatal: target file missing from discovered context"
                     S.exitFailure
-                Just targetEntry -> do
-                    let results = fePipeline targetEntry
+                Just targetEntry | Just results <- fePipeline targetEntry -> do
                     whenVeryVerbose opts $
                         T.hPutStrLn S.stderr $
                             (T.unlines . map ("    " <>) . T.lines) (B.sourceText results)
@@ -225,3 +226,7 @@ main = do
                     if anyFailed
                         then S.exitFailure
                         else S.hPutStrLn S.stderr ("[Info] " ++ causeOf CompilationSucceeded)
+                -- The target is always compiled, never served from its own interface.
+                Just _ -> do
+                    S.hPutStrLn S.stderr "Fatal: target file was not compiled"
+                    S.exitFailure
