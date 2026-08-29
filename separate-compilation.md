@@ -269,6 +269,17 @@ stronger claim is not.
    build. The claim being made is "a warm dependency costs a file read instead of a
    compile"; `bytes allocated in the heap` is what proves it.
 
+### Measured, 2026-08-28, `-O1`, `+RTS -s`
+
+| Target | Cold | Warm | |
+| --- | --- | --- | --- |
+| a 2-line file whose `using` pulls in the 623-line `taikyoku.betza` | 40,889,408 B | 12,608,256 B | **-69%**, 24ms → 8ms |
+| `taikyoku.betza` itself, whose dependencies are 46 lines between them | 38,852,784 B | 38,225,520 B | -1.6% |
+
+Warm readings repeat to within 30 bytes across runs. The second row is the honest shape
+of the thing: the target is always compiled, so the win is exactly the size of what you
+depend on, and nothing else.
+
 ---
 
 ## 9. How the interface projects forward
