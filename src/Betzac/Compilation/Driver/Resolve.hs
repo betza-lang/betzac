@@ -1,4 +1,4 @@
-module Betzac.Compilation.Driver.Resolve (resolveScopes, resolveScopesFrom) where
+module Betzac.Compilation.Driver.Resolve (resolveScopes, resolveScopesFrom, dependenciesOf) where
 
 import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map

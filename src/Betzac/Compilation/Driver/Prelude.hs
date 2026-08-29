@@ -9,7 +9,7 @@ import System.Directory (canonicalizePath, doesFileExist)
 import System.Environment (lookupEnv)
 import System.FilePath ((</>))
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feDiagnostics)
+import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feHasError)
 import Betzac.Diagnostic (
     SemanticProblem (..),
     SemanticProblemKind (SystemFailure),
@@ -52,7 +52,7 @@ sealPrelude :: CompilationContext -> Either SemanticProblem CompilationContext
 sealPrelude ctx = case ccPrelude ctx >>= \p -> (,) p <$> Map.lookup p (ccFiles ctx) of
     Nothing -> Right ctx
     Just (path, entry)
-        | entryHasError entry -> Left $ systemError $ "standard prelude failed to compile: " ++ path
+        | feHasError entry -> Left $ systemError $ "standard prelude failed to compile: " ++ path
         | otherwise -> Right ctx{ccFiles = Map.insert path (silenced entry) (ccFiles ctx)}
   where
     silenced entry =
@@ -61,16 +61,6 @@ sealPrelude ctx = case ccPrelude ctx >>= \p -> (,) p <$> Map.lookup p (ccFiles c
             , feScopeProblems = []
             , fePipeline = (fePipeline entry){semanticResult = fmap (const []) (semanticResult $ fePipeline entry)}
             }
-
-entryHasError :: FileEntry -> Bool
-entryHasError entry =
-    any isError (feDiagnostics entry)
-        || any isError (fromMaybe [] $ semanticResult $ fePipeline entry)
-        || bundleFailed (fmap snd $ lexResult $ fePipeline entry)
-        || bundleFailed (fmap snd $ parseResult $ fePipeline entry)
-  where
-    isError = (== Error) . semSev
-    bundleFailed = maybe False (maybe False (const True))
 
 systemError :: String -> SemanticProblem
 systemError msg = mkProblem Error (SystemFailure msg) Generated

@@ -8,8 +8,9 @@ import Options
 import Betzac.Debug.Dot.Visitor (toDot)
 import qualified Betzac.Pipeline as B (PipelineResult (..))
 
-import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feDiagnostics)
+import Betzac.Compilation.Context (CompilationContext (..), FileEntry (..), feDiagnostics, feHasError)
 import Betzac.Compilation.Driver (discover, resolvePrelude, resolveScopes, sealPrelude)
+import Betzac.Compilation.Driver.Store (defaultStore, publishInterfaces)
 import Betzac.Compilation.Flag (CompilerOptions (terminateOnFirstError), applyOptions, optionsFromFlags)
 import Betzac.Debug.PrettyPrint (PrettyPrint (..))
 import Betzac.Diagnostic (SemanticProblem (..), SemanticProblemKind (CompilationSucceeded), Severity (Error), causeOf)
@@ -18,7 +19,7 @@ import Betzac.Located (Located (tokenVal))
 import Control.Monad (when)
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -81,7 +82,7 @@ the target's resolved effective scope.
 showDependencies :: CompilationContext -> IO StageResult
 showDependencies ctx = do
     let entries = Map.toList (ccFiles ctx)
-        hasError = any (entryHasError . snd) entries
+        hasError = any (feHasError . snd) entries
         detail = do
             mapM_ (hPutIndentLn S.stderr . describeFile) entries
             case feEffective =<< Map.lookup (ccTarget ctx) (ccFiles ctx) of
@@ -89,12 +90,6 @@ showDependencies ctx = do
                 Nothing -> mempty
     return $ if hasError then err detail else ok{stageDetail = detail}
   where
-    entryHasError entry =
-        any ((== Error) . semSev) (feDiagnostics entry)
-            || bundleFailed (B.lexResult (fePipeline entry))
-            || bundleFailed (B.parseResult (fePipeline entry))
-            || maybe False (any ((== Error) . semSev)) (B.semanticResult (fePipeline entry))
-
     describeFile (path, entry) =
         path
             ++ " ["
@@ -109,8 +104,6 @@ showDependencies ctx = do
             ++ concatMap ((" " ++) . describeDiag) (feDiagnostics entry)
 
     describeDiag d = "(" ++ show (semSev d) ++ " " ++ causeOf (semKind d) ++ ")"
-
-    bundleFailed = maybe False (isJust . snd)
 
     resultTag Nothing = passed
     resultTag (Just (_, Just _)) = failure
@@ -207,6 +200,9 @@ main = do
             S.hPutStrLn S.stderr $ "Fatal: " ++ causeOf (semKind problem)
             S.exitFailure
         Right ctx1 -> do
+            -- Before warning flags are applied: what is cacheable must not depend on them.
+            store <- defaultStore
+            publishInterfaces store ctx1
             let ctx = applyOptionsToContext copts ctx1
             case Map.lookup (ccTarget ctx) (ccFiles ctx) of
                 Nothing -> do

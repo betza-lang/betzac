@@ -52,6 +52,7 @@ library
       Betzac.Compilation.Driver.Discovery
       Betzac.Compilation.Driver.Prelude
       Betzac.Compilation.Driver.Resolve
+      Betzac.Compilation.Driver.Store
       Betzac.Compilation.Flag
       Betzac.Compilation.Interface
       Betzac.Compilation.Label
@@ -160,6 +161,7 @@ test-suite betzac-test
       Compilation.InterfaceSpec
       Compilation.PreludeSpec
       Compilation.ScopeSpec
+      Compilation.StoreSpec
       Lexer.LexerQC
       Lexer.LexerSpec
       Parser.ParserHedgehog

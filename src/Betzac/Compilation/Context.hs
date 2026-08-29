@@ -15,6 +15,10 @@ module Betzac.Compilation.Context (
     ResolvedDef (..),
     rdOrigin,
     feDiagnostics,
+    feProblems,
+    feBundleFailed,
+    feHasError,
+    feIsClean,
     emptyContext,
 ) where
 
@@ -26,8 +30,8 @@ import Betzac.AST.Types (BetzaExpr, Labelling, QualifiedStmt)
 import Betzac.AST.Utils (exprOf, isOverride, stmtOf)
 import Betzac.Compilation.Flag (CompilerOptions)
 import Betzac.Compilation.Interface (InterfaceEntry, ieOrigin, interfaceEntry)
-import Betzac.Diagnostic (SemanticProblem)
-import Betzac.Pipeline (PipelineResult)
+import Betzac.Diagnostic (SemanticProblem (..), Severity (Error))
+import Betzac.Pipeline (PipelineResult (..))
 import Betzac.Span (HasSpan (..), Span)
 
 -- | One @using@ directive, once its target has been resolved to a real file.
@@ -135,6 +139,25 @@ per-node ones.
 -}
 feDiagnostics :: FileEntry -> [SemanticProblem]
 feDiagnostics entry = feDirectiveProblems entry ++ feScopeProblems entry
+
+-- | Everything the file's compilation had to say about it, at any severity.
+feProblems :: FileEntry -> [SemanticProblem]
+feProblems entry = feDiagnostics entry ++ concat (semanticResult $ fePipeline entry)
+
+-- | Whether the lexer or the parser had to recover.
+feBundleFailed :: FileEntry -> Bool
+feBundleFailed entry = failed (lexResult pr) || failed (parseResult pr)
+  where
+    pr = fePipeline entry
+    failed :: Maybe (a, Maybe b) -> Bool
+    failed = maybe False (maybe False (const True) . snd)
+
+feHasError :: FileEntry -> Bool
+feHasError entry = any ((== Error) . semSev) (feProblems entry) || feBundleFailed entry
+
+-- | Nothing to say about it at all: the only state whose compilation is worth keeping.
+feIsClean :: FileEntry -> Bool
+feIsClean entry = feStatus entry == ScopesResolved && null (feProblems entry) && not (feBundleFailed entry)
 
 data CompilationContext = CompilationContext
     { ccWorkspaceRoot :: FilePath

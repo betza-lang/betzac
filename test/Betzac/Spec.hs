@@ -4,6 +4,7 @@ import qualified Compilation.FlagSpec as FlagSpec
 import qualified Compilation.InterfaceSpec as InterfaceSpec
 import qualified Compilation.PreludeSpec as PreludeSpec
 import qualified Compilation.ScopeSpec as ScopeSpec
+import qualified Compilation.StoreSpec as StoreSpec
 import qualified Lexer.LexerQC as LexerQC
 import qualified Lexer.LexerSpec as LexerSpec
 import qualified Parser.ParserHedgehog as ParserHedgehog
@@ -19,6 +20,7 @@ main = do
     hspec InterfaceSpec.spec
     hspec ScopeSpec.spec
     hspec DriverSpec.spec
+    hspec StoreSpec.spec
     hspec PreludeSpec.spec
     hspec RecoverySpec.spec
     hspec LiteralAssignmentSpec.spec
