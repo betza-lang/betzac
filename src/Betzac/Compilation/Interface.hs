@@ -23,7 +23,9 @@ module Betzac.Compilation.Interface (
 import Data.Bits (shiftR, xor, (.&.))
 import Data.Char (ord)
 import Data.List (sortOn)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word64)
@@ -96,10 +98,19 @@ data Interface = Interface
 
 {- | What dependents are entitled to notice. Deliberately blind to 'ifSource' and
 'ifDeps': an edit that leaves the exports alone must leave this alone too, or nothing
-downstream is spared.
+downstream is spared. Blind to the file table too, so a change in layout is not a
+change in meaning.
 -}
 interfaceHash :: Interface -> InterfaceHash
-interfaceHash = hashText . T.unlines . map renderExport . sortedExports
+interfaceHash = hashText . T.unlines . map digest . sortedExports
+
+-- | One export, canonically, with the path last because it may hold spaces.
+digest :: InterfaceEntry -> Text
+digest e =
+    T.unwords $
+        [T.pack (ieLabel e), tshow (ieOrder e)]
+            ++ map tshow (renderSpan $ ieSpan e)
+            ++ [T.pack $ ieOrigin e]
 
 -- | Bumping this invalidates every artifact on disk.
 formatVersion :: Int
@@ -111,24 +122,36 @@ magic = T.pack "betzac-bi"
 sortedExports :: Interface -> [InterfaceEntry]
 sortedExports = sortOn ieLabel . ifExports
 
+{- | Origins interned into a table. A label and a path may each hold spaces, and only
+one free-form field can end a line, so the export line names its origin by index and
+keeps its label last.
+-}
+originTable :: Interface -> [FilePath]
+originTable = Set.toAscList . Set.fromList . map ieOrigin . ifExports
+
 renderInterface :: Interface -> Text
 renderInterface i =
     T.unlines $
         T.unwords [magic, tshow formatVersion]
             : T.unwords [T.pack "source", T.pack $ renderHash (ifSource i)]
             : map renderDep (ifDeps i)
+            ++ zipWith renderOrigin [0 :: Int ..] origins
             ++ map renderExport (sortedExports i)
+  where
+    origins = originTable i
+    indexOf o = Map.findWithDefault 0 o $ Map.fromList (zip origins [0 :: Int ..])
+    renderExport e =
+        T.unwords $
+            [T.pack "export", tshow (ieOrder e)]
+                ++ map tshow (renderSpan $ ieSpan e)
+                ++ [tshow (indexOf $ ieOrigin e), T.pack (ieLabel e)]
 
 -- | The path goes last: it may contain spaces, and nothing else on a line may.
 renderDep :: DependencyStamp -> Text
 renderDep d = T.unwords [T.pack "dep", T.pack $ renderHash (dsHash d), T.pack $ dsPath d]
 
-renderExport :: InterfaceEntry -> Text
-renderExport e =
-    T.unwords $
-        [T.pack "export", T.pack (ieLabel e), tshow (ieOrder e)]
-            ++ map tshow (renderSpan $ ieSpan e)
-            ++ [T.pack $ ieOrigin e]
+renderOrigin :: Int -> FilePath -> Text
+renderOrigin ix path = T.unwords [T.pack "file", tshow ix, T.pack path]
 
 -- | Start and end as line/column pairs. Megaparsec counts from 1, so zeroes mean 'Generated'.
 renderSpan :: Span -> [Int]
@@ -178,10 +201,11 @@ parseInterface src = case T.lines src of
         let tagged = mapMaybe (splitFields 1) ls
             linesFor key = [rest | ([kw], rest) <- tagged, kw == T.pack key]
         srcHash <- one $ linesFor "source"
+        origins <- Map.fromList <$> traverse origin (linesFor "file")
         Interface
             <$> parseHash (T.unpack srcHash)
             <*> traverse dep (linesFor "dep")
-            <*> traverse export (linesFor "export")
+            <*> traverse (export origins) (linesFor "export")
 
     one [x] = Right x
     one _ = Left "expected exactly one source line"
@@ -190,13 +214,22 @@ parseInterface src = case T.lines src of
         Just ([h], path) -> flip DependencyStamp <$> parseHash (T.unpack h) <*> pure (T.unpack path)
         _ -> Left $ "malformed dep line: " ++ T.unpack line
 
-    export line = case splitFields 6 line of
-        Just ([label, order, sl, sc, el, ec], origin) -> do
+    origin :: Text -> Either String (Int, FilePath)
+    origin line = case splitFields 1 line of
+        Just ([ix], path) -> flip (,) (T.unpack path) <$> readInt ix
+        _ -> Left $ "malformed file line: " ++ T.unpack line
+
+    export origins line = case splitFields 6 line of
+        Just ([order, sl, sc, el, ec, ix], label) -> do
             n <- readInt order
             ns <- traverse readInt [sl, sc, el, ec]
-            interfaceEntry (T.unpack label) n (T.unpack origin) <$> readSpan (T.unpack origin) ns
+            path <- lookupOrigin origins =<< readInt ix
+            interfaceEntry (T.unpack label) n path <$> readSpan path ns
         _ -> Left $ "malformed export line: " ++ T.unpack line
 
+    lookupOrigin origins ix = maybe (Left $ "no file " ++ show ix ++ " in the table") Right $ Map.lookup ix origins
+
+    readInt :: Text -> Either String Int
     readInt t = case reads (T.unpack t) of
         [(n, "")] -> Right n
         _ -> Left $ "malformed integer: " ++ T.unpack t

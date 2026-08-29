@@ -26,9 +26,13 @@ import qualified Hedgehog.Range as Range
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 import Test.Hspec.Hedgehog
 
--- | Spaces included: the path is the one field that may hold one.
+-- | Spaces included: a path may hold one.
 genPath :: Gen FilePath
 genPath = Gen.string (Range.linear 1 20) (Gen.element "/abc .-_")
+
+-- | The descriptor alphabet, which is alphanumerics, comma and space.
+genLabel :: Gen String
+genLabel = Gen.string (Range.linear 1 12) (Gen.choice [Gen.alphaNum, Gen.element ", "])
 
 genSpan :: Gen Span
 genSpan = Gen.choice [pure Generated, RealSpan <$> genPos <*> genPos]
@@ -39,7 +43,7 @@ genSpan = Gen.choice [pure Generated, RealSpan <$> genPos <*> genPos]
 genEntry :: Gen InterfaceEntry
 genEntry =
     interfaceEntry
-        <$> Gen.string (Range.linear 1 6) Gen.alphaNum
+        <$> genLabel
         <*> Gen.int (Range.linear 0 500)
         <*> genPath
         <*> genSpan
@@ -68,8 +72,18 @@ spec = describe "Compilation.Interface" $ do
                 `shouldSatisfy` isLeft
 
         it "rejects a truncated export rather than dropping the label it names" $
-            parseInterface (T.pack "betzac-bi 1\nsource 0000000000000000\nexport X 0 1 1\n")
+            parseInterface (T.pack "betzac-bi 1\nsource 0000000000000000\nexport 0 1 1\n")
                 `shouldSatisfy` isLeft
+
+        it "rejects an export naming a file the table does not hold" $
+            parseInterface (T.pack "betzac-bi 1\nsource 0000000000000000\nexport 0 0 0 0 0 7 X\n")
+                `shouldSatisfy` isLeft
+
+    describe "renderInterface" $
+        it "interns each origin once, however many exports name it" $ do
+            let entry n = interfaceEntry n 0 "/a b/base.betza" Generated
+                i = Interface (hashText $ T.pack "") [] [entry "one two", entry "three"]
+            length (filter (T.isPrefixOf $ T.pack "file ") (T.lines $ renderInterface i)) `shouldBe` 1
 
     describe "interfaceEntry" $
         it "anchors a span to the file that defines the label, not the one re-exporting it" $ do

@@ -151,6 +151,19 @@ spec = describe "Compilation.Store" $ do
                 ctx <- warm dir store "main.betza"
                 servedFromInterface "dep.betza" ctx `shouldBe` False
 
+        it "serves a dependency whose labels hold spaces, as a descriptor's may"
+            $ inWorkspace
+                [ ("main.betza", "using dep;\nexport Y = :earth general:;\n")
+                , ("dep.betza", "export :earth general: = :1,0:;\nexport :go between: = :2,1:;\n")
+                ]
+            $ \dir store -> do
+                _ <- cold dir store "main.betza"
+                stored <- readStored store (dir </> "dep.betza")
+                map ieLabel . ifExports <$> stored `shouldBe` Just ["earth general", "go between"]
+                ctx <- warm dir store "main.betza"
+                servedFromInterface "dep.betza" ctx `shouldBe` True
+                causesOn "main.betza" ctx `shouldBe` []
+
     describe "readStored" $ do
         it "misses rather than fails on a store that does not exist" $ do
             stored <- readStored (storeAt "/nonexistent/betzac-store-spec") "/main.betza"
