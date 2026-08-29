@@ -1,6 +1,7 @@
 import qualified AST.GenericSpec as GenericSpec
 import qualified Compilation.DriverSpec as DriverSpec
 import qualified Compilation.FlagSpec as FlagSpec
+import qualified Compilation.InterfaceSpec as InterfaceSpec
 import qualified Compilation.PreludeSpec as PreludeSpec
 import qualified Compilation.ScopeSpec as ScopeSpec
 import qualified Lexer.LexerQC as LexerQC
@@ -15,6 +16,7 @@ main :: IO ()
 main = do
     hspec LexerSpec.spec
     hspec FlagSpec.spec
+    hspec InterfaceSpec.spec
     hspec ScopeSpec.spec
     hspec DriverSpec.spec
     hspec PreludeSpec.spec

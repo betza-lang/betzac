@@ -23,6 +23,7 @@ module Betzac.Compilation.Interface (
 import Data.Bits (shiftR, xor, (.&.))
 import Data.Char (ord)
 import Data.List (sortOn)
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word64)
@@ -145,39 +146,56 @@ readSpan _ ns = Left $ "malformed span: " ++ unwords (map show ns)
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
 
+{- | Split off @n@ space-separated fields, keeping the rest of the line verbatim. Every
+line ends in a path, and a path may hold spaces; nothing before it may.
+-}
+splitFields :: Int -> Text -> Maybe ([Text], Text)
+splitFields n t
+    | n <= 0 = Just ([], t)
+    | otherwise = case T.breakOn space t of
+        (f, rest) | not (T.null rest) -> consing f <$> splitFields (n - 1) (T.drop 1 rest)
+        _ -> Nothing
+  where
+    space = T.pack " "
+    consing f (fs, rest) = (f : fs, rest)
+
 {- | A malformed or stale-versioned artifact is a 'Left' for the caller to treat as a
 cache miss, never as a compilation error: nothing a user wrote is wrong.
 -}
 parseInterface :: Text -> Either String Interface
-parseInterface src = case map T.words (T.lines src) of
+parseInterface src = case T.lines src of
     [] -> Left "empty interface"
     (header : rest) -> checkHeader header >> body rest
   where
-    checkHeader [m, v]
-        | m /= magic = Left $ "not an interface file: " ++ T.unpack m
-        | v /= tshow formatVersion = Left $ "interface format " ++ T.unpack v ++ ", expected " ++ show formatVersion
-        | otherwise = Right ()
-    checkHeader ws = Left $ "malformed header: " ++ T.unpack (T.unwords ws)
+    checkHeader line = case splitFields 1 line of
+        Just ([m], v)
+            | m /= magic -> Left $ "not an interface file: " ++ T.unpack m
+            | v /= tshow formatVersion -> Left $ "interface format " ++ T.unpack v ++ ", expected " ++ show formatVersion
+            | otherwise -> Right ()
+        _ -> Left $ "malformed header: " ++ T.unpack line
 
     body ls = do
-        srcHash <- one [h | (k : h : _) <- ls, k == T.pack "source"]
-        Interface <$> parseHash (T.unpack srcHash) <*> traverse dep deps <*> traverse export exports
-      where
-        deps = [ws | (k : ws) <- ls, k == T.pack "dep"]
-        exports = [ws | (k : ws) <- ls, k == T.pack "export"]
+        let tagged = mapMaybe (splitFields 1) ls
+            linesFor key = [rest | ([kw], rest) <- tagged, kw == T.pack key]
+        srcHash <- one $ linesFor "source"
+        Interface
+            <$> parseHash (T.unpack srcHash)
+            <*> traverse dep (linesFor "dep")
+            <*> traverse export (linesFor "export")
 
     one [x] = Right x
     one _ = Left "expected exactly one source line"
 
-    dep (h : rest) = flip DependencyStamp <$> parseHash (T.unpack h) <*> pure (T.unpack $ T.unwords rest)
-    dep ws = Left $ "malformed dep line: " ++ T.unpack (T.unwords ws)
+    dep line = case splitFields 1 line of
+        Just ([h], path) -> flip DependencyStamp <$> parseHash (T.unpack h) <*> pure (T.unpack path)
+        _ -> Left $ "malformed dep line: " ++ T.unpack line
 
-    export (label : order : sl : sc : el : ec : rest) = do
-        n <- readInt order
-        ns <- traverse readInt [sl, sc, el, ec]
-        let origin = T.unpack $ T.unwords rest
-        interfaceEntry (T.unpack label) n origin <$> readSpan origin ns
-    export ws = Left $ "malformed export line: " ++ T.unpack (T.unwords ws)
+    export line = case splitFields 6 line of
+        Just ([label, order, sl, sc, el, ec], origin) -> do
+            n <- readInt order
+            ns <- traverse readInt [sl, sc, el, ec]
+            interfaceEntry (T.unpack label) n (T.unpack origin) <$> readSpan (T.unpack origin) ns
+        _ -> Left $ "malformed export line: " ++ T.unpack line
 
     readInt t = case reads (T.unpack t) of
         [(n, "")] -> Right n
