@@ -78,6 +78,7 @@ library
       Betzac.Semantic.Passes
       Betzac.Span
       Betzac.Token
+      Betzac.Utils.Helper
       Betzac.Utils.Unparse
       Betzac.Version
       LangServer.Cache

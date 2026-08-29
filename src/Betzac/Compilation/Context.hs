@@ -15,7 +15,7 @@ import Control.Monad ((>=>))
 import qualified Data.Map.Strict as Map
 
 import Betzac.AST.Phases (Ps)
-import Betzac.AST.Types (BetzaExpr, QualifiedStmt)
+import Betzac.AST.Types (BetzaExpr, Labelling, QualifiedStmt)
 import Betzac.AST.Utils (exprOf, isOverride, stmtOf)
 import Betzac.Compilation.Flag (CompilerOptions)
 import Betzac.Diagnostic (SemanticProblem)
@@ -37,7 +37,7 @@ instance HasSpan UsingTarget where
 it can span the @export@/@override@ keyword too.
 -}
 data ExportedDef = ExportedDef
-    { edLabel :: String
+    { edLabel :: Labelling
     , edQualifiedStmt :: QualifiedStmt Ps
     , edOrder :: Int
     -- ^ Lexical position within its file, for tie-breaking.

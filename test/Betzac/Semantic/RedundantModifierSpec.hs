@@ -2,7 +2,7 @@
 
 module Semantic.RedundantModifierSpec (spec) where
 
-import Data.List (isInfixOf, nub)
+import Data.List (intercalate, isInfixOf, nub)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -159,6 +159,45 @@ spec = describe "Semantic.RedundantModifier" $ do
             -- the axis. Were the axis missing from `<ff>`, `s` would subsume it.
             causes "export X = <ff>sW;\n" `shouldBe` []
 
+    describe "subsumed behaviour modifiers (3.5.6.2)" $ do
+        -- `m` separates: `c` followed by `cy` lexes as `cc` and a stray `y`.
+        it "reports a behaviour subsumed by the same kind's any-modality form" $
+            subsumptions "export X = cmcyW;\n" `shouldBe` 1
+
+        it "reports it with the wider modifier on either side" $
+            subsumptions "export X = cymcW;\n" `shouldBe` 1
+
+        it "blames the narrow modifier, not the wide one" $
+            blamed "export X = cymcW;\n" `shouldBe` [15]
+
+        it "reports a doubled modality subsumed by the any-modality form" $
+            subsumptions "export X = ccmcyW;\n" `shouldBe` 1
+
+        it "reports every occurrence the wide modifier covers" $
+            subsumptions "export X = cmcmcyW;\n" `shouldBe` 2
+
+        it "reports leaping and jumping the same way" $
+            map subsumptions ["export X = gmgyW;\n", "export X = jmjyW;\n"] `shouldBe` [1, 1]
+
+    describe "what behaviour is not subsumed" $ do
+        it "leaves a lone any-modality behaviour alone" $
+            causes "export X = cyW;\n" `shouldBe` []
+
+        it "leaves a behaviour of another kind alone" $
+            causes "export X = mcyW;\n" `shouldBe` []
+
+        it "leaves a doubled modality alone, twice not covering once" $
+            causes "export X = ccmcW;\n" `shouldBe` []
+
+        it "leaves hopping alone, it having no any-modality form" $
+            causes "export X = pmppW;\n" `shouldBe` []
+
+        it "counts two any-modality behaviours as a duplicate, not a subsumption" $
+            map ($ "export X = cymcyW;\n") [subsumptions, duplicates] `shouldBe` [0, 1]
+
+        it "leaves the same behaviour on two different legs alone" $
+            causes "export X = cyW cF;\n" `shouldBe` []
+
     describe "severity" $
         it "reports redundancy as a warning, never an error" $
             map semSev (problemsOf "export X = mmW;\nexport Y = fvW;\n")
@@ -180,7 +219,7 @@ spec = describe "Semantic.RedundantModifier" $ do
         it "is silenced by -w even when -Wlang asks for it" $
             length (under [SuppressWarnings, GenerateWarnings Wlang]) `shouldBe` 0
 
-    describe "property" $
+    describe "property" $ do
         it "reports one duplicate per modifier a leg repeats, whatever else the program contains" $
             hedgehog $ do
                 prog <- forAll genProgram
@@ -199,6 +238,20 @@ spec = describe "Semantic.RedundantModifier" $ do
                 cover 15 "none at all" (expected == 0)
                 duplicates src === expected
 
+        it "reports one subsumption per behaviour another behaviour on the leg covers" $
+            hedgehog $ do
+                bs <- forAll $ Gen.list (Range.linear 2 6) (Gen.element behaviours)
+                let src = T.pack ("export X = " ++ intercalate "m" bs ++ "W;\n")
+                    anyModality b = b `elem` ["cy", "gy"]
+                    covered b =
+                        not (anyModality b)
+                            && any (\w -> anyModality w && take 1 w == take 1 b) bs
+                    expected = length (filter covered bs)
+                annotate (T.unpack src)
+                cover 20 "something subsumed" (expected > 0)
+                cover 20 "nothing subsumed" (expected == 0)
+                subsumptions src === expected
+
 {- | Statements whose legs repeat a modifier, with the number of repeats each contains,
 mixed into generated programs. Adjacent repeats only -- the non-adjacent case is pinned
 by its own unit test above.
@@ -210,3 +263,7 @@ offenders =
     , ("export Q = mmmW;", 2)
     , ("export Q = ffW;", 1)
     ]
+
+-- | Behaviour modifiers, spelt so that any two of them may sit side by side.
+behaviours :: [String]
+behaviours = ["c", "cc", "cy", "g", "gy"]

@@ -4,9 +4,10 @@ module Betzac.Semantic.Modifier.Subsume (analysisSubsumedModifiers) where
 
 import Betzac.AST
 import Betzac.Diagnostic
+import Betzac.Utils.Helper (groupByEq)
 
 import Control.Monad (when)
-import Data.List (groupBy, tails)
+import Data.List (inits, tails)
 import qualified Data.Set as Set
 
 analysisSubsumedModifiers :: [Modifier Ps] -> Pass ()
@@ -145,7 +146,7 @@ classesOf dm = Set.fromList . classesOf' . (strip <$>) $ case dm of
 
 analysisSubsumedDirections :: [DirectionModifier Ps] -> Pass ()
 analysisSubsumedDirections ms =
-    let classes = zip ms $ map classesOfHead $ groupBy stripEq ms
+    let classes = zip ms $ map classesOfHead $ groupByEq stripEq ms
         n = length classes
         runs = map (take n) . take n $ tails . cycle $ classes
      in mapM_ go runs
@@ -159,7 +160,18 @@ analysisSubsumedDirections ms =
     go _ = pure ()
 
     emitRedundant :: DirectionModifier Ps -> Pass ()
-    emitRedundant = emitWarningAt (RedundantModifier "subsumed by nearby modifiers")
+    emitRedundant = emitWarningAt $ RedundantModifier "subsumed by nearby modifiers"
+
+-- | Whether the first behaviour selects everything the second selects, and strictly more.
+subsumes :: Behaviour a -> Behaviour a -> Bool
+Behaviour _ (Any _) _ `subsumes` Behaviour _ (Any _) _ = False
+Behaviour kind1 (Any _) _ `subsumes` Behaviour kind2 _ _ = kind1 `stripEq` kind2
+_ `subsumes` _ = False
 
 analysisSubsumedBehaviours :: [Behaviour Ps] -> Pass ()
-analysisSubsumedBehaviours = const $ pure () -- TODO
+analysisSubsumedBehaviours ms =
+    mapM_ (emitWarningAt $ RedundantModifier "subsumed by nearby modifiers") $
+        [ m
+        | (m, before, after) <- zip3 ms (inits ms) (drop 1 $ tails ms)
+        , any (`subsumes` m) (before ++ after)
+        ]
