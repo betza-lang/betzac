@@ -103,7 +103,7 @@ spec = describe "Semantic.RedundantModifier" $ do
 
     describe "what is not a duplicate" $ do
         it "leaves two different behaviours alone" $
-            causes "export X = cmW;\n" `shouldBe` []
+            causes "export X = cmW - sK;\n" `shouldBe` []
 
         it "leaves a doubled modality alone, it being one modifier and not two" $
             causes "export X = ccW;\n" `shouldBe` []
@@ -112,7 +112,7 @@ spec = describe "Semantic.RedundantModifier" $ do
             causes "export X = fW fF;\n" `shouldBe` []
 
         it "leaves the same modifier on either side of a chain alone" $
-            causes "export X = fW - fW;\n" `shouldBe` []
+            causes "export X = sW - sW;\n" `shouldBe` []
 
     describe "subsumed direction modifiers (3.5.6.2)" $ do
         it "reports a direction subsumed by a wider one" $
@@ -151,7 +151,7 @@ spec = describe "Semantic.RedundantModifier" $ do
             causes "export X = sW;\n" `shouldBe` []
 
         it "leaves a lone `a` alone" $
-            causes "export X = aW;\n" `shouldBe` []
+            causes "export X = sW - aK;\n" `shouldBe` []
 
         it "leaves a doubled direction beside `s` alone, `s` reaching no axis" $
             -- Pins that `<ff>` selects the forward axis: `s` selects every displacement
@@ -168,7 +168,7 @@ spec = describe "Semantic.RedundantModifier" $ do
             subsumptions "export X = cymcW;\n" `shouldBe` 1
 
         it "blames the narrow modifier, not the wide one" $
-            blamed "export X = cymcW;\n" `shouldBe` [15]
+            blamed "export X = cymcW - sK;\n" `shouldBe` [15]
 
         it "reports a doubled modality subsumed by the any-modality form" $
             subsumptions "export X = ccmcyW;\n" `shouldBe` 1
@@ -187,7 +187,7 @@ spec = describe "Semantic.RedundantModifier" $ do
             causes "export X = mcyW;\n" `shouldBe` []
 
         it "leaves a doubled modality alone, twice not covering once" $
-            causes "export X = ccmcW;\n" `shouldBe` []
+            causes "export X = ccmcW - sK;\n" `shouldBe` []
 
         it "leaves hopping alone, it having no any-modality form" $
             causes "export X = pmppW;\n" `shouldBe` []

@@ -78,6 +78,7 @@ library
       Betzac.Semantic.Label.LiteralAssignment
       Betzac.Semantic.Modifier
       Betzac.Semantic.Modifier.Duplicate
+      Betzac.Semantic.Modifier.Restated
       Betzac.Semantic.Modifier.Subsume
       Betzac.Semantic.Passes
       Betzac.Span

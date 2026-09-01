@@ -5,7 +5,8 @@ module Betzac.Pipeline (
     PipelineError (..),
 ) where
 
-import Betzac.AST.Phases as B (Ps)
+import Betzac.AST.Desugar (desugar)
+import Betzac.AST.Phases as B (Ds, Ps)
 import Betzac.AST.Types as B (BetzaProgram)
 import qualified Betzac.Lexer.Lexer as B (runLexer)
 import Betzac.Located
@@ -46,6 +47,7 @@ data PipelineResult = PipelineResult
     , filePath :: FilePath
     , lexResult :: Maybe ([Located B.Token], Maybe LexBundle)
     , parseResult :: Maybe (BetzaProgram Ps, Maybe ParseBundle)
+    , desugarResult :: Maybe (BetzaProgram Ds)
     , semanticResult :: Maybe [SemanticProblem]
     }
     deriving (Show)
@@ -57,13 +59,14 @@ emptyResult f src =
         , filePath = f
         , lexResult = Nothing
         , parseResult = Nothing
+        , desugarResult = Nothing
         , semanticResult = Nothing
         }
 
 data PipelineError = SystemError String deriving (Show)
 
 pipeline :: Pipeline ()
-pipeline = lexStage >> parseStage >> semanticStage
+pipeline = lexStage >> parseStage >> desugarStage >> semanticStage
 
 updatePipeline :: PipelineResult -> Text -> Either PipelineError PipelineResult
 updatePipeline r = fromScratch $ filePath r
@@ -107,9 +110,17 @@ toErrorBundle f stream errs = case NE.nonEmpty errs of
             , pstateLinePrefix = ""
             }
 
-semanticStage :: Pipeline ()
-semanticStage = do
+desugarStage :: Pipeline ()
+desugarStage = do
     mparse <- gets parseResult
     case fst <$> mparse of
         Nothing -> return ()
-        Just ast -> modify $ \r -> r{semanticResult = Just $ runAllPasses ast}
+        Just ast -> modify $ \r -> r{desugarResult = Just $ desugar ast}
+
+semanticStage :: Pipeline ()
+semanticStage = do
+    mparse <- gets parseResult
+    mdesugar <- gets desugarResult
+    case (fst <$> mparse, mdesugar) of
+        (Just ast, Just ds) -> modify $ \r -> r{semanticResult = Just $ runAllPasses ast ds}
+        _ -> return ()

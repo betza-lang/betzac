@@ -6,6 +6,7 @@ import Betzac.Diagnostic
 import Betzac.Semantic.Direction.AmalgamatedDirection (analysisAmalgamatedDirection)
 import Betzac.Semantic.Label.LiteralAssignment (analysisLiteralAssignment)
 import Betzac.Semantic.Modifier (analysisModifiers)
+import Betzac.Semantic.Modifier.Restated (analysisRestatedModifiers)
 import Data.Maybe (mapMaybe)
 
 checkAmalgamatedDirections :: BetzaProgram Ps -> Pass ()
@@ -21,9 +22,10 @@ checkLiteralAssignment prog = mapM_ analysisLiteralAssignment $ mapMaybe stmtOf 
 checkModifiers :: BetzaProgram Ps -> Pass ()
 checkModifiers prog = mapM_ analysisModifiers $ universeOf prog
 
-runAllPasses :: BetzaProgram Ps -> [SemanticProblem]
-runAllPasses ast =
+runAllPasses :: BetzaProgram Ps -> BetzaProgram Ds -> [SemanticProblem]
+runAllPasses ast desugared =
     runPass $
         checkAmalgamatedDirections ast
             >> checkLiteralAssignment ast
             >> checkModifiers ast
+            >> analysisRestatedModifiers desugared
