@@ -621,17 +621,28 @@ This subsection gives the meaning of each construct of [Section 3.2](#32-grammar
 
 3.4.18.2 - A hurdle hopped over will be unaffected, whatever its allegiance: passing over a piece is not a capture, and so nothing about the hurdle's owner bears on whether the hop is available. Only the leg's destination is subject to allegiance, under the ordinary rule.
 
-3.4.18.3 - The modalities of the hurdle-related modifiers will be:
+3.4.18.3 - A modality that names an allegiance will do so uniformly: the letter alone will name the enemy, the doubled letter the friend, and the letter followed by `y` either. The modalities of the allegiance-bearing modifiers will accordingly be:
+
+| Written | Meaning |
+| --- | --- |
+| `c` | captures an enemy piece |
+| `cc` | captures a friendly piece |
+| `cy` | captures a piece of either allegiance |
+| `j` | visits an enemy piece |
+| `jj` | visits a friendly piece |
+| `jy` | visits a piece of either allegiance |
+| `g` | leaps an enemy piece |
+| `gg` | leaps a friendly piece |
+| `gy` | leaps a piece of either allegiance |
+
+3.4.18.4 - `p` will not name an allegiance, its modality counting hurdles instead:
 
 | Written | Meaning |
 | --- | --- |
 | `p` | exactly one hurdle, of either allegiance |
 | `pp` | any number of hurdles, of either allegiance, but at least one |
-| `j` | visits an enemy piece |
-| `jj` | visits a friendly piece |
-| `jy` | visits a piece of either allegiance |
-| `g` | leaps a piece of either allegiance |
-| `gg` | leaps a friendly piece, but not an enemy one |
+
+3.4.18.5 - `m`, `i` and `n` will carry no modality, there being nothing for one to name. A doubled letter will therefore be two modifiers rather than one modality (cf. 3.5.6.1), and a letter followed by `y` will not be written at all.
 
 ---
 
