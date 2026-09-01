@@ -41,6 +41,7 @@ library
       Betzac.Alphabet.Expr
       Betzac.Alphabet.Stmt
       Betzac.AST
+      Betzac.AST.Desugar
       Betzac.AST.Generic
       Betzac.AST.Origin
       Betzac.AST.Phases
@@ -156,6 +157,7 @@ test-suite betzac-test
   main-is: Spec.hs
   other-modules:
       Arbitrary
+      AST.DesugarSpec
       AST.GenericSpec
       Compilation.DriverSpec
       Compilation.FlagSpec
