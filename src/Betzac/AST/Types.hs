@@ -58,6 +58,8 @@ module Betzac.AST.Types (
     XUpper,
     XDescriptor,
     XLeaper,
+    XQualification,
+    XJoint,
     -- AST types
     BetzaProgram,
     QualifiedStmt (..),
@@ -79,16 +81,19 @@ module Betzac.AST.Types (
     Behaviour (..),
     BehaviourKind (..),
     BehaviourModality (..),
+    Qualification (..),
     Exponent (..),
     ExponentKind (..),
     Label (..),
     Number,
     Labelling,
+    OriginX,
 ) where
 
 import Betzac.Span (HasSpan (..))
 
 import Betzac.AST.Generic (GWalk (gwalk), Walk (..), WalkField)
+import Betzac.AST.Origin (HasOrigin (..))
 import Data.Data (Data, Typeable)
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
@@ -154,6 +159,10 @@ type family XUpper (p :: Type) :: Type
 type family XDescriptor (p :: Type) :: Type
 type family XLeaper (p :: Type) :: Type
 
+-- Field-position families: the phase decides the shape, not just an annotation.
+type family XQualification (p :: Type) :: Type
+type family XJoint (p :: Type) :: Type
+
 -- AST types, parameterized by phase
 
 type BetzaProgram p = [QualifiedStmt p]
@@ -181,7 +190,7 @@ data UnionExpr p = UnionExpr (NonEmpty (ModifierExpr p)) (XUnionExpr p)
 
 data ModifierExpr p = ModifierExpr
     { setup :: Bool
-    , modifiers :: [Modifier p]
+    , modifiers :: XQualification p
     , expExpr :: ExponentExpr p
     , modExprExt :: XModifierExpr p
     }
@@ -236,10 +245,16 @@ data BehaviourModality p
     | Twice (XTwice p)
     | Any (XAny p)
 
+-- | A modifier string once the phase guarantees what it must contain.
+data Qualification p = Qualification
+    { qualDirections :: NonEmpty (DirectionModifier p)
+    , qualBehaviours :: [Behaviour p]
+    }
+
 data Exponent p
     = Exponent
-        (Maybe (ChainOperator p))
-        [Modifier p]
+        (XJoint p)
+        (XQualification p)
         (ExponentKind p)
         (XExponent p)
 
@@ -309,6 +324,8 @@ type EqX p =
     , Eq (XUpper p)
     , Eq (XDescriptor p)
     , Eq (XLeaper p)
+    , Eq (XQualification p)
+    , Eq (XJoint p)
     )
 
 deriving instance (EqX p) => Eq (QualifiedStmt p)
@@ -330,6 +347,7 @@ deriving instance (EqX p) => Eq (Direction p)
 deriving instance (EqX p) => Eq (Behaviour p)
 deriving instance (EqX p) => Eq (BehaviourKind p)
 deriving instance (EqX p) => Eq (BehaviourModality p)
+deriving instance (EqX p) => Eq (Qualification p)
 deriving instance (EqX p) => Eq (Exponent p)
 deriving instance (EqX p) => Eq (ExponentKind p)
 deriving instance (EqX p) => Eq (Label p)
@@ -385,6 +403,8 @@ type ShowX p =
     , Show (XUpper p)
     , Show (XDescriptor p)
     , Show (XLeaper p)
+    , Show (XQualification p)
+    , Show (XJoint p)
     )
 
 deriving instance (ShowX p) => Show (QualifiedStmt p)
@@ -406,6 +426,7 @@ deriving instance (ShowX p) => Show (Direction p)
 deriving instance (ShowX p) => Show (Behaviour p)
 deriving instance (ShowX p) => Show (BehaviourKind p)
 deriving instance (ShowX p) => Show (BehaviourModality p)
+deriving instance (ShowX p) => Show (Qualification p)
 deriving instance (ShowX p) => Show (Exponent p)
 deriving instance (ShowX p) => Show (ExponentKind p)
 deriving instance (ShowX p) => Show (Label p)
@@ -463,6 +484,8 @@ type DataX p =
     , Data (XUpper p)
     , Data (XDescriptor p)
     , Data (XLeaper p)
+    , Data (XQualification p)
+    , Data (XJoint p)
     )
 
 deriving instance (DataX p) => Data (QualifiedStmt p)
@@ -484,6 +507,7 @@ deriving instance (DataX p) => Data (Direction p)
 deriving instance (DataX p) => Data (Behaviour p)
 deriving instance (DataX p) => Data (BehaviourKind p)
 deriving instance (DataX p) => Data (BehaviourModality p)
+deriving instance (DataX p) => Data (Qualification p)
 deriving instance (DataX p) => Data (Exponent p)
 deriving instance (DataX p) => Data (ExponentKind p)
 deriving instance (DataX p) => Data (Label p)
@@ -541,6 +565,8 @@ type WalkX p =
     , WalkField (XUpper p)
     , WalkField (XDescriptor p)
     , WalkField (XLeaper p)
+    , WalkField (XQualification p)
+    , WalkField (XJoint p)
     )
 
 deriving instance Generic (QualifiedStmt p)
@@ -562,6 +588,7 @@ deriving instance Generic (Direction p)
 deriving instance Generic (Behaviour p)
 deriving instance Generic (BehaviourKind p)
 deriving instance Generic (BehaviourModality p)
+deriving instance Generic (Qualification p)
 deriving instance Generic (Exponent p)
 deriving instance Generic (ExponentKind p)
 deriving instance Generic (Label p)
@@ -639,6 +666,10 @@ instance (WalkX p) => Walk (BehaviourKind p) where
     {-# INLINE walk #-}
 
 instance (WalkX p) => Walk (BehaviourModality p) where
+    walk collector = gwalk collector . from
+    {-# INLINE walk #-}
+
+instance (WalkX p) => Walk (Qualification p) where
     walk collector = gwalk collector . from
     {-# INLINE walk #-}
 
@@ -801,3 +832,17 @@ instance (SpanX p) => HasSpan (Label p) where
     getSpan (Upper _ ext) = getSpan ext
     getSpan (Descriptor _ ext) = getSpan ext
     getSpan (Leaper _ _ ext) = getSpan ext
+
+-- HasOrigin, for the nodes a desugaring can supply or find already written
+type OriginX p =
+    ( HasOrigin (XAmalgamated p)
+    , HasOrigin (XSingle p)
+    , HasOrigin (XBehaviour p)
+    )
+
+instance (OriginX p) => HasOrigin (DirectionModifier p) where
+    origin (Amalgamated _ _ ext) = origin ext
+    origin (Single _ ext) = origin ext
+
+instance (OriginX p) => HasOrigin (Behaviour p) where
+    origin (Behaviour _ _ ext) = origin ext

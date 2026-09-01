@@ -1,15 +1,18 @@
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Betzac.AST.Strip (Extensible (..)) where
 
-import Betzac.AST.Phases (Stripped)
+import Betzac.AST.Phases (Qualifying (..), Stripped)
 import Betzac.AST.Types
 import Data.Kind (Type)
 import qualified Data.List.NonEmpty as NE
 
 class (Eq (x Stripped)) => Extensible (x :: Type -> Type) where
-    strip :: x p -> x Stripped
-    stripEq :: x p -> x p -> Bool
+    strip :: (Qualifying p) => x p -> x Stripped
+    stripEq :: (Qualifying p) => x p -> x p -> Bool
     stripEq a b = strip a == strip b
 
 instance Extensible QualifiedStmt where
@@ -38,7 +41,8 @@ instance Extensible UnionExpr where
     strip (UnionExpr ms _) = UnionExpr (NE.map strip ms) ()
 
 instance Extensible ModifierExpr where
-    strip (ModifierExpr s ms e _) = ModifierExpr s (map strip ms) (strip e) ()
+    strip :: forall p. (Qualifying p) => ModifierExpr p -> ModifierExpr Stripped
+    strip (ModifierExpr s ms e _) = ModifierExpr s (map strip (toModifiers @p ms)) (strip e) ()
 
 instance Extensible ExponentExpr where
     strip (ExponentExpr a me _) = ExponentExpr (strip a) (maybe Nothing (Just . strip) $ me) ()
@@ -94,10 +98,11 @@ instance Extensible BehaviourModality where
     strip (Any _) = Any ()
 
 instance Extensible Exponent where
+    strip :: forall p. (Qualifying p) => Exponent p -> Exponent Stripped
     strip (Exponent mco ms k _) =
         Exponent
-            (maybe Nothing (Just . strip) $ mco)
-            (map strip ms)
+            (maybe Nothing (Just . strip) $ toJoint @p mco)
+            (map strip (toModifiers @p ms))
             (strip k)
             ()
 

@@ -120,7 +120,7 @@ forwardRightClasses =
     , Oblique N E
     ]
 
-classesOf :: DirectionModifier a -> Set.Set DisplacementClass
+classesOf :: (Qualifying a) => DirectionModifier a -> Set.Set DisplacementClass
 classesOf dm = Set.fromList . classesOf' . (strip <$>) $ case dm of
     Single d _ -> [d]
     Amalgamated d1 d2 _ -> [d1, d2]
@@ -163,7 +163,7 @@ analysisSubsumedDirections ms =
     emitRedundant = emitWarningAt $ RedundantModifier "subsumed by nearby modifiers"
 
 -- | Whether the first behaviour selects everything the second selects, and strictly more.
-subsumes :: Behaviour a -> Behaviour a -> Bool
+subsumes :: (Qualifying a) => Behaviour a -> Behaviour a -> Bool
 Behaviour _ (Any _) _ `subsumes` Behaviour _ (Any _) _ = False
 Behaviour kind1 (Any _) _ `subsumes` Behaviour kind2 _ _ = kind1 `stripEq` kind2
 _ `subsumes` _ = False

@@ -1,3 +1,6 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+
 module Betzac.Utils.Unparse (
     unparse,
     unparseQualifiedStmt,
@@ -24,16 +27,17 @@ module Betzac.Utils.Unparse (
 ) where
 
 import Betzac.AST
+import Betzac.AST.Phases (Qualifying (..))
 import qualified Betzac.Token as B
 
-unparse :: BetzaProgram a -> [B.Token]
+unparse :: (Qualifying a) => BetzaProgram a -> [B.Token]
 unparse stmts = concat $ unparseQualifiedStmt <$> stmts
 
-unparseQualifiedStmt :: QualifiedStmt a -> [B.Token]
+unparseQualifiedStmt :: (Qualifying a) => QualifiedStmt a -> [B.Token]
 unparseQualifiedStmt (Override d _) = B.TokOverride : unparseDirective d <> [B.TokEndStmt]
 unparseQualifiedStmt (Plain d _) = unparseDirective d <> [B.TokEndStmt]
 
-unparseDirective :: Directive a -> [B.Token]
+unparseDirective :: (Qualifying a) => Directive a -> [B.Token]
 unparseDirective (Using f _) = [B.TokUsing $ unparseFilePath f]
 unparseDirective (Export s _) = B.TokExport : unparseStmt s
 unparseDirective (Bare s _) = unparseStmt s
@@ -41,7 +45,7 @@ unparseDirective (Bare s _) = unparseStmt s
 unparseFilePath :: FilePath -> FilePath
 unparseFilePath f = (\c -> if c == '/' then '.' else c) <$> f
 
-unparseStmt :: BetzaStmt a -> [B.Token]
+unparseStmt :: (Qualifying a) => BetzaStmt a -> [B.Token]
 unparseStmt (Assign l e _) = unparseLabel l : B.TokAssign : unparseExpr e
 unparseStmt (LabelRef l _) = [unparseLabel l]
 
@@ -50,16 +54,16 @@ unparseLabel (Upper c _) = B.TokAtom c
 unparseLabel (Descriptor s _) = B.TokDescriptor s
 unparseLabel (Leaper a b _) = B.TokDescriptor $ show a ++ "," ++ show b
 
-unparseExpr :: BetzaExpr a -> [B.Token]
+unparseExpr :: (Qualifying a) => BetzaExpr a -> [B.Token]
 unparseExpr (BetzaExpr c _) = unparseChain c
 
-unparseChain :: ChainExpr a -> [B.Token]
+unparseChain :: (Qualifying a) => ChainExpr a -> [B.Token]
 unparseChain (ChainExpr u mcl _) = unparseUnion u <> maybe [] unparseChainLeg mcl
 
-unparseChainLeg :: ChainLeg a -> [B.Token]
+unparseChainLeg :: (Qualifying a) => ChainLeg a -> [B.Token]
 unparseChainLeg (ChainLeg op c _) = unparseChainOp op c
 
-unparseChainOp :: ChainOperator a -> ChainExpr a -> [B.Token]
+unparseChainOp :: (Qualifying a) => ChainOperator a -> ChainExpr a -> [B.Token]
 unparseChainOp (ChainOperator k (Mandatory _) _) c =
     unparseChainKind k : unparseChain c
 unparseChainOp (ChainOperator k (IffUnblocked _) _) c =
@@ -71,13 +75,13 @@ unparseChainKind :: ChainKind a -> B.Token
 unparseChainKind (Step _) = B.TokChainStep
 unparseChainKind (Sequence _) = B.TokChainSequence
 
-unparseUnion :: UnionExpr a -> [B.Token]
+unparseUnion :: (Qualifying a) => UnionExpr a -> [B.Token]
 unparseUnion (UnionExpr ms _) = concat $ unparseModExpr <$> ms
 
-unparseModExpr :: ModifierExpr a -> [B.Token]
+unparseModExpr :: forall a. (Qualifying a) => ModifierExpr a -> [B.Token]
 unparseModExpr (ModifierExpr s ms e _) =
     (if s then [B.TokBang] else [])
-        <> (ms >>= unparseModifier)
+        <> (toModifiers @a ms >>= unparseModifier)
         <> unparseExponentExpr e
 
 unparseModifier :: Modifier a -> [B.Token]
@@ -116,19 +120,19 @@ unparseBehaviourKind (Move _) = B.TokBehaviour 'm'
 unparseBehaviourKind (NoJump _) = B.TokBehaviour 'n'
 unparseBehaviourKind (Hop _) = B.TokBehaviour 'p'
 
-unparseExponentExpr :: ExponentExpr a -> [B.Token]
+unparseExponentExpr :: (Qualifying a) => ExponentExpr a -> [B.Token]
 unparseExponentExpr (ExponentExpr a me _) = unparseAtom a <> maybe [] unparseExponent me
 
-unparseAtom :: AtomExpr a -> [B.Token]
+unparseAtom :: (Qualifying a) => AtomExpr a -> [B.Token]
 unparseAtom (Paren e _) = [B.TokLParen] <> unparseExpr e <> [B.TokRParen]
 unparseAtom (From l _) = [unparseLabel l]
 
-unparseExponent :: Exponent a -> [B.Token]
-unparseExponent (Exponent mop ms k _) = case mop of
-    Nothing -> (ms >>= unparseModifier) <> [unparseExponentKind k]
-    Just (ChainOperator ck (Mandatory _) _) -> [unparseChainKind ck] <> (ms >>= unparseModifier) <> [unparseExponentKind k]
-    Just (ChainOperator ck (IffUnblocked _) _) -> [unparseChainKind ck, B.TokLBrace] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBrace]
-    Just (ChainOperator ck (Choose _) _) -> [unparseChainKind ck, B.TokLBracket] <> (ms >>= unparseModifier) <> [unparseExponentKind k, B.TokRBracket]
+unparseExponent :: forall a. (Qualifying a) => Exponent a -> [B.Token]
+unparseExponent (Exponent mop ms' k _) = case toJoint @a mop of
+    Nothing -> (toModifiers @a ms' >>= unparseModifier) <> [unparseExponentKind k]
+    Just (ChainOperator ck (Mandatory _) _) -> [unparseChainKind ck] <> (toModifiers @a ms' >>= unparseModifier) <> [unparseExponentKind k]
+    Just (ChainOperator ck (IffUnblocked _) _) -> [unparseChainKind ck, B.TokLBrace] <> (toModifiers @a ms' >>= unparseModifier) <> [unparseExponentKind k, B.TokRBrace]
+    Just (ChainOperator ck (Choose _) _) -> [unparseChainKind ck, B.TokLBracket] <> (toModifiers @a ms' >>= unparseModifier) <> [unparseExponentKind k, B.TokRBracket]
 
 unparseExponentKind :: ExponentKind a -> B.Token
 unparseExponentKind (Infinite _) = B.TokNumber 0

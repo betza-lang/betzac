@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Parser.ParserHedgehog (spec, genProgram) where
 
@@ -285,15 +287,15 @@ hasAtomExponent = anyExponentExpr $ \(ExponentExpr _ me _) -> isJust me
 hasBang :: BetzaExpr p -> Bool
 hasBang = anyModifierExpr $ \(ModifierExpr s _ _ _) -> s
 
-hasAmalgamated :: BetzaExpr p -> Bool
+hasAmalgamated :: forall p. (Qualifying p) => BetzaExpr p -> Bool
 hasAmalgamated =
     anyModifierExpr $ \(ModifierExpr _ ms _ _) ->
-        any (\case Directional (Amalgamated _ _ _) _ -> True; _ -> False) ms
+        any (\case Directional (Amalgamated _ _ _) _ -> True; _ -> False) (toModifiers @p ms)
 
 hasMultiUnion :: BetzaExpr p -> Bool
 hasMultiUnion = anyChainExpr $ \(ChainExpr (UnionExpr ne _) _ _) -> length ne >= 2
 
-hasModality :: ChainModality p -> BetzaExpr p -> Bool
+hasModality :: (Qualifying p) => ChainModality p -> BetzaExpr p -> Bool
 hasModality m =
     anyChainExpr $ \(ChainExpr _ ml _) ->
         maybe False (\(ChainLeg (ChainOperator _ m' _) _ _) -> m `stripEq` m') ml
