@@ -27,7 +27,6 @@ module Betzac.Utils.Unparse (
 ) where
 
 import Betzac.AST
-import Betzac.AST.Phases (Qualifying (..))
 import qualified Betzac.Token as B
 
 unparse :: (Qualifying a) => BetzaProgram a -> [B.Token]
