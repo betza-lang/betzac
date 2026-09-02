@@ -833,16 +833,76 @@ instance (SpanX p) => HasSpan (Label p) where
     getSpan (Descriptor _ ext) = getSpan ext
     getSpan (Leaper _ _ ext) = getSpan ext
 
--- HasOrigin, for the nodes a desugaring can supply or find already written
+{- | The nodes a desugaring can supply or find already written. Statements,
+expressions, atoms and labels are never synthesised, so they are absent here.
+-}
 type OriginX p =
     ( HasOrigin (XAmalgamated p)
     , HasOrigin (XSingle p)
+    , HasOrigin (XForward p)
+    , HasOrigin (XBackward p)
+    , HasOrigin (XLeftward p)
+    , HasOrigin (XRightward p)
+    , HasOrigin (XSideway p)
+    , HasOrigin (XVertically p)
+    , HasOrigin (XAll p)
     , HasOrigin (XBehaviour p)
+    , HasOrigin (XCapture p)
+    , HasOrigin (XLeap p)
+    , HasOrigin (XInitial p)
+    , HasOrigin (XJump p)
+    , HasOrigin (XMove p)
+    , HasOrigin (XNoJump p)
+    , HasOrigin (XHop p)
+    , HasOrigin (XOnce p)
+    , HasOrigin (XTwice p)
+    , HasOrigin (XAny p)
+    , HasOrigin (XChainOperator p)
+    , HasOrigin (XStep p)
+    , HasOrigin (XSequence p)
+    , HasOrigin (XMandatory p)
+    , HasOrigin (XChoose p)
+    , HasOrigin (XIffUnblocked p)
     )
 
 instance (OriginX p) => HasOrigin (DirectionModifier p) where
     origin (Amalgamated _ _ ext) = origin ext
     origin (Single _ ext) = origin ext
 
+instance (OriginX p) => HasOrigin (Direction p) where
+    origin (Forward ext) = origin ext
+    origin (Backward ext) = origin ext
+    origin (Leftward ext) = origin ext
+    origin (Rightward ext) = origin ext
+    origin (Sideway ext) = origin ext
+    origin (Vertically ext) = origin ext
+    origin (All ext) = origin ext
+
 instance (OriginX p) => HasOrigin (Behaviour p) where
     origin (Behaviour _ _ ext) = origin ext
+
+instance (OriginX p) => HasOrigin (BehaviourKind p) where
+    origin (Capture ext) = origin ext
+    origin (Leap ext) = origin ext
+    origin (Initial ext) = origin ext
+    origin (Jump ext) = origin ext
+    origin (Move ext) = origin ext
+    origin (NoJump ext) = origin ext
+    origin (Hop ext) = origin ext
+
+instance (OriginX p) => HasOrigin (BehaviourModality p) where
+    origin (Once ext) = origin ext
+    origin (Twice ext) = origin ext
+    origin (Any ext) = origin ext
+
+instance (OriginX p) => HasOrigin (ChainOperator p) where
+    origin (ChainOperator _ _ ext) = origin ext
+
+instance (OriginX p) => HasOrigin (ChainKind p) where
+    origin (Step ext) = origin ext
+    origin (Sequence ext) = origin ext
+
+instance (OriginX p) => HasOrigin (ChainModality p) where
+    origin (Mandatory ext) = origin ext
+    origin (Choose ext) = origin ext
+    origin (IffUnblocked ext) = origin ext

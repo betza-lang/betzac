@@ -6,6 +6,7 @@ import qualified Compilation.InterfaceSpec as InterfaceSpec
 import qualified Compilation.PreludeSpec as PreludeSpec
 import qualified Compilation.ScopeSpec as ScopeSpec
 import qualified Compilation.StoreSpec as StoreSpec
+import qualified Debug.DotSpec as DotSpec
 import qualified Lexer.LexerQC as LexerQC
 import qualified Lexer.LexerSpec as LexerSpec
 import qualified Parser.ParserHedgehog as ParserHedgehog
@@ -26,6 +27,7 @@ main = do
     hspec RecoverySpec.spec
     hspec LiteralAssignmentSpec.spec
     hspec RedundantModifierSpec.spec
+    hspec DotSpec.spec
     putStrLn "" >> putStrLn "========= Properties ========="
     hspec GenericSpec.spec
     hspec DesugarSpec.spec

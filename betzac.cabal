@@ -166,6 +166,7 @@ test-suite betzac-test
       Compilation.PreludeSpec
       Compilation.ScopeSpec
       Compilation.StoreSpec
+      Debug.DotSpec
       Lexer.LexerQC
       Lexer.LexerSpec
       Parser.ParserHedgehog

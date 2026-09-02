@@ -43,23 +43,12 @@ showLexResults _ p = case B.lexResult p of
                 }
 
 showParseResults :: Options -> B.PipelineResult -> IO StageResult
-showParseResults o p = case B.parseResult p of
+showParseResults _ p = case B.parseResult p of
     Nothing -> return notRun
-    Just (program, mbundle) -> do
-        case emitDot o of
-            Just "/dev/null" -> mempty
-            Just "stdout" -> T.hPutStr S.stdout (toDot program)
-            Just "-" -> T.hPutStr S.stdout (toDot program)
-            Just path -> T.writeFile path (toDot program)
-            Nothing -> mempty
-        let dotNote = case emitDot o of
-                Just path
-                    | path `notElem` ["/dev/null", "stdout", "-"] ->
-                        hPutIndentLn S.stderr ("Wrote AST to " ++ path)
-                _ -> mempty
+    Just (_, mbundle) ->
         return
             (maybe ok (const $ err mempty) mbundle)
-                { stageDetail = mapM_ (hPutBundlePretty S.stderr) mbundle >> dotNote
+                { stageDetail = mapM_ (hPutBundlePretty S.stderr) mbundle
                 }
 
 {- | The desugaring cannot fail: it is a total rewrite of a parsed tree, so it
@@ -67,6 +56,32 @@ reports only whether it had a tree to run on.
 -}
 showDesugarResults :: B.PipelineResult -> IO StageResult
 showDesugarResults p = return $ maybe notRun (const ok) (B.desugarResult p)
+
+{- | Draw the requested phase, or the last one the pipeline managed to produce.
+A phase asked for by name and never reached draws nothing rather than falling back.
+-}
+showDot :: DotRequest -> B.PipelineResult -> IO StageResult
+showDot req p = case drawn of
+    Nothing -> return notRun{stageDetail = hPutIndentLn S.stderr (missing ++ " tree was not produced")}
+    Just (phase, graph) -> do
+        writeGraph (dotPath req) graph
+        return ok{stageDetail = hPutIndentLn S.stderr ("Wrote " ++ phase ++ " AST to " ++ dotPath req)}
+  where
+    ps = toDot . fst <$> B.parseResult p
+    ds = toDot <$> B.desugarResult p
+
+    drawn = case dotPhase req of
+        Just PhasePs -> (,) "ps" <$> ps
+        Just PhaseDs -> (,) "ds" <$> ds
+        Nothing -> ((,) "ds" <$> ds) <|> ((,) "ps" <$> ps)
+
+    missing = maybe "no" show (dotPhase req)
+
+writeGraph :: FilePath -> T.Text -> IO ()
+writeGraph path graph
+    | path `elem` ["-", "stdout"] = T.hPutStr S.stdout graph
+    | path == "/dev/null" = mempty
+    | otherwise = T.writeFile path graph
 
 showAnalysis :: Options -> B.PipelineResult -> IO StageResult
 showAnalysis _ p = case B.semanticResult p of
@@ -226,12 +241,15 @@ main = do
                         runStages
                             opts
                             copts
-                            [ ("LEXER", showLexResults opts results)
-                            , ("PARSER", showParseResults opts results)
-                            , ("DESUGAR", showDesugarResults results)
-                            , ("ANALYSIS", showAnalysis opts results)
-                            , ("DEPENDENCIES", showDependencies ctx)
-                            ]
+                            ( [ ("LEXER", showLexResults opts results)
+                              , ("PARSER", showParseResults opts results)
+                              , ("DESUGAR", showDesugarResults results)
+                              ]
+                                ++ [("DOT", showDot req results) | Just req <- [emitDot opts]]
+                                ++ [ ("ANALYSIS", showAnalysis opts results)
+                                   , ("DEPENDENCIES", showDependencies ctx)
+                                   ]
+                            )
                     if anyFailed
                         then S.exitFailure
                         else S.hPutStrLn S.stderr ("[Info] " ++ causeOf CompilationSucceeded)
