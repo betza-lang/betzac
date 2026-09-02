@@ -155,7 +155,9 @@ exponentNode n@(Exponent mco ms k _) =
     myNode = (midNode 8) . summarize
 
 exponentKindNode :: ExponentKind p -> DotNode
-exponentKindNode = leafNode . summarize
+exponentKindNode = \case
+    n@(Repeat x _) -> midNode 8 (summarize n) [numberNode x]
+    n -> leafNode (summarize n)
 
 chainOperatorNode :: (Drawable p) => ChainOperator p -> DotNode
 chainOperatorNode n@(ChainOperator k m _) =

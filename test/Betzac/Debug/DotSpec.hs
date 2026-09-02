@@ -42,6 +42,8 @@ spec = describe "dot" $ do
         it "draws more nodes than the tree it came from" $
             T.count "label=" (dsGraph "export X = W - K;")
                 `shouldSatisfy` (> T.count "label=" (psGraph "export X = W - K;"))
+        it "draws an exponent's repetition count, not merely that it repeats" $
+            T.count "label=\"3\"" (dsGraph "export X = fsW3;") `shouldBe` 1
         it "marks a restatement where it stands" $
             tinted restatedColour (dsGraph "export X = acmW;") `shouldBe` 3
         it "leaves a restatement's children written, the letter having been typed" $
