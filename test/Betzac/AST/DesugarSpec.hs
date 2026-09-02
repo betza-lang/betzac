@@ -108,6 +108,9 @@ spec = describe "desugar" $ do
             modalitiesIn "export X = aW-3;" `shouldBe` [Mandatory ()]
         it "reads 0* as the braced modality it means" $
             modalitiesIn "export X = aW0*;" `shouldBe` [IffUnblocked ()]
+        it "leaves 0* and -{0} indistinguishable, being two spellings of one construct" $
+            map strip (desugared "export X = aW0*;")
+                `shouldBe` map strip (desugared "export X = aW-{0};")
 
     describe "round trip" $
         it "is idempotent through its own rendering" $

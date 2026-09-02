@@ -12,6 +12,7 @@ module Betzac.AST.Generic (universeOf, universeBy, Collector (..), visit, Walk (
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Typeable (Typeable, cast)
+import Data.Void (Void, absurd)
 import GHC.Generics
 
 import Betzac.Span (Span)
@@ -75,6 +76,10 @@ instance Walk () where
 -- 'String', which descending would visit one character at a time, at every node.
 instance Walk Span where
     walk _ _ acc = acc
+
+-- The field of a constructor the phase cannot spell, so the walk never arrives.
+instance Walk Void where
+    walk _ v _ = absurd v
 
 -- Containers: transparent, so an element is reached as if the container weren't there.
 

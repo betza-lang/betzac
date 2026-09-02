@@ -18,6 +18,7 @@ import Betzac.AST.Types
 import Betzac.Span (HasSpan (..), Span (Generated))
 import Data.Data (Data)
 import qualified Data.List.NonEmpty as NE
+import Data.Void (Void, absurd)
 import GHC.Generics (Generic, from)
 
 -- Phase indices
@@ -202,7 +203,7 @@ type instance XOnce Ds = ()
 type instance XTwice Ds = DsX
 type instance XAny Ds = DsX
 type instance XInfinite Ds = DsX
-type instance XSlippery Ds = DsX
+type instance XSlippery Ds = Void
 type instance XRepeat Ds = DsX
 type instance XUpper Ds = DsX
 type instance XDescriptor Ds = DsX
@@ -217,6 +218,9 @@ instance HasSpan () where -- Stripped phase, for uniformity
 
 instance HasSpan PsX where
     getSpan = psSpan
+
+instance HasSpan Void where -- a constructor Ds cannot spell has no span to give
+    getSpan = absurd
 
 instance HasSpan DsX where
     getSpan = dsSpan

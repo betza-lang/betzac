@@ -260,7 +260,7 @@ data Exponent p
 
 data ExponentKind p
     = Infinite (XInfinite p)
-    | Slippery (XSlippery p)
+    | Slippery !(XSlippery p)
     | Repeat Number (XRepeat p)
 
 data Label p
