@@ -62,6 +62,12 @@ showParseResults o p = case B.parseResult p of
                 { stageDetail = mapM_ (hPutBundlePretty S.stderr) mbundle >> dotNote
                 }
 
+{- | The desugaring cannot fail: it is a total rewrite of a parsed tree, so it
+reports only whether it had a tree to run on.
+-}
+showDesugarResults :: B.PipelineResult -> IO StageResult
+showDesugarResults p = return $ maybe notRun (const ok) (B.desugarResult p)
+
 showAnalysis :: Options -> B.PipelineResult -> IO StageResult
 showAnalysis _ p = case B.semanticResult p of
     Nothing -> return notRun
@@ -99,6 +105,8 @@ showDependencies ctx = do
             ++ resultTag (B.lexResult =<< fePipeline entry)
             ++ " parse="
             ++ resultTag (B.parseResult =<< fePipeline entry)
+            ++ " desugar="
+            ++ maybe passed (const success) (B.desugarResult =<< fePipeline entry)
             ++ " analysis="
             ++ maybe passed (\ps -> if any ((== Error) . semSev) ps then failure else success) (B.semanticResult =<< fePipeline entry)
             ++ concatMap ((" " ++) . describeDiag) (feDiagnostics entry)
@@ -220,6 +228,7 @@ main = do
                             copts
                             [ ("LEXER", showLexResults opts results)
                             , ("PARSER", showParseResults opts results)
+                            , ("DESUGAR", showDesugarResults results)
                             , ("ANALYSIS", showAnalysis opts results)
                             , ("DEPENDENCIES", showDependencies ctx)
                             ]
