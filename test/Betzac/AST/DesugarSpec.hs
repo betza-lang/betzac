@@ -1,13 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module AST.DesugarSpec (spec) where
+module AST.DesugarSpec (spec, parsed, desugared) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
 
 import Betzac.AST
 import Betzac.AST.Desugar (desugar)
-import Betzac.AST.Generic (universeOf)
 import Betzac.AST.Origin (Origin (..), origin)
 import Betzac.Pipeline (PipelineResult (parseResult), fromScratch)
 import Betzac.Utils.Unparse (unparse)
