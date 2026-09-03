@@ -12,6 +12,9 @@ data Origin
     = Written
     | Implied
     | Restated
+    | Contradicted
+    -- ^ Written, but asked for alongside something no leg can satisfy at once.
+    -- A leg holding one of these permits nothing (cf. the empty moveset).
     deriving (Eq, Show, Data, Generic)
 
 instance Walk Origin where

@@ -732,6 +732,8 @@ This subsection gives the meaning of each construct of [Section 3.2](#32-grammar
 
 3.4.34 - Modifiers of one class written at the same level will select the union of what each selects (3.4.13, 3.4.17.1). Modifiers of one class arriving from different levels will select the intersection.
 
+3.4.34.0.1 - A modality names a set of cases (3.4.18.3, 3.4.18.4), so two modalities of one kind arriving from different levels will intersect likewise. `c(cyX)` denotes `cX`, the outer modality naming the enemy alone; `p(ppX)` denotes `pX`, the outer count admitting one hurdle only. `c(ccX)` selects nothing, no allegiance being named by both (cf. 3.5.4.1).
+
 3.4.34.1 - Consequently `f(frN)` denotes `fN`, the outer modifier narrowing the inner rather than widening it, and `m(R)` denotes `mR`: a single leg is a final leg, carrying `cm` by 3.4.14.1, and the outer `m` narrows that to `m` alone.
 
 3.4.34.2 - A default is not a level. What 3.4.14.1 and 3.4.27.1 supply is supplied only where nothing was written (3.4.14.3), so it never intersects with what the source states.

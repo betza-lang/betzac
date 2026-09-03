@@ -80,6 +80,7 @@ library
       Betzac.Semantic.Modifier.Duplicate
       Betzac.Semantic.Modifier.Restated
       Betzac.Semantic.Modifier.Subsume
+      Betzac.Semantic.Moveset
       Betzac.Semantic.Passes
       Betzac.Span
       Betzac.Token

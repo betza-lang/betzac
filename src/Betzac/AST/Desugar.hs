@@ -172,6 +172,8 @@ qualification leg ms = Qualification directions behaviours
 
     behaviours
         | legFinality leg /= AlwaysFinal = stated
+        -- A leg permitting nothing has nothing to restate.
+        | any contradictory stated = stated
         | capturing && quiet = map restateFinal stated
         -- An enclosing level has said what the leg permits, so nothing is left
         -- unsaid to supply -- including where it permits nothing at all. A
@@ -186,6 +188,8 @@ qualification leg ms = Qualification directions behaviours
         | legFinality leg == NeverFinal = writtenBehaviours
         | null (legCarried leg) = writtenBehaviours
         | otherwise = narrowedBy (legCarried leg) writtenBehaviours
+
+    contradictory (Behaviour _ _ ext) = dsOrigin ext == Contradicted
 
     capturing = any (isFinalHalf Capture) stated
     quiet = any (isFinalHalf Move) stated
@@ -209,13 +213,62 @@ restates _ (Amalgamated _ _ _) = False
 permissions the leg states for itself; anything else it carries is simply added.
 -}
 narrowedBy :: [Behaviour Ds] -> [Behaviour Ds] -> [Behaviour Ds]
-narrowedBy carried stated = permitted <> statedRest <> carriedRest
+narrowedBy carried stated = permitted <> merged carriedRest statedRest
   where
     (carriedPermissions, carriedRest) = partition isPermission carried
     (statedPermissions, statedRest) = partition isPermission stated
+
+    -- A leg must permit something on the capture axis, so an empty intersection
+    -- there empties the move; both halves are kept and marked to say why.
     permitted
         | null statedPermissions = carriedPermissions
-        | otherwise = filter (\w -> any (sameKind w) carriedPermissions) statedPermissions
+        | null carriedPermissions = statedPermissions
+        | null kept = map contradicted (statedPermissions <> carriedPermissions)
+        | otherwise = kept
+    kept = concatMap (`narrowAgainst` carriedPermissions) statedPermissions
+
+{- | Everything else the two levels ask for: a kind named at both narrows, and a
+kind named at only one is simply carried through.
+-}
+merged :: [Behaviour Ds] -> [Behaviour Ds] -> [Behaviour Ds]
+merged carried stated = concatMap keep stated <> untouched
+  where
+    keep s = case narrowAgainst s carried of
+        [] -> [s] -- named at both but with nothing in common: not a permission, so not fatal
+        bs -> bs
+    untouched = [c | c <- carried, not (any (sameKind c) stated)]
+
+{- | One behaviour narrowed by whichever of the enclosing ones names its kind.
+Nothing, where they admit no case in common or where the enclosing level does not
+name the kind at all -- on the capture axis that level says what may happen, so a
+kind it leaves out is a kind it does not permit.
+-}
+narrowAgainst :: Behaviour Ds -> [Behaviour Ds] -> [Behaviour Ds]
+narrowAgainst s@(Behaviour k m x) carried = case filter (sameKind s) carried of
+    [] -> []
+    (Behaviour _ cm _ : _) -> case narrowModality k m cm of
+        Just m' -> [Behaviour k m' x]
+        Nothing -> []
+
+{- | The narrower of two modalities of one kind, or nothing where they admit no
+case in common. The two cases a modality distinguishes differ by kind, so which
+modality is the widest does too.
+-}
+narrowModality :: BehaviourKind Ds -> BehaviourModality Ds -> BehaviourModality Ds -> Maybe (BehaviourModality Ds)
+narrowModality k a b
+    | stripEq a b = Just a
+    | widest k a = Just b
+    | widest k b = Just a
+    | otherwise = Nothing
+
+-- | The modality admitting every case its kind distinguishes.
+widest :: BehaviourKind Ds -> BehaviourModality Ds -> Bool
+widest k m = case m of
+    -- `pp` is any number of hurdles, where `p` is exactly one.
+    Twice _ -> stripEq k (Hop implied)
+    -- `xy` is either allegiance, where `x` and `xx` name one each.
+    Any _ -> True
+    Once _ -> False
 
 -- | Whether a behaviour speaks to what may happen on the square the leg ends on.
 isPermission :: Behaviour Ds -> Bool
@@ -296,14 +349,18 @@ implied = DsX Generated Implied
 
 -- | Kept where it stands, so the diagnostic can point at what the reader wrote.
 class Restatable a where
-    restated :: a -> a
+    remark :: Origin -> a -> a
+
+restated, contradicted :: (Restatable a) => a -> a
+restated = remark Restated
+contradicted = remark Contradicted
 
 instance Restatable DsX where
-    restated x = x{dsOrigin = Restated}
+    remark o x = x{dsOrigin = o}
 
 instance Restatable (DirectionModifier Ds) where
-    restated (Amalgamated d1 d2 x) = Amalgamated d1 d2 (restated x)
-    restated (Single d x) = Single d (restated x)
+    remark o (Amalgamated d1 d2 x) = Amalgamated d1 d2 (remark o x)
+    remark o (Single d x) = Single d (remark o x)
 
 instance Restatable (Behaviour Ds) where
-    restated (Behaviour k m x) = Behaviour k m (restated x)
+    remark o (Behaviour k m x) = Behaviour k m (remark o x)

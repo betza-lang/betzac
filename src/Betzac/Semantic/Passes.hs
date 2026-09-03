@@ -7,6 +7,7 @@ import Betzac.Semantic.Direction.AmalgamatedDirection (analysisAmalgamatedDirect
 import Betzac.Semantic.Label.LiteralAssignment (analysisLiteralAssignment)
 import Betzac.Semantic.Modifier (analysisModifiers)
 import Betzac.Semantic.Modifier.Restated (analysisRestatedModifiers)
+import Betzac.Semantic.Moveset (analysisEmptyMoveset)
 import Data.Maybe (mapMaybe)
 
 checkAmalgamatedDirections :: BetzaProgram Ps -> Pass ()
@@ -29,3 +30,4 @@ runAllPasses ast desugared =
             >> checkLiteralAssignment ast
             >> checkModifiers ast
             >> analysisRestatedModifiers desugared
+            >> analysisEmptyMoveset desugared

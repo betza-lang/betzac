@@ -61,6 +61,25 @@ behavioursIn :: Text -> [BehaviourKind Stripped]
 behavioursIn src =
     [strip k | Behaviour k _ _ <- universeOf (desugared src) :: [Behaviour Ds]]
 
+-- | Every behaviour modality the tree ends up carrying.
+behaviourModalitiesIn :: Text -> [BehaviourModality Stripped]
+behaviourModalitiesIn src =
+    [strip m | Behaviour _ m _ <- universeOf (desugared src) :: [Behaviour Ds]]
+
+{- | The behaviours a leg is left actually permitting: a contradicted one is kept
+so a diagnostic can name it, but it permits nothing.
+-}
+permittedBehaviours :: Text -> [BehaviourKind Stripped]
+permittedBehaviours src =
+    [ strip k
+    | b@(Behaviour k _ _) <- universeOf (desugared src) :: [Behaviour Ds]
+    , origin b /= Contradicted
+    ]
+
+-- | How many behaviours were asked for alongside something they cannot hold with.
+contradictedBehaviours :: Text -> Int
+contradictedBehaviours = countBehaviours Contradicted
+
 -- | Every joint modality the tree ends up carrying, written or supplied.
 modalitiesIn :: Text -> [ChainModality Stripped]
 modalitiesIn src = map strip (universeOf (desugared src) :: [ChainModality Ds])
@@ -113,11 +132,23 @@ spec = describe "desugar" $ do
         it "leaves the same leg qualified as writing it there would have" $
             behavioursIn "export X = m(aR);" `shouldBe` behavioursIn "export X = maR;"
         it "permits nothing where it contradicts what the leg states" $
-            behavioursIn "export X = m(caR);" `shouldBe` []
+            permittedBehaviours "export X = m(caR);" `shouldBe` []
         it "restates the final leg's default when it supplies both halves" $
             restatedBehaviours "export X = cm(aR);" `shouldBe` 2
         it "supplies no default of its own, having been told what the leg permits" $
             suppliedBehaviours "export X = m(aR);" `shouldBe` 0
+
+    describe "a modality narrowed from an enclosing level" $ do
+        it "keeps the allegiance the outer level names, not the wider inner one" $
+            behaviourModalitiesIn "export X = c(cyaR);" `shouldBe` [Once ()]
+        it "narrows a hurdle count to the one the outer level allows" $
+            behaviourModalitiesIn "export X = p(ppaR);" `shouldBe` [Once (), Once (), Once ()]
+        it "permits nothing where two allegiances have none in common" $
+            contradictedBehaviours "export X = c(ccaR);" `shouldBe` 2
+        it "permits nothing where a quiet leg is asked to capture" $
+            contradictedBehaviours "export X = m(caR);" `shouldBe` 2
+        it "leaves a leg alone when nothing encloses it" $
+            contradictedBehaviours "export X = cyaR;" `shouldBe` 0
 
     describe "an exponent's joints" $ do
         it "supplies the optional modality where none is written" $

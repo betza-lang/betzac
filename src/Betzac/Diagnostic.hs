@@ -44,6 +44,7 @@ data SemanticProblemKind
     = CircularLabel [String]
     | DuplicateDirective
     | DuplicateLabel
+    | EmptyMoveset String
     | IllFormedDirective
     | IllFormedLabel
     | IllFormedStatement
@@ -66,6 +67,7 @@ causeOf :: SemanticProblemKind -> String
 causeOf (CircularLabel _) = "circular label"
 causeOf DuplicateDirective = "duplicate directive"
 causeOf DuplicateLabel = "duplicate label"
+causeOf (EmptyMoveset _) = "empty moveset"
 causeOf IllFormedDirective = "ill-formed directive"
 causeOf IllFormedLabel = "ill-formed label"
 causeOf IllFormedStatement = "ill-formed statement"
@@ -132,6 +134,7 @@ runStage_ = snd . runStage
 
 instance PrettyPrint SemanticProblemKind where
     prettyPrint (CircularLabel labels) = "CircularLabel: " <> intercalate " -> " labels
+    prettyPrint (EmptyMoveset s) = "EmptyMoveset: " <> s
     prettyPrint (InvalidStatement s) = "InvalidStatement: " <> s
     prettyPrint (InvalidValue s) = "InvalidValue: " <> s
     prettyPrint (RedundantModifier s) = "RedundantModifier: " <> s

@@ -65,6 +65,7 @@ specifierOf Sem.UnusedUsing = Just Wunused
 specifierOf Sem.DuplicateLabel = Just Wunused
 specifierOf Sem.DuplicateDirective = Just Wdirective
 specifierOf (Sem.RedundantModifier _) = Just Wlang
+specifierOf (Sem.EmptyMoveset _) = Just Wlang
 specifierOf Sem.RedundantOverride = Just Wdirective
 specifierOf _ = Nothing
 
