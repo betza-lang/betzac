@@ -56,6 +56,11 @@ countBehaviours :: Origin -> Text -> Int
 countBehaviours o src =
     length [() | b <- universeOf (desugared src) :: [Behaviour Ds], origin b == o]
 
+-- | Every behaviour the tree ends up carrying, by kind and modality.
+behavioursIn :: Text -> [BehaviourKind Stripped]
+behavioursIn src =
+    [strip k | Behaviour k _ _ <- universeOf (desugared src) :: [Behaviour Ds]]
+
 -- | Every joint modality the tree ends up carrying, written or supplied.
 modalitiesIn :: Text -> [ChainModality Stripped]
 modalitiesIn src = map strip (universeOf (desugared src) :: [ChainModality Ds])
@@ -99,6 +104,20 @@ spec = describe "desugar" $ do
             restatedDirections "export X = cmW - (aK - Y);" `shouldBe` 0
         it "stays silent on c alone, which narrows rather than restates" $
             restatedBehaviours "export X = acW;" `shouldBe` 0
+
+    describe "a behaviour written on a parenthesised chain" $ do
+        it "narrows the final leg's cm rather than widening it" $
+            behavioursIn "export X = m(aR);" `shouldBe` [Move ()]
+        it "reaches the leg that ends the chain, not the one that starts it" $
+            behavioursIn "export X = c(aR - aR);" `shouldBe` [Capture ()]
+        it "leaves the same leg qualified as writing it there would have" $
+            behavioursIn "export X = m(aR);" `shouldBe` behavioursIn "export X = maR;"
+        it "permits nothing where it contradicts what the leg states" $
+            behavioursIn "export X = m(caR);" `shouldBe` []
+        it "restates the final leg's default when it supplies both halves" $
+            restatedBehaviours "export X = cm(aR);" `shouldBe` 2
+        it "supplies no default of its own, having been told what the leg permits" $
+            suppliedBehaviours "export X = m(aR);" `shouldBe` 0
 
     describe "an exponent's joints" $ do
         it "supplies the optional modality where none is written" $

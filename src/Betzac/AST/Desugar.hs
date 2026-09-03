@@ -7,6 +7,7 @@ module Betzac.AST.Desugar (desugar) where
 import Betzac.AST
 import Betzac.AST.Origin (Origin (..))
 import Betzac.Span (HasSpan (..), Span (Generated))
+import Data.List (partition)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
 
@@ -28,6 +29,8 @@ data Finality
 data Leg = Leg
     { legImplied :: Inherited
     , legFinality :: Finality
+    , legCarried :: [Behaviour Ds]
+    -- ^ Behaviours from an enclosing level, to be applied where the move can end.
     }
 
 desugar :: BetzaProgram Ps -> BetzaProgram Ds
@@ -48,7 +51,7 @@ stmt (LabelRef l x) = LabelRef (label l) (written x)
 
 -- | A definition stands on its own, so its last leg ends the move.
 wholeMove :: Leg
-wholeMove = Leg Omnidirectional AlwaysFinal
+wholeMove = Leg Omnidirectional AlwaysFinal []
 
 expr :: Leg -> BetzaExpr Ps -> BetzaExpr Ds
 expr leg (BetzaExpr c x) = BetzaExpr (chain leg c) (written x)
@@ -81,18 +84,24 @@ union leg (UnionExpr ms x) = UnionExpr (NE.map (modExpr leg) ms) (written x)
 
 modExpr :: Leg -> ModifierExpr Ps -> ModifierExpr Ds
 modExpr leg (ModifierExpr s ms e@(ExponentExpr atom mexp _) x) =
-    ModifierExpr s (qualification here ms) (exponentExpr inside e) (written x)
+    ModifierExpr s (qualification here mine) (exponentExpr inside e) (written x)
   where
     here =
         Leg
             (impliedAt atom (legImplied leg))
             (withExponent mexp (finalityAt atom (legFinality leg)))
-    -- A parenthesised chain takes the inheritance its wrapper did not spend.
+            (carriedAt atom (legCarried leg))
+    -- A parenthesised chain takes the inheritance and the behaviours its wrapper did not spend.
     inside =
         leg
             { legImplied =
                 if any isDirectional ms then Omnidirectional else legImplied leg
+            , legCarried = legCarried leg <> [behaviour b | Behavioural b _ <- ms]
             }
+    -- A behaviour written on a wrapper qualifies the leg that ends the chain, not the wrapper.
+    mine = case atom of
+        Paren _ _ -> filter isDirectional ms
+        From _ _ -> ms
 
 -- | A wrapper around a chain constrains its head only, so it claims no direction of its own.
 impliedAt :: AtomExpr Ps -> Inherited -> Inherited
@@ -103,6 +112,11 @@ impliedAt (From _ _) i = i
 finalityAt :: AtomExpr Ps -> Finality -> Finality
 finalityAt (Paren _ _) _ = NeverFinal
 finalityAt (From _ _) f = f
+
+-- | A wrapper passes what it carries inward rather than spending it on itself.
+carriedAt :: AtomExpr Ps -> [Behaviour Ds] -> [Behaviour Ds]
+carriedAt (Paren _ _) _ = []
+carriedAt (From _ _) cs = cs
 
 {- | Repetition carries the leg's behaviours into every copy, so which copy ends the
 move is a branch's answer, not the head's.
@@ -128,7 +142,7 @@ predecessor, and are declinable unless an operator says otherwise.
 exponent' :: Exponent Ps -> Exponent Ds
 exponent' (Exponent mop ms k x) = Exponent joint (qualification joints ms) kind (written x)
   where
-    joints = Leg Ahead SometimesFinal
+    joints = Leg Ahead SometimesFinal []
     (joint, kind) = case k of
         -- Travelling as far as the run allows is the braced modality under another name.
         Slippery ext -> (maximalJoint (getSpan ext), Infinite (written ext))
@@ -157,13 +171,24 @@ qualification leg ms = Qualification directions behaviours
         d : ds -> d :| ds
 
     behaviours
-        | legFinality leg /= AlwaysFinal = writtenBehaviours
-        | capturing && quiet = map restateFinal writtenBehaviours
-        | capturing || quiet = writtenBehaviours
-        | otherwise = writtenBehaviours <> [impliedBehaviour Capture, impliedBehaviour Move]
+        | legFinality leg /= AlwaysFinal = stated
+        | capturing && quiet = map restateFinal stated
+        -- An enclosing level has said what the leg permits, so nothing is left
+        -- unsaid to supply -- including where it permits nothing at all. A
+        -- behaviour that speaks to something other than capture leaves the
+        -- question open, and the default still answers it.
+        | any isPermission (legCarried leg) = stated
+        | capturing || quiet = stated
+        | otherwise = stated <> [impliedBehaviour Capture, impliedBehaviour Move]
 
-    capturing = any (isFinalHalf Capture) writtenBehaviours
-    quiet = any (isFinalHalf Move) writtenBehaviours
+    -- What the leg permits once an enclosing level has had its say.
+    stated
+        | legFinality leg == NeverFinal = writtenBehaviours
+        | null (legCarried leg) = writtenBehaviours
+        | otherwise = narrowedBy (legCarried leg) writtenBehaviours
+
+    capturing = any (isFinalHalf Capture) stated
+    quiet = any (isFinalHalf Move) stated
 
     restateFinal b
         | isFinalHalf Capture b || isFinalHalf Move b = restated b
@@ -179,6 +204,25 @@ restates i (Single d _) = case (i, d) of
     (Omnidirectional, All _) -> True
     _ -> False
 restates _ (Amalgamated _ _ _) = False
+
+{- | A behaviour arriving from an enclosing level narrows the capture and quiet
+permissions the leg states for itself; anything else it carries is simply added.
+-}
+narrowedBy :: [Behaviour Ds] -> [Behaviour Ds] -> [Behaviour Ds]
+narrowedBy carried stated = permitted <> statedRest <> carriedRest
+  where
+    (carriedPermissions, carriedRest) = partition isPermission carried
+    (statedPermissions, statedRest) = partition isPermission stated
+    permitted
+        | null statedPermissions = carriedPermissions
+        | otherwise = filter (\w -> any (sameKind w) carriedPermissions) statedPermissions
+
+-- | Whether a behaviour speaks to what may happen on the square the leg ends on.
+isPermission :: Behaviour Ds -> Bool
+isPermission (Behaviour k _ _) = stripEq k (Capture implied) || stripEq k (Move implied)
+
+sameKind :: Behaviour Ds -> Behaviour Ds -> Bool
+sameKind (Behaviour a _ _) (Behaviour b _ _) = stripEq a b
 
 impliedBehaviour :: (DsX -> BehaviourKind Ds) -> Behaviour Ds
 impliedBehaviour k = Behaviour (k implied) (Once ()) implied
