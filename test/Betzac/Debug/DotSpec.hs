@@ -17,9 +17,10 @@ import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 import Test.Hspec.Hedgehog
 
 -- | The colours the renderer reserves for what the source did not say.
-impliedColour, restatedColour :: Text
+impliedColour, restatedColour, contradictedColour :: Text
 impliedColour = "#dcc6f5"
 restatedColour = "#ffd9a0"
+contradictedColour = "#f2a0a0"
 
 tinted :: Text -> Text -> Int
 tinted colour = T.count colour
@@ -44,6 +45,8 @@ spec = describe "dot" $ do
                 `shouldSatisfy` (> T.count "label=" (psGraph "export X = W - K;"))
         it "draws an exponent's repetition count, not merely that it repeats" $
             T.count "label=\"3\"" (dsGraph "export X = fsW3;") `shouldBe` 1
+        it "draws a contradicted modifier in a colour of its own" $
+            tinted contradictedColour (dsGraph "export X = m(caW);") `shouldBe` 2
         it "marks a restatement where it stands" $
             tinted restatedColour (dsGraph "export X = acmW;") `shouldBe` 3
         it "leaves a restatement's children written, the letter having been typed" $

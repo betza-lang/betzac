@@ -29,15 +29,17 @@ toDot prog =
             ++ ["}"]
 
 -- Colours for what the source did not say. A written node keeps its structural colour.
-impliedColour, restatedColour :: String
+impliedColour, restatedColour, contradictedColour :: String
 impliedColour = "#dcc6f5"
 restatedColour = "#ffd9a0"
+contradictedColour = "#f2a0a0"
 
 -- | The structural colour a node would have had, unless its origin overrides it.
 tinted :: Origin -> Int -> String
 tinted Written structural = show structural
 tinted Implied _ = impliedColour
 tinted Restated _ = restatedColour
+tinted Contradicted _ = contradictedColour
 
 originNode :: Origin -> Int -> String -> [DotNode] -> DotNode
 originNode o structural label subs = node label (tinted o structural) "box" subs
