@@ -724,7 +724,19 @@ This subsection gives the meaning of each construct of [Section 3.2](#32-grammar
 
 3.4.31 - Parentheses will group without contributing any moves of their own: `(E)` and `E` denote the same moveset.
 
-3.4.32 - A modifier applied to a parenthesised union will distribute over that union: `f(W F)` and `fW fF` denote the same moveset. Applied to a parenthesised chain it constrains the head only (3.4.27.2).
+3.4.32 - A modifier applied to a parenthesised union will distribute over that union: `f(W F)` and `fW fF` denote the same moveset.
+
+3.4.33 - A modifier applied to a parenthesised chain will attach to one leg of that chain, chosen by the modifier's class. A direction modifier will attach to the chain's first leg (3.4.27.2), every later leg taking its orientation from its predecessor. A behaviour modifier will attach to the chain's final leg, that being the leg whose conditions decide the move (3.4.14).
+
+3.4.33.1 - The two classes differ because what they mean differs. A direction composes along the chain, so constraining the head constrains the whole; a behaviour qualifies the square a leg ends on, and the square that ends the move is the last. Consequently `c(X - Y)` denotes `X - cY` and not `cX - Y`.
+
+3.4.34 - Modifiers of one class written at the same level will select the union of what each selects (3.4.13, 3.4.17.1). Modifiers of one class arriving from different levels will select the intersection.
+
+3.4.34.1 - Consequently `f(frN)` denotes `fN`, the outer modifier narrowing the inner rather than widening it, and `m(R)` denotes `mR`: a single leg is a final leg, carrying `cm` by 3.4.14.1, and the outer `m` narrows that to `m` alone.
+
+3.4.34.2 - A default is not a level. What 3.4.14.1 and 3.4.27.1 supply is supplied only where nothing was written (3.4.14.3), so it never intersects with what the source states.
+
+3.4.34.3 - Consequently `m(R - c3)` selects nothing: the outer `m` and the final leg's written `c` are of one class and arrive from different levels, and no leg is both quiet and a capture (cf. 3.5.4.1).
 ---
 
 ## 3.5 Semantic Constraints
@@ -738,6 +750,8 @@ This subsection lists expressions which [Section 3.2](#32-grammar) admits but wh
 3.5.3 - A leaper literal will not be the left-hand side of an assignment. A leaper literal is a geometric value rather than a name, and assigning to one will produce an error log with cause `invalid statement`.
 
 3.5.4 - An expression whose direction modifiers select none of its displacements denotes the empty moveset, and will produce a warning log with cause `empty moveset`. `<fr>D` is such an expression: no displacement of `:2,0:` is both forward and rightward.
+
+3.5.4.1 - An expression whose behaviour modifiers permit no move of its leg denotes the empty moveset likewise, and will produce a warning log with the same cause. `m(cR)` is such an expression: the outer `m` and the inner `c` intersect by 3.4.34, and no leg is both quiet and a capture.
 
 3.5.5 - The final leg of a move will not be a visit. A leg qualified `j` ends on an occupied square, which is not a square the piece may rest on (3.4.17.2), so a chain ending in one denotes no completed move and will produce an error log with cause `invalid statement`.
 
