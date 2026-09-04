@@ -654,9 +654,9 @@ This subsection gives the meaning of each construct of [Section 3.2](#32-grammar
 
 3.4.19.2 - The repeated unit will be the atom-expression alone -- a label, a leaper literal, or a parenthesised expression -- and never a chain the exponent happens to follow. In `A - B m N` the unit is `B`; repeating a chain requires parenthesising it, as in `(F - lF) - r0`.
 
-3.4.20 - The modifier string of an exponent will decorate the **joints** between the copies, not the interior of a copy. Consequently `(F - lF) - r0` denotes `F - lF - rF - lF - rF ...`: the `l` belongs to the repeated unit and is preserved in every copy, while the `r` governs only how each copy attaches to the last.
+3.4.20 - The modifier string of an exponent will be exactly what each joint carries, and the copies will be exactly the bare atom -- i.e. with its modifiers removed -- onto which the exponent is attached. Consequently, `(F-lF)-r3` denotes `F-lF-rF-lF-rF-lF`: the `l`belongs to the repeated unit and is preserved in every copy, whereas the `r` governs only how each copy attaches to the last.
 
-3.4.20.1 - A copy will carry the behaviour modifiers of the leg written out, and will not carry its direction modifiers. `fjyB-[3]` denotes `fjyB - jyB - jyB`.
+3.4.20.1 - A copy will not carry any of the behaviour modifiers of the leg written out. `fjyB-[3]` denotes `fjyB - B - B`.
 
 3.4.21 - Where the modifier string of an exponent contains no direction modifier, `f` will be supplied. Each repetition therefore continues straight ahead of the previous one (3.4.26), which is what makes `W3` a straight run rather than a wandering path.
 
@@ -674,27 +674,29 @@ This subsection gives the meaning of each construct of [Section 3.2](#32-grammar
 
 3.4.25 - Declining a joint will end the repetition, not the move: control passes to whatever chain leg follows the exponent. Consequently in `fjyB-[3] - B` a single repetition may be followed by the mandatory `B`.
 
+3.4.26 - `Xn` will be equivalent to `X-[n]`, and `X0*` to `X-{0}`.
+
 ---
 
 #### Chains
 
-3.4.26 - A chain `E1 <chain-operator> E2` will denote sequential composition: each move of the chain consists of a move of `E1` followed by a move of `E2` taken from the destination of the first.
+3.4.27 - A chain `E1 <chain-operator> E2` will denote sequential composition: each move of the chain consists of a move of `E1` followed by a move of `E2` taken from the destination of the first.
 
-3.4.27 - A **step** chain, written `-`, will interpret direction modifiers on its continuation **relative to the direction of the leg preceding it**. `f` on such a leg denotes straight ahead of the previous leg, `b` its reverse, and so on.
+3.4.28 - A **step** chain, written `-`, will interpret direction modifiers on its continuation **relative to the direction of the leg preceding it**. `f` on such a leg denotes straight ahead of the previous leg, `b` its reverse, and so on.
 
-3.4.27.1 - A continuation of a step chain carrying no direction modifier at all will be read as carrying `f`. A leg therefore continues straight ahead of the leg before it unless it says otherwise, which is what makes `(D A H G f:4,4: - [Q])` a leap continued along the line of the leap rather than a leap followed by a slide in any of the eight directions. The same default supplies the `f` of an exponent's joints (3.4.21), that being the same rule applied to the joints an exponent expands into.
+3.4.28.1 - A continuation of a step chain carrying no direction modifier at all will be read as carrying `f`. A leg therefore continues straight ahead of the leg before it unless it says otherwise, which is what makes `(D A H G f:4,4: - [Q])` a leap continued along the line of the leap rather than a leap followed by a slide in any of the eight directions. The same default supplies the `f` of an exponent's joints (3.4.21), that being the same rule applied to the joints an exponent expands into.
 
-3.4.27.2 - Consequently a direction modifier prefixed to a parenthesised chain constrains that chain's first leg only, every later leg taking its orientation from its predecessor. `f(X - Y)`, `(fX) - Y`, and `fX - Y` denote the same moveset.
+3.4.28.2 - Consequently a direction modifier prefixed to a parenthesised chain constrains that chain's first leg only, every later leg taking its orientation from its predecessor. `f(X - Y)`, `(fX) - Y`, and `fX - Y` denote the same moveset.
 
-3.4.27.3 - Consequently `(cmK - bK)` denotes a capture on an adjacent square followed by a return to the origin square, in any of the eight directions, rather than a step followed by an absolute backward step.
+3.4.28.3 - Consequently `(cmK - bK)` denotes a capture on an adjacent square followed by a return to the origin square, in any of the eight directions, rather than a step followed by an absolute backward step.
 
-3.4.28 - A **sequence** chain, written `--`, will interpret direction modifiers on its continuation in the frame of the move's first leg rather than relative to the leg preceding it. The two chain operators differ in this and in nothing else.
+3.4.29 - A **sequence** chain, written `--`, will interpret direction modifiers on its continuation in the frame of the move's first leg rather than relative to the leg preceding it. The two chain operators differ in this and in nothing else.
 
-3.4.28.1 - A continuation joined by a sequence chain will carry no implicit direction. The default of 3.4.27.1 follows from a leg inheriting its predecessor's orientation, and a sequence chain is precisely the operator that withholds that inheritance, so a bare continuation after `--` is unconstrained and may set off in any direction.
+3.4.29.1 - A continuation joined by a sequence chain will carry no implicit direction. The default of 3.4.27.1 follows from a leg inheriting its predecessor's orientation, and a sequence chain is precisely the operator that withholds that inheritance, so a bare continuation after `--` is unconstrained and may set off in any direction.
 
-3.4.28.2 - Chains will associate to the right, so that `X -- Y - Z` is `X -- (Y - Z)`. The continuation `Y` may therefore set off in any direction whatever `X` turned out to be, while `Z`, joined to `Y` by a step chain, is relative to the direction `Y` took. Inheritance resumes within the continuation; only the joint written `--` interrupts it.
+3.4.29.2 - Chains will associate to the right, so that `X -- Y - Z` is `X -- (Y - Z)`. The continuation `Y` may therefore set off in any direction whatever `X` turned out to be, while `Z`, joined to `Y` by a step chain, is relative to the direction `Y` took. Inheritance resumes within the continuation; only the joint written `--` interrupts it.
 
-3.4.29 - A chain operator of either kind will carry a **modality**, written as follows:
+3.4.30 - A chain operator of either kind will carry a **modality**, written as follows:
 
 | Written | Modality |
 | --- | --- |
@@ -702,43 +704,43 @@ This subsection gives the meaning of each construct of [Section 3.2](#32-grammar
 | `E1 -[E2]` | the continuation may be declined, the move ending at the destination of `E1` |
 | `E1 -{E2}` | the continuation belongs to the move if it is unblocked, and does not if it is blocked |
 
-3.4.29.1 - The braced modality will not be a choice. Where the continuation is unblocked it is compulsory; where it is blocked the move ends at the destination of `E1`. This distinguishes it from the bracketed modality, which the moving side elects to take or decline.
+3.4.30.1 - The braced modality will not be a choice. Where the continuation is unblocked it is compulsory; where it is blocked the move ends at the destination of `E1`. This distinguishes it from the bracketed modality, which the moving side elects to take or decline.
 
-3.4.29.2 - Consequently `K - {((fr)K)0*}` denotes a king which, having taken a step, must then continue around a circular path turning 45 degrees at each step, stopping only where the path becomes blocked.
+3.4.30.2 - Consequently `K - {((fr)K)0*}` denotes a king which, having taken a step, must then continue around a circular path turning 45 degrees at each step, stopping only where the path becomes blocked.
 
 ---
 
 #### Setup
 
-3.4.30 - The setup operator `!` will prefix a leg, preceding any modifier and any exponent of that leg, and will mark the square the piece occupies at the moment the operator is encountered as the **setup square**.
+3.4.31 - The setup operator `!` will prefix a leg, preceding any modifier and any exponent of that leg, and will mark the square the piece occupies at the moment the operator is encountered as the **setup square**.
 
-3.4.30.1 - On its first occurrence in a move, the setup operator will mean: take the succeeding legs, then return the piece to the setup square.
+3.4.31.1 - On its first occurrence in a move, the setup operator will mean: take the succeeding legs, then return the piece to the setup square.
 
-3.4.30.2 - On any later occurrence in the same move, it will mean: return the piece to the setup square, then take the succeeding legs, then return it to the setup square again.
+3.4.31.2 - On any later occurrence in the same move, it will mean: return the piece to the setup square, then take the succeeding legs, then return it to the setup square again.
 
-3.4.30.3 - Consequently `mQ - {!cK}` denotes capture by withdrawal: a quiet queen move, then -- where that continuation is unblocked -- a single step onward capturing the piece there, after which the piece returns to the square it stepped from.
+3.4.31.3 - Consequently `mQ - {!cK}` denotes capture by withdrawal: a quiet queen move, then -- where that continuation is unblocked -- a single step onward capturing the piece there, after which the piece returns to the square it stepped from.
 
 ---
 
 #### Grouping
 
-3.4.31 - Parentheses will group without contributing any moves of their own: `(E)` and `E` denote the same moveset.
+3.4.32 - Parentheses will group without contributing any moves of their own: `(E)` and `E` denote the same moveset.
 
-3.4.32 - A modifier applied to a parenthesised union will distribute over that union: `f(W F)` and `fW fF` denote the same moveset.
+3.4.33 - A modifier applied to a parenthesised union will distribute over that union: `f(W F)` and `fW fF` denote the same moveset.
 
-3.4.33 - A modifier applied to a parenthesised chain will attach to one leg of that chain, chosen by the modifier's class. A direction modifier will attach to the chain's first leg (3.4.27.2), every later leg taking its orientation from its predecessor. A behaviour modifier will attach to the chain's final leg, that being the leg whose conditions decide the move (3.4.14).
+3.4.34 - A modifier applied to a parenthesised chain will attach to one leg of that chain, chosen by the modifier's class. A direction modifier will attach to the chain's first leg (3.4.27.2), every later leg taking its orientation from its predecessor. A behaviour modifier will attach to the chain's final leg, that being the leg whose conditions decide the move (3.4.14).
 
-3.4.33.1 - The two classes differ because what they mean differs. A direction composes along the chain, so constraining the head constrains the whole; a behaviour qualifies the square a leg ends on, and the square that ends the move is the last. Consequently `c(X - Y)` denotes `X - cY` and not `cX - Y`.
+3.4.34.1 - The two classes differ because what they mean differs. A direction composes along the chain, so constraining the head constrains the whole; a behaviour qualifies the square a leg ends on, and the square that ends the move is the last. Consequently `c(X - Y)` denotes `X - cY` and not `cX - Y`.
 
-3.4.34 - Modifiers of one class written at the same level will select the union of what each selects (3.4.13, 3.4.17.1). Modifiers of one class arriving from different levels will select the intersection.
+3.4.35 - Modifiers of one class written at the same level will select the union of what each selects (3.4.13, 3.4.17.1). Modifiers of one class arriving from different levels will select the intersection.
 
-3.4.34.0.1 - A modality names a set of cases (3.4.18.3, 3.4.18.4), so two modalities of one kind arriving from different levels will intersect likewise. `c(cyX)` denotes `cX`, the outer modality naming the enemy alone; `p(ppX)` denotes `pX`, the outer count admitting one hurdle only. `c(ccX)` selects nothing, no allegiance being named by both (cf. 3.5.4.1).
+3.4.35.0.1 - A modality names a set of cases (3.4.18.3, 3.4.18.4), so two modalities of one kind arriving from different levels will intersect likewise. `c(cyX)` denotes `cX`, the outer modality naming the enemy alone; `p(ppX)` denotes `pX`, the outer count admitting one hurdle only. `c(ccX)` selects nothing, no allegiance being named by both (cf. 3.5.4.1).
 
-3.4.34.1 - Consequently `f(frN)` denotes `fN`, the outer modifier narrowing the inner rather than widening it, and `m(R)` denotes `mR`: a single leg is a final leg, carrying `cm` by 3.4.14.1, and the outer `m` narrows that to `m` alone.
+3.4.35.1 - Consequently `f(frN)` denotes `fN`, the outer modifier narrowing the inner rather than widening it, and `m(R)` denotes `mR`: a single leg is a final leg, carrying `cm` by 3.4.14.1, and the outer `m` narrows that to `m` alone.
 
-3.4.34.2 - A default is not a level. What 3.4.14.1 and 3.4.27.1 supply is supplied only where nothing was written (3.4.14.3), so it never intersects with what the source states.
+3.4.35.2 - A default is not a level. What 3.4.14.1 and 3.4.27.1 supply is supplied only where nothing was written (3.4.14.3), so it never intersects with what the source states.
 
-3.4.34.3 - Consequently `m(R - c3)` selects nothing: the outer `m` and the final leg's written `c` are of one class and arrive from different levels, and no leg is both quiet and a capture (cf. 3.5.4.1).
+3.4.35.3 - Consequently `m(R - c3)` selects nothing: the outer `m` and the final leg's written `c` are of one class and arrive from different levels, and no leg is both quiet and a capture (cf. 3.5.4.1).
 ---
 
 ## 3.5 Semantic Constraints
@@ -801,15 +803,15 @@ export :free eagle: =
         Q                       # slider
         (D A H G f:4,4: - [Q])  # leap and slide
         (cmK - bK)              # igui and jitto
-        (cmK-[3] - [Q])         # sweep capture
-        f(cmF-[4] - [Q]);       # sweep capture, forward diagonal
+        (cmK-[cm3] - [Q])         # sweep capture
+        f(cmF-[cm4] - [Q]);       # sweep capture, forward diagonal
 ```
 
 **`(D A H G f:4,4: - [Q])`** -- a leap to any of the special squares, optionally continued as a slide. Because the continuation is optional, the leap is the final leg of the branch that declines it and may capture there; in the branch that takes it, the leap is quiet and the capture falls at the end of the slide (3.4.15.1).
 
 **`(cmK - bK)`** -- igui: a capture on an adjacent square, then a mandatory return leg whose `b` is relative to the first leg (3.4.27.3), landing back on the origin. Written `cm` on the first leg because that leg is not final (3.4.14.3). The branch in which the first leg is quiet is jitto, a null move.
 
-**`(cmK-[3] - [Q])`** -- the sweep: one to three king steps in a straight line (3.4.21, 3.4.22.2), every one of them able to capture because the head carries `cm` and the repeated unit is the head (3.4.19), followed by an optional ordinary slide. Occupants of the swept squares are therefore consumed rather than blocking, and the run may halt after one or two steps.
+**`(cmK-[cm3] - [Q])`** -- the sweep: one to three king steps in a straight line (3.4.21, 3.4.22.2), every one of them able to capture, followed by an optional ordinary slide. Occupants of the swept squares are therefore consumed rather than blocking, and the run may halt after one or two steps.
 
 ---
 
