@@ -103,7 +103,7 @@ spec = describe "desugar" $ do
             suppliedBehaviours "export X = (aK - acmY);" `shouldBe` 0
         it "supplies neither where the leg writes one half itself" $
             suppliedBehaviours "export X = acW;" `shouldBe` 0
-        it "supplies neither under an exponent, every copy carrying what the head writes" $
+        it "supplies neither under an exponent, no copy being unconditionally last" $
             suppliedBehaviours "export X = aW0;" `shouldBe` 0
 
     describe "what the language would have supplied anyway" $ do

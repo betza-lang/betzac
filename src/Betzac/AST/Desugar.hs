@@ -118,8 +118,8 @@ carriedAt :: AtomExpr Ps -> [Behaviour Ds] -> [Behaviour Ds]
 carriedAt (Paren _ _) _ = []
 carriedAt (From _ _) cs = cs
 
-{- | Repetition carries the leg's behaviours into every copy, so which copy ends the
-move is a branch's answer, not the head's.
+{- | Repetition leaves the number of legs to a branch, so which copy ends the move
+is a branch's answer, not the head's.
 -}
 withExponent :: Maybe (Exponent Ps) -> Finality -> Finality
 withExponent Nothing f = f
