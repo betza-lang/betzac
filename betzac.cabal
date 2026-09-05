@@ -51,6 +51,8 @@ library
       Betzac.AST.Phases.Stripped
       Betzac.AST.Strip
       Betzac.AST.Types
+      Betzac.AST.Types.Constraints
+      Betzac.AST.Types.Ext
       Betzac.AST.Utils
       Betzac.Compilation.Context
       Betzac.Compilation.Diagnostic

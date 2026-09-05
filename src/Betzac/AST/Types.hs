@@ -7,59 +7,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Betzac.AST.Types (
-    -- Extension typee families
-    XOverride,
-    XPlain,
-    XUsing,
-    XExport,
-    XBare,
-    XAssign,
-    XLabelRef,
-    XBetzaExpr,
-    XChainExpr,
-    XChainLeg,
-    XUnionExpr,
-    XModifierExpr,
-    XExponentExpr,
-    XParen,
-    XFrom,
-    XChainOperator,
-    XIffUnblocked,
-    XDirectional,
-    XBehavioural,
-    XAmalgamated,
-    XSingle,
-    XBehaviour,
-    XExponent,
-    XStep,
-    XSequence,
-    XMandatory,
-    XChoose,
-    XForward,
-    XBackward,
-    XLeftward,
-    XRightward,
-    XSideway,
-    XVertically,
-    XAll,
-    XCapture,
-    XLeap,
-    XInitial,
-    XJump,
-    XMove,
-    XNoJump,
-    XHop,
-    XOnce,
-    XTwice,
-    XAny,
-    XInfinite,
-    XSlippery,
-    XRepeat,
-    XUpper,
-    XDescriptor,
-    XLeaper,
-    XQualification,
-    XJoint,
+    module Betzac.AST.Types.Ext,
     -- AST types
     BetzaProgram,
     QualifiedStmt (..),
@@ -93,79 +41,17 @@ module Betzac.AST.Types (
 
 import Betzac.Span (HasSpan (..))
 
-import Betzac.AST.Generic (GWalk (gwalk), Walk (..), WalkField)
+import Betzac.AST.Generic (GWalk (gwalk), Walk (..))
 import Betzac.AST.Origin (HasOrigin (..))
-import Data.Data (Data, Typeable)
-import Data.Kind (Type)
+import Betzac.AST.Types.Constraints
+import Betzac.AST.Types.Ext
+
+import Data.Data (Data)
 import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic, from)
 
--- Extension type families, giving these constructors annotations
--- XConstructorName Phase = FieldType
--- Statement/directive level
-type family XOverride (p :: Type) :: Type
-type family XPlain (p :: Type) :: Type
-type family XUsing (p :: Type) :: Type
-type family XExport (p :: Type) :: Type
-type family XBare (p :: Type) :: Type
-type family XAssign (p :: Type) :: Type
-type family XLabelRef (p :: Type) :: Type
-
--- Expression level
-type family XBetzaExpr (p :: Type) :: Type
-type family XChainExpr (p :: Type) :: Type
-type family XChainLeg (p :: Type) :: Type
-type family XUnionExpr (p :: Type) :: Type
-type family XModifierExpr (p :: Type) :: Type
-type family XExponentExpr (p :: Type) :: Type
-type family XParen (p :: Type) :: Type
-type family XFrom (p :: Type) :: Type
-
--- Modifier level
-type family XChainOperator (p :: Type) :: Type
-type family XIffUnblocked (p :: Type) :: Type
-type family XDirectional (p :: Type) :: Type
-type family XBehavioural (p :: Type) :: Type
-type family XAmalgamated (p :: Type) :: Type
-type family XSingle (p :: Type) :: Type
-type family XBehaviour (p :: Type) :: Type
-type family XExponent (p :: Type) :: Type
-
--- Kinds, modalities, etc.
-type family XStep (p :: Type) :: Type
-type family XSequence (p :: Type) :: Type
-type family XMandatory (p :: Type) :: Type
-type family XChoose (p :: Type) :: Type
-type family XForward (p :: Type) :: Type
-type family XBackward (p :: Type) :: Type
-type family XLeftward (p :: Type) :: Type
-type family XRightward (p :: Type) :: Type
-type family XSideway (p :: Type) :: Type
-type family XVertically (p :: Type) :: Type
-type family XAll (p :: Type) :: Type
-type family XCapture (p :: Type) :: Type
-type family XLeap (p :: Type) :: Type
-type family XInitial (p :: Type) :: Type
-type family XJump (p :: Type) :: Type
-type family XMove (p :: Type) :: Type
-type family XNoJump (p :: Type) :: Type
-type family XHop (p :: Type) :: Type
-type family XOnce (p :: Type) :: Type
-type family XTwice (p :: Type) :: Type
-type family XAny (p :: Type) :: Type
-type family XInfinite (p :: Type) :: Type
-type family XSlippery (p :: Type) :: Type
-type family XRepeat (p :: Type) :: Type
-type family XUpper (p :: Type) :: Type
-type family XDescriptor (p :: Type) :: Type
-type family XLeaper (p :: Type) :: Type
-
--- Field-position families: the phase decides the shape, not just an annotation.
-type family XQualification (p :: Type) :: Type
-type family XJoint (p :: Type) :: Type
-
 {- | Reading a modifier string back as the flat list the written form has, so that
-rendering and stripping stay polymorphic in the phase.
+rendering and stripping are polymorphic in the phase.
 -}
 class Qualifying p where
     toModifiers :: XQualification p -> [Modifier p]
@@ -281,61 +167,6 @@ type Number = Int
 type Labelling = String
 
 -- Eq, Show, and Data
-type EqX p =
-    ( Eq (XOverride p)
-    , Eq (XPlain p)
-    , Eq (XUsing p)
-    , Eq (XExport p)
-    , Eq (XBare p)
-    , Eq (XAssign p)
-    , Eq (XLabelRef p)
-    , Eq (XBetzaExpr p)
-    , Eq (XChainExpr p)
-    , Eq (XChainLeg p)
-    , Eq (XUnionExpr p)
-    , Eq (XModifierExpr p)
-    , Eq (XExponentExpr p)
-    , Eq (XParen p)
-    , Eq (XFrom p)
-    , Eq (XDirectional p)
-    , Eq (XBehavioural p)
-    , Eq (XAmalgamated p)
-    , Eq (XSingle p)
-    , Eq (XForward p)
-    , Eq (XBackward p)
-    , Eq (XLeftward p)
-    , Eq (XRightward p)
-    , Eq (XSideway p)
-    , Eq (XVertically p)
-    , Eq (XAll p)
-    , Eq (XBehaviour p)
-    , Eq (XCapture p)
-    , Eq (XLeap p)
-    , Eq (XInitial p)
-    , Eq (XJump p)
-    , Eq (XMove p)
-    , Eq (XNoJump p)
-    , Eq (XHop p)
-    , Eq (XOnce p)
-    , Eq (XTwice p)
-    , Eq (XAny p)
-    , Eq (XChainOperator p)
-    , Eq (XStep p)
-    , Eq (XSequence p)
-    , Eq (XMandatory p)
-    , Eq (XIffUnblocked p)
-    , Eq (XChoose p)
-    , Eq (XExponent p)
-    , Eq (XInfinite p)
-    , Eq (XSlippery p)
-    , Eq (XRepeat p)
-    , Eq (XUpper p)
-    , Eq (XDescriptor p)
-    , Eq (XLeaper p)
-    , Eq (XQualification p)
-    , Eq (XJoint p)
-    )
-
 deriving instance (EqX p) => Eq (QualifiedStmt p)
 deriving instance (EqX p) => Eq (Directive p)
 deriving instance (EqX p) => Eq (BetzaStmt p)
@@ -360,61 +191,6 @@ deriving instance (EqX p) => Eq (Exponent p)
 deriving instance (EqX p) => Eq (ExponentKind p)
 deriving instance (EqX p) => Eq (Label p)
 
-type ShowX p =
-    ( Show (XOverride p)
-    , Show (XPlain p)
-    , Show (XUsing p)
-    , Show (XExport p)
-    , Show (XBare p)
-    , Show (XAssign p)
-    , Show (XLabelRef p)
-    , Show (XBetzaExpr p)
-    , Show (XChainExpr p)
-    , Show (XChainLeg p)
-    , Show (XUnionExpr p)
-    , Show (XModifierExpr p)
-    , Show (XExponentExpr p)
-    , Show (XParen p)
-    , Show (XFrom p)
-    , Show (XDirectional p)
-    , Show (XBehavioural p)
-    , Show (XAmalgamated p)
-    , Show (XSingle p)
-    , Show (XForward p)
-    , Show (XBackward p)
-    , Show (XLeftward p)
-    , Show (XRightward p)
-    , Show (XSideway p)
-    , Show (XVertically p)
-    , Show (XAll p)
-    , Show (XBehaviour p)
-    , Show (XCapture p)
-    , Show (XLeap p)
-    , Show (XInitial p)
-    , Show (XJump p)
-    , Show (XMove p)
-    , Show (XNoJump p)
-    , Show (XHop p)
-    , Show (XOnce p)
-    , Show (XTwice p)
-    , Show (XAny p)
-    , Show (XChainOperator p)
-    , Show (XStep p)
-    , Show (XSequence p)
-    , Show (XMandatory p)
-    , Show (XIffUnblocked p)
-    , Show (XChoose p)
-    , Show (XExponent p)
-    , Show (XInfinite p)
-    , Show (XSlippery p)
-    , Show (XRepeat p)
-    , Show (XUpper p)
-    , Show (XDescriptor p)
-    , Show (XLeaper p)
-    , Show (XQualification p)
-    , Show (XJoint p)
-    )
-
 deriving instance (ShowX p) => Show (QualifiedStmt p)
 deriving instance (ShowX p) => Show (Directive p)
 deriving instance (ShowX p) => Show (BetzaStmt p)
@@ -438,63 +214,6 @@ deriving instance (ShowX p) => Show (Qualification p)
 deriving instance (ShowX p) => Show (Exponent p)
 deriving instance (ShowX p) => Show (ExponentKind p)
 deriving instance (ShowX p) => Show (Label p)
-
-type DataX p =
-    ( Typeable p
-    , Data p
-    , Data (XOverride p)
-    , Data (XPlain p)
-    , Data (XUsing p)
-    , Data (XExport p)
-    , Data (XBare p)
-    , Data (XAssign p)
-    , Data (XLabelRef p)
-    , Data (XBetzaExpr p)
-    , Data (XChainExpr p)
-    , Data (XChainLeg p)
-    , Data (XUnionExpr p)
-    , Data (XModifierExpr p)
-    , Data (XExponentExpr p)
-    , Data (XParen p)
-    , Data (XFrom p)
-    , Data (XDirectional p)
-    , Data (XBehavioural p)
-    , Data (XAmalgamated p)
-    , Data (XSingle p)
-    , Data (XForward p)
-    , Data (XBackward p)
-    , Data (XLeftward p)
-    , Data (XRightward p)
-    , Data (XSideway p)
-    , Data (XVertically p)
-    , Data (XAll p)
-    , Data (XBehaviour p)
-    , Data (XCapture p)
-    , Data (XLeap p)
-    , Data (XInitial p)
-    , Data (XJump p)
-    , Data (XMove p)
-    , Data (XNoJump p)
-    , Data (XHop p)
-    , Data (XOnce p)
-    , Data (XTwice p)
-    , Data (XAny p)
-    , Data (XChainOperator p)
-    , Data (XStep p)
-    , Data (XSequence p)
-    , Data (XMandatory p)
-    , Data (XIffUnblocked p)
-    , Data (XChoose p)
-    , Data (XExponent p)
-    , Data (XInfinite p)
-    , Data (XSlippery p)
-    , Data (XRepeat p)
-    , Data (XUpper p)
-    , Data (XDescriptor p)
-    , Data (XLeaper p)
-    , Data (XQualification p)
-    , Data (XJoint p)
-    )
 
 deriving instance (DataX p) => Data (QualifiedStmt p)
 deriving instance (DataX p) => Data (Directive p)
@@ -521,62 +240,6 @@ deriving instance (DataX p) => Data (ExponentKind p)
 deriving instance (DataX p) => Data (Label p)
 
 -- Generic traversal
-type WalkX p =
-    ( Typeable p
-    , WalkField (XOverride p)
-    , WalkField (XPlain p)
-    , WalkField (XUsing p)
-    , WalkField (XExport p)
-    , WalkField (XBare p)
-    , WalkField (XAssign p)
-    , WalkField (XLabelRef p)
-    , WalkField (XBetzaExpr p)
-    , WalkField (XChainExpr p)
-    , WalkField (XChainLeg p)
-    , WalkField (XUnionExpr p)
-    , WalkField (XModifierExpr p)
-    , WalkField (XExponentExpr p)
-    , WalkField (XParen p)
-    , WalkField (XFrom p)
-    , WalkField (XDirectional p)
-    , WalkField (XBehavioural p)
-    , WalkField (XAmalgamated p)
-    , WalkField (XSingle p)
-    , WalkField (XForward p)
-    , WalkField (XBackward p)
-    , WalkField (XLeftward p)
-    , WalkField (XRightward p)
-    , WalkField (XSideway p)
-    , WalkField (XVertically p)
-    , WalkField (XAll p)
-    , WalkField (XBehaviour p)
-    , WalkField (XCapture p)
-    , WalkField (XLeap p)
-    , WalkField (XInitial p)
-    , WalkField (XJump p)
-    , WalkField (XMove p)
-    , WalkField (XNoJump p)
-    , WalkField (XHop p)
-    , WalkField (XOnce p)
-    , WalkField (XTwice p)
-    , WalkField (XAny p)
-    , WalkField (XChainOperator p)
-    , WalkField (XStep p)
-    , WalkField (XSequence p)
-    , WalkField (XMandatory p)
-    , WalkField (XIffUnblocked p)
-    , WalkField (XChoose p)
-    , WalkField (XExponent p)
-    , WalkField (XInfinite p)
-    , WalkField (XSlippery p)
-    , WalkField (XRepeat p)
-    , WalkField (XUpper p)
-    , WalkField (XDescriptor p)
-    , WalkField (XLeaper p)
-    , WalkField (XQualification p)
-    , WalkField (XJoint p)
-    )
-
 deriving instance Generic (QualifiedStmt p)
 deriving instance Generic (Directive p)
 deriving instance Generic (BetzaStmt p)
@@ -694,59 +357,6 @@ instance (WalkX p) => Walk (Label p) where
     {-# INLINE walk #-}
 
 -- HasSpan
-type SpanX p =
-    ( HasSpan (XOverride p)
-    , HasSpan (XPlain p)
-    , HasSpan (XUsing p)
-    , HasSpan (XExport p)
-    , HasSpan (XBare p)
-    , HasSpan (XAssign p)
-    , HasSpan (XLabelRef p)
-    , HasSpan (XBetzaExpr p)
-    , HasSpan (XChainExpr p)
-    , HasSpan (XChainLeg p)
-    , HasSpan (XUnionExpr p)
-    , HasSpan (XModifierExpr p)
-    , HasSpan (XExponentExpr p)
-    , HasSpan (XParen p)
-    , HasSpan (XFrom p)
-    , HasSpan (XChainOperator p)
-    , HasSpan (XStep p)
-    , HasSpan (XSequence p)
-    , HasSpan (XMandatory p)
-    , HasSpan (XChoose p)
-    , HasSpan (XIffUnblocked p)
-    , HasSpan (XDirectional p)
-    , HasSpan (XBehavioural p)
-    , HasSpan (XAmalgamated p)
-    , HasSpan (XSingle p)
-    , HasSpan (XForward p)
-    , HasSpan (XBackward p)
-    , HasSpan (XLeftward p)
-    , HasSpan (XRightward p)
-    , HasSpan (XSideway p)
-    , HasSpan (XVertically p)
-    , HasSpan (XAll p)
-    , HasSpan (XBehaviour p)
-    , HasSpan (XCapture p)
-    , HasSpan (XLeap p)
-    , HasSpan (XInitial p)
-    , HasSpan (XJump p)
-    , HasSpan (XMove p)
-    , HasSpan (XNoJump p)
-    , HasSpan (XHop p)
-    , HasSpan (XOnce p)
-    , HasSpan (XTwice p)
-    , HasSpan (XAny p)
-    , HasSpan (XExponent p)
-    , HasSpan (XInfinite p)
-    , HasSpan (XSlippery p)
-    , HasSpan (XRepeat p)
-    , HasSpan (XUpper p)
-    , HasSpan (XDescriptor p)
-    , HasSpan (XLeaper p)
-    )
-
 instance (SpanX p) => HasSpan (QualifiedStmt p) where
     getSpan (Override _ ext) = getSpan ext
     getSpan (Plain _ ext) = getSpan ext
@@ -841,38 +451,7 @@ instance (SpanX p) => HasSpan (Label p) where
     getSpan (Descriptor _ ext) = getSpan ext
     getSpan (Leaper _ _ ext) = getSpan ext
 
-{- | The nodes a desugaring can supply or find already written. Statements,
-expressions, atoms and labels are never synthesised, so they are absent here.
--}
-type OriginX p =
-    ( HasOrigin (XAmalgamated p)
-    , HasOrigin (XSingle p)
-    , HasOrigin (XForward p)
-    , HasOrigin (XBackward p)
-    , HasOrigin (XLeftward p)
-    , HasOrigin (XRightward p)
-    , HasOrigin (XSideway p)
-    , HasOrigin (XVertically p)
-    , HasOrigin (XAll p)
-    , HasOrigin (XBehaviour p)
-    , HasOrigin (XCapture p)
-    , HasOrigin (XLeap p)
-    , HasOrigin (XInitial p)
-    , HasOrigin (XJump p)
-    , HasOrigin (XMove p)
-    , HasOrigin (XNoJump p)
-    , HasOrigin (XHop p)
-    , HasOrigin (XOnce p)
-    , HasOrigin (XTwice p)
-    , HasOrigin (XAny p)
-    , HasOrigin (XChainOperator p)
-    , HasOrigin (XStep p)
-    , HasOrigin (XSequence p)
-    , HasOrigin (XMandatory p)
-    , HasOrigin (XChoose p)
-    , HasOrigin (XIffUnblocked p)
-    )
-
+-- HasOrigin
 instance (OriginX p) => HasOrigin (DirectionModifier p) where
     origin (Amalgamated _ _ ext) = origin ext
     origin (Single _ ext) = origin ext
