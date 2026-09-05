@@ -88,6 +88,7 @@ module Betzac.AST.Types (
     Number,
     Labelling,
     OriginX,
+    Qualifying (..),
 ) where
 
 import Betzac.Span (HasSpan (..))
@@ -162,6 +163,13 @@ type family XLeaper (p :: Type) :: Type
 -- Field-position families: the phase decides the shape, not just an annotation.
 type family XQualification (p :: Type) :: Type
 type family XJoint (p :: Type) :: Type
+
+{- | Reading a modifier string back as the flat list the written form has, so that
+rendering and stripping stay polymorphic in the phase.
+-}
+class Qualifying p where
+    toModifiers :: XQualification p -> [Modifier p]
+    toJoint :: XJoint p -> Maybe (ChainOperator p)
 
 -- AST types, parameterized by phase
 

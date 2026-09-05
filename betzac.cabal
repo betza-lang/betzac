@@ -45,6 +45,10 @@ library
       Betzac.AST.Generic
       Betzac.AST.Origin
       Betzac.AST.Phases
+      Betzac.AST.Phases.Ds
+      Betzac.AST.Phases.Geo
+      Betzac.AST.Phases.Ps
+      Betzac.AST.Phases.Stripped
       Betzac.AST.Strip
       Betzac.AST.Types
       Betzac.AST.Utils

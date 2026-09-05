@@ -5,7 +5,7 @@
 
 module Betzac.AST.Strip (Extensible (..)) where
 
-import Betzac.AST.Phases (Qualifying (..), Stripped)
+import Betzac.AST.Phases.Stripped
 import Betzac.AST.Types
 import Data.Kind (Type)
 import qualified Data.List.NonEmpty as NE
