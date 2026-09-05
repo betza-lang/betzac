@@ -14,6 +14,12 @@ To build and install (i.e. copy the binaries to `~/.local/bin`):
 stack install
 ```
 
+If the installation was successful, you should be able to run this command:
+
+```bash
+betzac --version
+```
+
 ## Usage
 
 To run on `FILE`:
@@ -23,6 +29,7 @@ betzac FILE
 
 For help:
 ```bash
+betzac --help
 ```
 
 ## Visualize AST

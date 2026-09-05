@@ -92,7 +92,7 @@ library
       Betzac.Token
       Betzac.Utils.Helper
       Betzac.Utils.Unparse
-      Betzac.Version
+      Betzac.Utils.Version
       LangServer.Cache
       LangServer.Config
       LangServer.Handlers.Core

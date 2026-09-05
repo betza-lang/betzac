@@ -13,7 +13,7 @@ module Options (
 ) where
 
 import Betzac.Compilation.Flag (CompilerFlag (..), Wspecifier (..))
-import Betzac.Version (versionString)
+import Betzac.Utils.Version (versionString)
 
 import Data.List (stripPrefix)
 import Options.Applicative hiding (Parser)

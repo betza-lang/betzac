@@ -2,7 +2,7 @@ module Main (main) where
 
 import System.Environment (getArgs)
 
-import Betzac.Version (versionString)
+import Betzac.Utils.Version (versionString)
 import LangServer.Cache (newCache)
 import LangServer.Server (serverBLS)
 import Language.LSP.Server (runServer)

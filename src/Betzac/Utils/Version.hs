@@ -1,5 +1,5 @@
 -- | The package version, for the executables' @--version@ flags.
-module Betzac.Version (versionString) where
+module Betzac.Utils.Version (versionString) where
 
 import Data.Version (showVersion)
 
